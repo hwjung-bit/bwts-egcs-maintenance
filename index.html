@@ -561,21 +561,22 @@ function renderRepairs() {
       return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
     }).join('');
     var eid = esc(r.id);
-    var mailIcon = r.email_link
-      ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none" title="'+esc(r.email_subject||'메일 열기')+'">📧</a> '
-      : '';
+    var mailCell = r.email_link
+      ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none;display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.email_subject||'메일 열기')+'">📧 '+esc((r.email_subject||'').slice(0,30))+'</a>'
+      : '<span class="muted" style="font-size:11px">—</span>';
     return '<tr>'+
       '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
       '<td>'+esc(r.ship_code)+'</td>'+
       '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'equip\',this)" title="클릭하여 수정">'+esc(r.equip||'—')+'</td>'+
       '<td style="padding:4px 6px"><select class="status-select st-'+esc(r.stage)+'" style="padding:3px 18px 3px 6px" onchange="updateRepairField(\''+eid+'\',\'stage\',this.value)">'+stOpts+'</select></td>'+
-      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+mailIcon+esc(r.symptom||'—')+'</td>'+
+      '<td>'+mailCell+'</td>'+
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
 }
 
