@@ -73,6 +73,7 @@ tr:hover{background:#f8fafc}
 .cal-table th,.cal-table td{padding:6px 10px;font-size:12px}
 .lv-expired{background:#fee2e2;color:#b91c1c}.lv-soon{background:#ffedd5;color:#c2410c}
 .lv-ok{background:#dcfce7;color:#15803d}.lv-unknown{background:#f1f5f9;color:#64748b}
+.edit-cell{cursor:pointer;border-radius:4px}.edit-cell:hover{background:#eff6ff}
 </style>
 </head>
 <body>
@@ -404,23 +405,57 @@ function renderRepairs() {
     var stOpts = STATUS_LIST.map(function(s) {
       return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
     }).join('');
+    var eid = esc(r.id);
     return '<tr>'+
       '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
       '<td>'+esc(r.ship_code)+'</td>'+
       '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
-      '<td style="max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.equip)+'">'+esc(r.equip||'—')+'</td>'+
-      '<td><select class="status-select st-'+esc(r.stage)+'" onchange="updateRepairStage(\''+esc(r.id)+'\',this.value)">'+stOpts+'</select></td>'+
-      '<td style="max-width:350px;white-space:pre-wrap;word-break:break-word">'+esc(r.symptom||'')+'</td>'+
-      '<td style="max-width:350px;white-space:pre-wrap;word-break:break-word">'+esc(r.action||'')+'</td></tr>';
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'equip\',this)" title="클릭하여 수정">'+esc(r.equip||'—')+'</td>'+
+      '<td style="padding:4px 6px"><select class="status-select st-'+esc(r.stage)+'" style="padding:3px 18px 3px 6px" onchange="updateRepairField(\''+eid+'\',\'stage\',this.value)">'+stOpts+'</select></td>'+
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
+      '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:90px">단계</th><th>증상</th><th>조치</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 인라인 수정 · 상태 드롭다운 → 즉시 저장 · ✕ → 삭제</div>';
 }
-async function updateRepairStage(id, stage) {
+
+/* Inline edit for repair fields */
+function editRepairField(id, field, el) {
   var r = REPAIRS.find(function(x){return x.id===id;});
-  if (r) r.stage = stage;
-  await sb.from('repairs').update({stage:stage}).eq('id',id);
-  toast(stage+' 저장됨');
+  if (!r) return;
+  var cur = r[field] || '';
+  var isLong = (field==='symptom'||field==='action');
+  if (isLong) {
+    var ta = document.createElement('textarea');
+    ta.value = cur; ta.style.cssText = 'width:100%;min-height:60px;font-size:12px;padding:4px;border:1px solid #3b82f6;border-radius:4px;outline:none;font-family:inherit';
+    el.textContent = ''; el.appendChild(ta); ta.focus();
+    function save() { var v=ta.value.trim(); r[field]=v; el.textContent=v||'—';
+      updateRepairField(id,field,v); }
+    ta.onblur = save;
+    ta.onkeydown = function(e) { if (e.key==='Escape'){el.textContent=cur||'—';} };
+  } else {
+    var inp = document.createElement('input');
+    inp.value = cur; inp.style.cssText = 'width:100%;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
+    el.textContent = ''; el.appendChild(inp); inp.focus();
+    function save2() { var v=inp.value.trim(); r[field]=v; el.textContent=v||'—';
+      updateRepairField(id,field,v); }
+    inp.onblur = save2;
+    inp.onkeydown = function(e) { if (e.key==='Enter') save2(); if (e.key==='Escape') el.textContent=cur||'—'; };
+  }
+}
+async function updateRepairField(id, field, val) {
+  var patch = {}; patch[field] = val;
+  await sb.from('repairs').update(patch).eq('id', id);
+  toast(field + ' 저장됨');
+}
+async function deleteRepair(id) {
+  if (!confirm('이 수리 기록을 삭제할까요?')) return;
+  await sb.from('repairs').delete().eq('id', id);
+  REPAIRS = REPAIRS.filter(function(x){return x.id!==id;});
+  renderRepairs();
+  toast('삭제됨');
 }
 
 /* ===== BWTS Calibration ===== */
@@ -442,7 +477,7 @@ function renderBwtsCal() {
     return '<tr><td><b>'+esc(c.ship_code)+'</b></td>'+
       '<td>'+esc(c.last_date||'—')+'</td>'+
       '<td>'+fmtDate(due)+'</td>'+
-      '<td><span class="pill lv-'+lv+'">'+label+'</span> '+
+      '<td style="padding:4px 10px"><span class="pill lv-'+lv+'" style="margin-right:6px">'+label+'</span>'+
         (days!=null?'<span style="color:#64748b;font-size:11px">'+(days<=0?Math.abs(days)+'일 경과':'D-'+days)+'</span>':'')+
       '</td><td>'+esc(c.note||'')+'</td></tr>';
   }).join('');
@@ -451,21 +486,105 @@ function renderBwtsCal() {
     '<table class="cal-table"><thead><tr><th>선박</th><th>최근 검교정</th><th>다음 만료</th><th>상태</th><th>비고</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
-/* ===== EGCS Calibration ===== */
+/* ===== EGCS Calibration — WMS1/WMS2 매트릭스 ===== */
 function renderEgcsCal() {
   if (!EGCS_CAL.length) {
     document.getElementById('egcsCalRoot').innerHTML = '<div class="loading">EGCS 검교정 없음</div>';
     return;
   }
-  var rows = EGCS_CAL.map(function(c) {
-    return '<tr><td><b>'+esc(c.ship_code)+'</b></td>'+
-      '<td>'+esc(c.equip)+'</td>'+
-      '<td>'+esc(c.last_date||c.note||'—')+'</td>'+
-      '<td>'+esc(c.serial||'')+'</td>'+
-      '<td>'+esc(c.model||'')+'</td></tr>';
-  }).join('');
+  var DAY = 86400000;
+  // Build ship/equip map
+  var shipSet = {}, equipSet = {}, map = {};
+  EGCS_CAL.forEach(function(c) {
+    shipSet[c.ship_code] = 1;
+    // Normalize equip: WMS1-PH → WMS1/PH
+    var eq = (c.equip||'').replace('-','/');
+    equipSet[eq] = 1;
+    map[c.ship_code+'|'+eq] = c;
+  });
+  // Sort ships by SHIP_ORDER
+  var SHIP_ORDER = ['KNB','KSZ','KMB','KDB','KCN','KJA','KMN','KNH','KMU','KCB','KSL','KDE'];
+  var ships = Object.keys(shipSet).sort(function(a,b) {
+    var ia = SHIP_ORDER.indexOf(a), ib = SHIP_ORDER.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  // Sort equips: WMS1/PH, WMS1/TURB, WMS1/PAH, WMS2/PH, ...
+  var WMS_GROUPS = ['WMS1','WMS2'];
+  var SENSORS = ['PH','TURB','PAH'];
+  var orderedEquips = [];
+  WMS_GROUPS.forEach(function(g) {
+    SENSORS.forEach(function(s) {
+      var key = g+'/'+s;
+      if (equipSet[key]) orderedEquips.push({group:g,sensor:s,key:key});
+    });
+  });
+  Object.keys(equipSet).forEach(function(eq) {
+    if (!orderedEquips.some(function(o){return o.key===eq;}))
+      orderedEquips.push({group:'기타',sensor:eq,key:eq});
+  });
+
+  // Sensor cycle data
+  var SENSOR_CYCLE = {
+    'enviroFlu':{cal:48,repl:96},'TTurb':{cal:48,repl:96},'TpH-D':{cal:24,repl:24},
+    'G6110':{cal:24,repl:48},'G6111':{cal:36,repl:36},'G6120':{cal:null,repl:60},'G6130':{cal:12,repl:12}
+  };
+  function getShipWms(code) {
+    var s = SHIPS.find(function(x){return x.code===code;});
+    var w = String(s&&s.wms||'').toUpperCase();
+    if (w.indexOf('TRI')>=0) return 'TRIOS';
+    if (w.indexOf('GI')>=0||w.indexOf('GREEN')>=0) return 'GI';
+    return '';
+  }
+  function sensorModel(code,equip,model) {
+    var maker=getShipWms(code), kind=(/PAH/.test(equip)?'PAH':/TURB/.test(equip)?'TURB':'PH');
+    if(maker==='TRIOS') return kind==='PAH'?'enviroFlu':(kind==='TURB'?'TTurb':'TpH-D');
+    if(maker==='GI'){if(kind==='TURB')return'G6120';if(kind==='PH')return'G6130';return(model&&SENSOR_CYCLE[model])?model:null;}
+    return null;
+  }
+
+  // Build matrix HTML
+  var colg = '<colgroup><col style="width:72px">'+ships.map(function(){return '<col style="width:110px">';}).join('')+'</colgroup>';
+  var thead = '<tr><th style="text-align:left;background:#f8fafc">장비</th>'+ships.map(function(s){return '<th>'+esc(s)+'</th>';}).join('')+'</tr>';
+  var body = '', lastGroup = null;
+  orderedEquips.forEach(function(o) {
+    if (o.group !== lastGroup) {
+      body += '<tr><th colspan="'+(ships.length+1)+'" style="text-align:left;background:#eef2ff;color:#1d4ed8;font-weight:800;font-size:12px;padding:6px 10px">'+esc(o.group)+'</th></tr>';
+      lastGroup = o.group;
+    }
+    var tds = ships.map(function(s) {
+      var d = map[s+'|'+o.key];
+      if (!d) return '<td style="text-align:center;font-size:12px;color:#cbd5e1">—</td>';
+      var sn = d.serial ? '<div style="font-size:10px;color:#64748b;margin-top:2px">S/N '+esc(d.serial)+'</div>' : '';
+      var mdl = d.model ? '<div style="font-size:10px;color:#64748b">'+esc(d.model)+'</div>' : '';
+      if (!d.last_date) {
+        return '<td style="text-align:center;font-size:12px"><span style="color:#94a3b8">'+esc(d.note||'—')+'</span>'+mdl+sn+'</td>';
+      }
+      var sm = sensorModel(s,o.key,d.model);
+      var cyc = sm ? SENSOR_CYCLE[sm] : null;
+      if (!cyc) {
+        return '<td style="text-align:center;font-size:12px"><div style="font-weight:700">'+esc(d.last_date)+'</div>'+mdl+sn+'</td>';
+      }
+      var calDue = null, calDays = null, calLv = 'unknown';
+      if (cyc.cal != null) {
+        calDue = new Date(d.last_date+'T00:00:00'); calDue.setMonth(calDue.getMonth()+cyc.cal);
+        calDays = Math.round((calDue-new Date())/DAY);
+        calLv = calDays<=0?'expired':(calDays<=30?'soon':'ok');
+      }
+      var replDue = new Date(d.last_date+'T00:00:00'); replDue.setMonth(replDue.getMonth()+cyc.repl);
+      var replDays = Math.round((replDue-new Date())/DAY);
+      var replLv = replDays<=0?'expired':(replDays<=30?'soon':'ok');
+      var replTag = (replLv==='expired'||replLv==='soon') ?
+        '<div style="font-size:10px;font-weight:700;margin-top:2px" class="lv-'+replLv+'">신환 '+(replDays<=0?Math.abs(replDays)+'일 경과':'D-'+replDays)+'</div>' : '';
+      var bgCls = cyc.cal!=null ? calLv : replLv;
+      var calTxt = cyc.cal!=null ? '<div style="font-size:10px;opacity:.8">검 '+(calDays<=0?Math.abs(calDays)+'일 경과':'D-'+calDays)+'</div>' : '';
+      return '<td class="lv-'+bgCls+'" style="text-align:center;font-size:12px;padding:4px 6px">'+
+        '<div style="font-weight:700">'+esc(d.last_date)+'</div>'+calTxt+replTag+mdl+sn+'</td>';
+    }).join('');
+    body += '<tr><th style="text-align:left;background:#f8fafc;font-weight:700;font-size:12px">'+esc(o.sensor)+'</th>'+tds+'</tr>';
+  });
   document.getElementById('egcsCalRoot').innerHTML =
-    '<table class="cal-table"><thead><tr><th>선박</th><th>장비</th><th>최근 검교정</th><th>S/N</th><th>모델</th></tr></thead><tbody>'+rows+'</tbody></table>';
+    '<div style="margin-bottom:12px;color:#64748b;font-size:12px">TriOS: PAH·탁도 검4년·신환8년 / pH 2년 · GI: PAH 모델별 · 탁도 광원5년 · pH 1년</div>'+
+    '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">'+colg+'<thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>';
 }
 
 /* ===== Start ===== */
