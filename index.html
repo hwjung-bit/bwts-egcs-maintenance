@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BWTS·EGCS 정비 관리대장</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:#f1f5f9;color:#1e293b;font-size:13px}
+.header{background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+.header h1{font-size:18px}.header .meta{font-size:11px;color:#94a3b8}
+.spacer{flex:1}
+.login-btn{background:#2563eb;color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
+.login-btn:hover{background:#1d4ed8}
+.user-info{font-size:12px;color:#64748b}
+.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0}
+.tab{padding:6px 14px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;color:#64748b}
+.tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
+.stats{display:flex;gap:10px;padding:16px 24px;flex-wrap:wrap}
+.card{background:#fff;border-radius:10px;padding:12px 18px;min-width:80px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;transition:all .15s;border:2px solid transparent}
+.card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1)}
+.card.active{border-color:#2563eb}
+.card .num{font-size:22px;font-weight:700}.card .label{font-size:10px;color:#94a3b8;margin-top:2px}
+.card.blue .num{color:#1d4ed8}.card.green .num{color:#16a34a}
+.card.amber .num{color:#d97706}.card.purple .num{color:#7c3aed}
+.card.teal .num{color:#0d9488}.card.rose .num{color:#e11d48}
+.ships{padding:4px 24px 12px}
+.chip{display:inline-block;padding:3px 10px;border-radius:12px;background:#fff;border:1px solid #e2e8f0;font-size:11px;margin:2px;cursor:pointer;transition:all .1s}
+.chip:hover{background:#eff6ff;border-color:#93c5fd}
+.chip.active{background:#dbeafe;border-color:#3b82f6;color:#1d4ed8}
+.filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:54px;z-index:9}
+.filters select,.filters input{padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px}
+.filters input[type="text"]{width:220px}
+.count{font-size:12px;color:#94a3b8;margin-left:auto}
+.refresh-btn{background:#f1f5f9;border:1px solid #d1d5db;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px}
+.refresh-btn:hover{background:#e2e8f0}
+.wrap{padding:8px 16px 24px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:1000px}
+th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px}
+tr:hover{background:#f8fafc}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer}
+.pill-bwts{background:#dbeafe;color:#1d4ed8}.pill-egcs{background:#dcfce7;color:#16a34a}
+.pill-etc{background:#f1f5f9;color:#64748b}
+.status-select{appearance:none;border:none;background:transparent;font-size:11px;font-weight:600;cursor:pointer;padding:2px 20px 2px 8px;border-radius:10px;outline:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 4px center}
+.st-미확인{background:#fef3c7;color:#92400e}
+.st-진행중{background:#e0e7ff;color:#3730a3}
+.st-수리견적중{background:#fce7f3;color:#9d174d}
+.st-부품발주중{background:#fff7ed;color:#9a3412}
+.st-방선대기{background:#f0fdf4;color:#166534}
+.st-확인{background:#dbeafe;color:#1e40af}
+.st-완료{background:#d1fae5;color:#065f46}
+.note-cell{max-width:200px;position:relative}
+.note-text{font-size:12px;color:#64748b;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 4px;border-radius:4px;min-height:20px}
+.note-text:hover{background:#f1f5f9}
+.note-text:empty::after{content:'메모 추가...';color:#cbd5e1;font-style:italic}
+.note-input{width:100%;border:1px solid #3b82f6;border-radius:4px;padding:4px 6px;font-size:12px;outline:none;display:none}
+.reply-badge{background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px}
+.toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
+.toast.show{display:block;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.loading{text-align:center;padding:40px;color:#94a3b8}
+.spin{display:inline-block;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#3b82f6;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.detail-row{display:none}.detail-row.open{display:table-row}
+.detail-row td{background:#f8fafc;padding:12px 20px}
+.detail-content{display:flex;gap:24px;flex-wrap:wrap}
+.detail-section{min-width:200px}
+.detail-section h4{font-size:11px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
+.detail-section p{font-size:12px;margin-bottom:4px}
+/* Calibration styles */
+.cal-table th,.cal-table td{padding:6px 10px;font-size:12px}
+.lv-expired{background:#fee2e2;color:#b91c1c}.lv-soon{background:#ffedd5;color:#c2410c}
+.lv-ok{background:#dcfce7;color:#15803d}.lv-unknown{background:#f1f5f9;color:#64748b}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>BWTS·EGCS 정비 관리대장</h1>
+  <span class="meta">V2 — Supabase + GitHub Pages</span>
+  <div class="spacer"></div>
+  <span class="user-info" id="userInfo" style="display:none"></span>
+  <button class="login-btn" id="loginBtn" onclick="login()">Google 로그인</button>
+  <button class="login-btn" id="logoutBtn" onclick="logout()" style="display:none;background:#64748b">로그아웃</button>
+</div>
+
+<div class="tabs" id="mainTabs">
+  <div class="tab active" data-tab="mail" onclick="switchTab('mail')">📧 메일대장</div>
+  <div class="tab" data-tab="repairs" onclick="switchTab('repairs')">🔧 수리이력</div>
+  <div class="tab" data-tab="bwtsCal" onclick="switchTab('bwtsCal')">BWTS 검교정</div>
+  <div class="tab" data-tab="egcsCal" onclick="switchTab('egcsCal')">EGCS 검교정</div>
+</div>
+
+<div id="mailView">
+  <div class="stats" id="stats"></div>
+  <div class="ships" id="shipChips"></div>
+  <div class="filters">
+    <select id="fSys" onchange="renderMail()">
+      <option value="">전체 시스템</option>
+      <option value="BWTS">BWTS</option>
+      <option value="EGCS">EGCS</option>
+      <option value="기타">기타</option>
+    </select>
+    <select id="fShip" onchange="renderMail()">
+      <option value="">전체 선박</option>
+    </select>
+    <select id="fStatus" onchange="renderMail()">
+      <option value="">전체 상태</option>
+      <option>미확인</option><option>진행중</option>
+      <option>수리견적중</option><option>부품발주중</option>
+      <option>방선대기</option><option>확인</option><option>완료</option>
+    </select>
+    <input type="text" id="search" placeholder="🔍 제목, 선박, 발신자..."
+           oninput="renderMail()">
+    <button class="refresh-btn" onclick="loadData()">🔄 새로고침</button>
+    <span class="count" id="cnt"></span>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr>
+      <th style="width:80px">날짜</th>
+      <th style="width:50px">시스템</th>
+      <th style="width:45px">선박</th>
+      <th style="width:70px">키워드</th>
+      <th>메일 제목</th>
+      <th style="width:120px">발신자</th>
+      <th style="width:40px;text-align:center">📎</th>
+      <th style="width:90px">상태</th>
+      <th style="width:180px">비고</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table></div>
+</div>
+
+<div id="repairsView" style="display:none">
+  <div class="wrap" id="repairsRoot"></div>
+</div>
+<div id="bwtsCalView" style="display:none">
+  <div class="wrap" id="bwtsCalRoot"></div>
+</div>
+<div id="egcsCalView" style="display:none">
+  <div class="wrap" id="egcsCalRoot"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== CONFIG — Supabase 프로젝트 생성 후 여기에 입력 ===== */
+var SUPA_URL  = 'https://YOUR_PROJECT.supabase.co';
+var SUPA_ANON = 'YOUR_ANON_KEY';
+
+var sb = null;
+var USER = null;
+var MAIL = [], REPAIRS = [], BWTS_CAL = [], EGCS_CAL = [], SHIPS = [];
+var TAB = 'mail';
+var FILTER = { sys: '', ship: '', status: '', q: '' };
+var STATUS_LIST = ['미확인','진행중','수리견적중','부품발주중',
+                   '방선대기','확인','완료'];
+
+/* ===== Init ===== */
+function init() {
+  sb = supabase.createClient(SUPA_URL, SUPA_ANON);
+  sb.auth.getSession().then(function(res) {
+    if (res.data.session) onLogin(res.data.session.user);
+    else document.getElementById('tbody').innerHTML =
+      '<tr><td colspan="9" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
+  });
+  sb.auth.onAuthStateChange(function(event, session) {
+    if (event === 'SIGNED_IN' && session) onLogin(session.user);
+    if (event === 'SIGNED_OUT') onLogout();
+  });
+}
+
+function login() {
+  sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: location.origin + location.pathname }
+  });
+}
+function logout() {
+  sb.auth.signOut();
+}
+function onLogin(user) {
+  USER = user;
+  document.getElementById('userInfo').textContent = user.email;
+  document.getElementById('userInfo').style.display = '';
+  document.getElementById('loginBtn').style.display = 'none';
+  document.getElementById('logoutBtn').style.display = '';
+  loadData();
+}
+function onLogout() {
+  USER = null;
+  document.getElementById('userInfo').style.display = 'none';
+  document.getElementById('loginBtn').style.display = '';
+  document.getElementById('logoutBtn').style.display = 'none';
+  MAIL = []; renderMail();
+}
+
+/* ===== Data Loading ===== */
+async function loadData() {
+  document.getElementById('tbody').innerHTML =
+    '<tr><td colspan="9" class="loading"><span class="spin"></span> 로딩...</td></tr>';
+  try {
+    var [m, r, bc, ec, s] = await Promise.all([
+      sb.from('mail_log').select('*').order('date', {ascending:false}).limit(2000),
+      sb.from('repairs').select('*').order('date', {ascending:false}),
+      sb.from('calibrations').select('*').eq('system','BWTS'),
+      sb.from('calibrations').select('*').eq('system','EGCS'),
+      sb.from('ships').select('*'),
+    ]);
+    MAIL = m.data || [];
+    REPAIRS = r.data || [];
+    BWTS_CAL = bc.data || [];
+    EGCS_CAL = ec.data || [];
+    SHIPS = s.data || [];
+    buildShipChips();
+    buildShipFilter();
+    renderCurrent();
+    toast('데이터 로드 완료 (' + MAIL.length + '건)');
+  } catch(e) {
+    toast('로드 실패: ' + e.message);
+  }
+}
+
+/* ===== Tab Switch ===== */
+function switchTab(t) {
+  TAB = t;
+  document.querySelectorAll('.tab').forEach(function(el) {
+    el.classList.toggle('active', el.dataset.tab === t);
+  });
+  ['mailView','repairsView','bwtsCalView','egcsCalView'].forEach(function(id) {
+    document.getElementById(id).style.display = 'none';
+  });
+  document.getElementById(t + 'View').style.display = '';
+  renderCurrent();
+}
+function renderCurrent() {
+  if (TAB === 'mail') renderMail();
+  else if (TAB === 'repairs') renderRepairs();
+  else if (TAB === 'bwtsCal') renderBwtsCal();
+  else if (TAB === 'egcsCal') renderEgcsCal();
+}
+
+/* ===== Helpers ===== */
+function esc(s) {
+  return String(s==null?'':s).replace(/[&<>"]/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._t);
+  t._t = setTimeout(function() { t.classList.remove('show'); }, 2500);
+}
+function pad(n) { return n < 10 ? '0'+n : ''+n; }
+function fmtDate(d) {
+  if (!d) return '—';
+  var x = new Date(d); if (isNaN(x)) return '—';
+  return x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());
+}
+
+/* ===== Ship Chips ===== */
+function buildShipChips() {
+  var counts = {};
+  MAIL.forEach(function(m) {
+    if (m.ship_code) counts[m.ship_code] = (counts[m.ship_code]||0)+1;
+  });
+  var sorted = Object.keys(counts).sort(function(a,b) {
+    return counts[b]-counts[a];
+  });
+  var el = document.getElementById('shipChips');
+  el.innerHTML = '<span style="font-size:11px;color:#64748b;margin-right:8px">선박:</span>' +
+    '<span class="chip'+(FILTER.ship?'':' active')+'" onclick="filterShip(\'\')">전체</span>' +
+    sorted.map(function(c) {
+      return '<span class="chip'+(FILTER.ship===c?' active':'')+
+        '" onclick="filterShip(\''+c+'\')">'+c+' <b>'+counts[c]+'</b></span>';
+    }).join('');
+}
+function buildShipFilter() {
+  var ships = {};
+  MAIL.forEach(function(m) { if (m.ship_code) ships[m.ship_code]=1; });
+  var sel = document.getElementById('fShip');
+  sel.innerHTML = '<option value="">전체 선박</option>' +
+    Object.keys(ships).sort().map(function(c) {
+      return '<option>'+c+'</option>';
+    }).join('');
+}
+function filterShip(code) {
+  FILTER.ship = code;
+  document.getElementById('fShip').value = code;
+  buildShipChips();
+  renderMail();
+}
+
+/* ===== Mail Render ===== */
+function renderMail() {
+  var f = {
+    sys: document.getElementById('fSys').value,
+    ship: document.getElementById('fShip').value || FILTER.ship,
+    status: document.getElementById('fStatus').value,
+    q: document.getElementById('search').value.toLowerCase()
+  };
+  var filtered = MAIL.filter(function(m) {
+    if (f.sys && m.system !== f.sys) return false;
+    if (f.ship && m.ship_code !== f.ship) return false;
+    if (f.status && m.status !== f.status) return false;
+    if (f.q) {
+      var txt = ((m.subject||'')+(m.ship_code||'')+(m.sender||'')+(m.keyword||'')+(m.note||'')).toLowerCase();
+      if (txt.indexOf(f.q) < 0) return false;
+    }
+    return true;
+  });
+  // Stats
+  var st = {total:MAIL.length, BWTS:0, EGCS:0};
+  STATUS_LIST.forEach(function(s){st[s]=0;});
+  MAIL.forEach(function(m) {
+    if (m.system==='BWTS') st.BWTS++;
+    if (m.system==='EGCS') st.EGCS++;
+    st[m.status] = (st[m.status]||0)+1;
+  });
+  document.getElementById('stats').innerHTML =
+    card('전체',st.total,'')+card('BWTS',st.BWTS,'blue')+card('EGCS',st.EGCS,'green')+
+    card('미확인',st['미확인']||0,'amber')+card('진행중',st['진행중']||0,'purple')+
+    card('완료',st['완료']||0,'teal');
+
+  function card(l,n,cls) {
+    return '<div class="card '+cls+'"><div class="num">'+n+'</div><div class="label">'+l+'</div></div>';
+  }
+
+  // Table rows
+  var rows = filtered.map(function(m) {
+    var sysCls = m.system==='BWTS'?'pill-bwts':m.system==='EGCS'?'pill-egcs':'pill-etc';
+    var fromShort = (m.sender||'').replace(/<[^>]+>/g,'').replace(/"/g,'').trim();
+    if (fromShort.length>20) fromShort = fromShort.slice(0,18)+'…';
+    var subj = m.mail_link
+      ? '<a href="'+esc(m.mail_link)+'" target="_blank" title="'+esc(m.subject)+'">'+
+        esc((m.subject||'').slice(0,55))+(m.subject&&m.subject.length>55?'…':'')+'</a>'
+      : esc((m.subject||'').slice(0,55));
+    var reply = (m.reply_count&&m.reply_count>0)
+      ? '<span class="reply-badge">↩'+m.reply_count+'</span>' : '';
+    var stOpts = STATUS_LIST.map(function(s) {
+      return '<option value="'+s+'"'+(m.status===s?' selected':'')+'>'+s+'</option>';
+    }).join('');
+    return '<tr>'+
+      '<td style="white-space:nowrap">'+esc(m.date||'—')+'</td>'+
+      '<td><span class="pill '+sysCls+'">'+esc(m.system)+'</span></td>'+
+      '<td><b>'+esc(m.ship_code||'—')+'</b></td>'+
+      '<td>'+esc(m.keyword||'')+'</td>'+
+      '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+subj+reply+'</td>'+
+      '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#64748b" title="'+esc(m.sender)+'">'+esc(fromShort)+'</td>'+
+      '<td style="text-align:center">'+(m.attachments?'📎':'')+'</td>'+
+      '<td><select class="status-select st-'+esc(m.status)+'" onchange="updateStatus(\''+esc(m.id)+'\',this.value)">'+stOpts+'</select></td>'+
+      '<td class="note-cell"><div class="note-text" onclick="editNote(this,\''+esc(m.id)+'\')">'+esc(m.note||'')+'</div></td>'+
+      '</tr>';
+  }).join('');
+  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="9" class="loading">데이터 없음</td></tr>';
+  document.getElementById('cnt').textContent = filtered.length + ' / ' + MAIL.length + '건';
+}
+
+/* ===== Status Update ===== */
+async function updateStatus(id, newStatus) {
+  var item = MAIL.find(function(m){return m.id===id;});
+  if (item) item.status = newStatus;
+  try {
+    await sb.from('mail_log').update({status: newStatus}).eq('id', id);
+    toast(newStatus + ' 저장됨');
+  } catch(e) { toast('저장 실패'); }
+}
+
+/* ===== Note Edit ===== */
+function editNote(el, id) {
+  var item = MAIL.find(function(m){return m.id===id;});
+  if (!item) return;
+  var cur = item.note || '';
+  var input = document.createElement('input');
+  input.className = 'note-input';
+  input.style.display = 'block';
+  input.value = cur;
+  el.style.display = 'none';
+  el.parentNode.appendChild(input);
+  input.focus();
+  function save() {
+    var val = input.value.trim();
+    item.note = val;
+    el.textContent = val;
+    el.style.display = '';
+    input.remove();
+    sb.from('mail_log').update({note: val}).eq('id', id)
+      .then(function() { toast('메모 저장됨'); });
+  }
+  input.onblur = save;
+  input.onkeydown = function(e) { if (e.key==='Enter') save(); if (e.key==='Escape') { el.style.display=''; input.remove(); } };
+}
+
+/* ===== Repairs ===== */
+function renderRepairs() {
+  if (!REPAIRS.length) {
+    document.getElementById('repairsRoot').innerHTML = '<div class="loading">수리이력 없음</div>';
+    return;
+  }
+  var rows = REPAIRS.map(function(r) {
+    var stOpts = STATUS_LIST.map(function(s) {
+      return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
+    }).join('');
+    return '<tr>'+
+      '<td>'+esc(r.date||'—')+'</td>'+
+      '<td>'+esc(r.ship_code)+'</td>'+
+      '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
+      '<td>'+esc(r.equip||'—')+'</td>'+
+      '<td><select class="status-select st-'+esc(r.stage)+'" onchange="updateRepairStage(\''+esc(r.id)+'\',this.value)">'+stOpts+'</select></td>'+
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">'+esc(r.symptom||'')+'</td>'+
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">'+esc(r.action||'')+'</td>'+
+      '<td>'+esc(r.cost||'')+'</td></tr>';
+  }).join('');
+  document.getElementById('repairsRoot').innerHTML =
+    '<table><thead><tr><th>일자</th><th>선박</th><th>시스템</th><th>장비</th><th>단계</th><th>증상</th><th>조치</th><th>비용</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+async function updateRepairStage(id, stage) {
+  var r = REPAIRS.find(function(x){return x.id===id;});
+  if (r) r.stage = stage;
+  await sb.from('repairs').update({stage:stage}).eq('id',id);
+  toast(stage+' 저장됨');
+}
+
+/* ===== BWTS Calibration ===== */
+function renderBwtsCal() {
+  var DAY = 86400000;
+  var rows = BWTS_CAL.sort(function(a,b) {
+    var da = a.last_date?new Date(a.last_date):new Date(9999,0);
+    var db = b.last_date?new Date(b.last_date):new Date(9999,0);
+    return da-db;
+  }).map(function(c) {
+    var due = null, days = null, lv = 'unknown', label = '미상';
+    if (c.last_date) {
+      due = new Date(c.last_date+'T00:00:00');
+      due.setMonth(due.getMonth()+12);
+      days = Math.round((due-new Date())/DAY);
+      lv = days<=60?'expired':'ok';
+      label = days<=0?'만료':(days<=60?'임박':'정상');
+    }
+    return '<tr><td><b>'+esc(c.ship_code)+'</b></td>'+
+      '<td>'+esc(c.last_date||'—')+'</td>'+
+      '<td>'+fmtDate(due)+'</td>'+
+      '<td><span class="pill lv-'+lv+'">'+label+'</span> '+
+        (days!=null?'<span style="color:#64748b;font-size:11px">'+(days<=0?Math.abs(days)+'일 경과':'D-'+days)+'</span>':'')+
+      '</td><td>'+esc(c.note||'')+'</td></tr>';
+  }).join('');
+  document.getElementById('bwtsCalRoot').innerHTML =
+    '<div style="margin-bottom:12px;color:#64748b;font-size:12px">검교정 주기 1년 · 만료 2개월 이내 빨강</div>'+
+    '<table class="cal-table"><thead><tr><th>선박</th><th>최근 검교정</th><th>다음 만료</th><th>상태</th><th>비고</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* ===== EGCS Calibration ===== */
+function renderEgcsCal() {
+  if (!EGCS_CAL.length) {
+    document.getElementById('egcsCalRoot').innerHTML = '<div class="loading">EGCS 검교정 없음</div>';
+    return;
+  }
+  var rows = EGCS_CAL.map(function(c) {
+    return '<tr><td><b>'+esc(c.ship_code)+'</b></td>'+
+      '<td>'+esc(c.equip)+'</td>'+
+      '<td>'+esc(c.last_date||c.note||'—')+'</td>'+
+      '<td>'+esc(c.serial||'')+'</td>'+
+      '<td>'+esc(c.model||'')+'</td></tr>';
+  }).join('');
+  document.getElementById('egcsCalRoot').innerHTML =
+    '<table class="cal-table"><thead><tr><th>선박</th><th>장비</th><th>최근 검교정</th><th>S/N</th><th>모델</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* ===== Start ===== */
+if (SUPA_URL.indexOf('YOUR_') >= 0) {
+  document.getElementById('tbody').innerHTML =
+    '<tr><td colspan="9" class="loading">⚠️ Supabase 설정 필요<br><br>' +
+    '<code>SUPA_URL</code>과 <code>SUPA_ANON</code>을 index.html 상단에 입력하세요.<br>' +
+    '<a href="https://supabase.com" target="_blank">supabase.com</a>에서 프로젝트 생성 후 Settings → API에서 확인</td></tr>';
+} else {
+  init();
+}
+</script>
+</body>
+</html>
