@@ -146,6 +146,7 @@ tr:hover{background:#f8fafc}
 </div>
 
 <div id="repairsView" style="display:none">
+  <div id="repairsFilter" style="position:sticky;top:54px;z-index:9;background:#f1f5f9;padding:12px 24px 0"></div>
   <div class="wrap" id="repairsRoot"></div>
 </div>
 <div id="bwtsCalView" style="display:none">
@@ -430,7 +431,7 @@ async function mailToRepair(mailId) {
     await sb.from('mail_log').delete().eq('id', mailId);
     MAIL = MAIL.filter(function(x){return x.id!==mailId;});
     toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
-    goRepairs(m.ship_code);
+    renderMail();
   } catch(e) { toast('추가 실패: '+e.message); }
 }
 
@@ -539,8 +540,8 @@ function renderRepairs() {
   }).join('');
 
   var filterBar = '<div style="margin-bottom:12px">'+
-    '<div style="margin-bottom:6px;font-size:11px;color:#64748b">선박</div>'+
-    '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">'+shipChips+'</div>'+
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">'+
+    '<span style="font-size:11px;color:#64748b;flex-shrink:0">선박</span>'+shipChips+'</div>'+
     '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">'+
       '<div><span style="font-size:11px;color:#64748b;margin-right:6px">시스템</span>'+
         sysChip('','전체','')+sysChip('BWTS','BWTS','sys-bwts')+sysChip('EGCS','EGCS','sys-egcs')+'</div>'+
@@ -569,8 +570,9 @@ function renderRepairs() {
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
-  document.getElementById('repairsRoot').innerHTML = filterBar +
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+  document.getElementById('repairsFilter').innerHTML = filterBar;
+  document.getElementById('repairsRoot').innerHTML =
+    '<table><thead style="position:sticky;top:140px;z-index:8"><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
 }
 
