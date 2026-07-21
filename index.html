@@ -412,8 +412,11 @@ async function mailToRepair(mailId) {
   if (!m) return;
   var repairId = 'ML_' + mailId;
   if (REPAIRS.some(function(r){return r.id===repairId;})) {
-    toast('이미 수리이력에 있음');
-    goRepairs(m.ship_code);
+    // Already in repairs — just delete from mail
+    await sb.from('mail_log').delete().eq('id', mailId);
+    MAIL = MAIL.filter(function(x){return x.id!==mailId;});
+    toast('이미 수리이력에 있음 — 메일 제거');
+    renderMail();
     return;
   }
   var newR = {
@@ -435,14 +438,16 @@ async function mailToRepair(mailId) {
     source_msg_id: mailId,
   };
   try {
-    await sb.from('repairs').insert(newR).select();
-    REPAIRS.unshift(newR);
-    // Remove from mail_log
+    await sb.from('repairs').upsert(newR).select();
+    if (!REPAIRS.some(function(r){return r.id===repairId;})) REPAIRS.unshift(newR);
+  } catch(e) { toast('수리이력 추가 실패: '+e.message); }
+  // Always remove from mail_log
+  try {
     await sb.from('mail_log').delete().eq('id', mailId);
     MAIL = MAIL.filter(function(x){return x.id!==mailId;});
-    toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
     renderMail();
-  } catch(e) { toast('추가 실패: '+e.message); }
+    toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
+  } catch(e2) { toast('메일 제거 실패: '+e2.message); }
 }
 
 /* ===== Go to Repairs filtered by ship ===== */
