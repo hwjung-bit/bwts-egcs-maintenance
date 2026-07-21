@@ -96,8 +96,7 @@ tr:hover{background:#f8fafc}
   <h1>BWTS·EGCS 정비 관리대장</h1>
   <span class="meta">V2 — Supabase + GitHub Pages</span>
   <div class="spacer"></div>
-  <button class="login-btn" id="collectBtn" onclick="triggerCollect()" style="background:#059669;display:none">📧 메일 수집</button>
-  <span id="collectStatus" style="font-size:11px;color:#16a34a;display:none"></span>
+  <a class="login-btn" href="https://github.com/hwjung-bit/bwts-egcs-maintenance/actions/workflows/collect.yml" target="_blank" id="collectBtn" style="background:#059669;display:none;text-decoration:none">📧 메일 수집</a>
   <span class="user-info" id="userInfo" style="display:none"></span>
   <button class="login-btn" id="loginBtn" onclick="login()">Google 로그인</button>
   <button class="login-btn" id="logoutBtn" onclick="logout()" style="display:none;background:#64748b">로그아웃</button>
@@ -202,7 +201,6 @@ tr:hover{background:#f8fafc}
 var SUPA_URL  = 'https://ivsjskywdtsnoxhnozcd.supabase.co';
 var SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2c2pza3l3ZHRzbm94aG5vemNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MDE4NjIsImV4cCI6MjEwMDE3Nzg2Mn0.5sF-TSA0WEeR5zj2gSJGuJPiCWWqke_SQB50Mt0Qvec';
 /* GitHub PAT — fine-grained, Actions:write only on this repo */
-var GH_PAT = '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';
 var GH_REPO = 'hwjung-bit/bwts-egcs-maintenance';
 
 var sb = null;
@@ -242,7 +240,7 @@ function onLogin(user) {
   document.getElementById('userInfo').style.display = '';
   document.getElementById('loginBtn').style.display = 'none';
   document.getElementById('logoutBtn').style.display = '';
-  if (GH_PAT) document.getElementById('collectBtn').style.display = '';
+  document.getElementById('collectBtn').style.display = '';
   loadData();
 }
 function onLogout() {
@@ -277,46 +275,6 @@ async function loadData() {
   } catch(e) {
     toast('로드 실패: ' + e.message);
   }
-}
-
-/* ===== Mail Collect Trigger ===== */
-async function triggerCollect() {
-  if (!GH_PAT) { toast('GH_PAT 미설정'); return; }
-  var btn = document.getElementById('collectBtn');
-  var st = document.getElementById('collectStatus');
-  btn.disabled = true; btn.textContent = '⏳ 수집 중...';
-  st.style.display = 'inline'; st.textContent = '';
-  try {
-    var resp = await fetch(
-      'https://api.github.com/repos/' + GH_REPO +
-      '/dispatches', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + GH_PAT,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        event_type: 'collect-mail'
-      }),
-    });
-    if (resp.status === 204 || resp.ok) {
-      st.textContent = '수집 트리거 완료! 2~3분 후 새로고침';
-      st.style.color = '#16a34a';
-      toast('GitHub Actions 수집 시작됨');
-      // 3분 후 자동 새로고침
-      setTimeout(function() { loadData(); }, 180000);
-    } else {
-      var err = await resp.text();
-      st.textContent = '실패: ' + resp.status;
-      st.style.color = '#dc2626';
-      toast('트리거 실패: ' + err);
-    }
-  } catch(e) {
-    st.textContent = '오류: ' + e.message;
-    st.style.color = '#dc2626';
-  }
-  btn.disabled = false; btn.textContent = '📧 메일 수집';
 }
 
 /* ===== Tab Switch ===== */
