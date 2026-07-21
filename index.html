@@ -29,6 +29,16 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .chip{display:inline-block;padding:3px 10px;border-radius:12px;background:#fff;border:1px solid #e2e8f0;font-size:11px;margin:2px;cursor:pointer;transition:all .1s}
 .chip:hover{background:#eff6ff;border-color:#93c5fd}
 .chip.active{background:#dbeafe;border-color:#3b82f6;color:#1d4ed8}
+.chip.sys-bwts.active{background:#dbeafe;border-color:#3b82f6;color:#1d4ed8}
+.chip.sys-egcs.active{background:#dcfce7;border-color:#22c55e;color:#16a34a}
+.chip.stg{font-size:10px;padding:3px 8px}
+.chip.stg.active.stg-미확인{background:#fef3c7;border-color:#fbbf24;color:#92400e}
+.chip.stg.active.stg-진행중{background:#e0e7ff;border-color:#818cf8;color:#3730a3}
+.chip.stg.active.stg-수리견적중{background:#fce7f3;border-color:#f472b6;color:#9d174d}
+.chip.stg.active.stg-부품발주중{background:#fff7ed;border-color:#fb923c;color:#9a3412}
+.chip.stg.active.stg-방선대기{background:#f0fdf4;border-color:#4ade80;color:#166534}
+.chip.stg.active.stg-확인{background:#dbeafe;border-color:#60a5fa;color:#1e40af}
+.chip.stg.active.stg-완료{background:#d1fae5;border-color:#34d399;color:#065f46}
 .filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:54px;z-index:9}
 .filters select,.filters input{padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px}
 .filters input[type="text"]{width:220px}
@@ -518,19 +528,19 @@ function renderRepairs() {
     }).join('');
 
   // Filter bar
-  var sysChip = function(val,label) {
-    return '<span class="chip'+(f.system===val?' active':'')+'" onclick="REPAIR_FILTER.system=\''+val+'\';renderRepairs()">'+label+'</span>';
+  var sysChip = function(val,label,cls) {
+    return '<span class="chip'+(cls?' '+cls:'')+(f.system===val?' active':'')+'" onclick="REPAIR_FILTER.system=\''+val+'\';renderRepairs()">'+label+'</span>';
   };
   var stageChips = STATUS_LIST.map(function(s) {
-    return '<span class="chip'+(f.stage===s?' active':'')+'" onclick="REPAIR_FILTER.stage=\''+s+'\';renderRepairs()">'+s+'</span>';
+    return '<span class="chip stg stg-'+s+(f.stage===s?' active':'')+'" onclick="REPAIR_FILTER.stage=\''+s+'\';renderRepairs()">'+s+'</span>';
   }).join('');
 
   var filterBar = '<div style="margin-bottom:12px">'+
     '<div style="margin-bottom:6px;font-size:11px;color:#64748b">선박</div>'+
-    '<div class="chips" style="margin-bottom:8px">'+shipChips+'</div>'+
+    '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">'+shipChips+'</div>'+
     '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">'+
       '<div><span style="font-size:11px;color:#64748b;margin-right:6px">시스템</span>'+
-        sysChip('','전체')+sysChip('BWTS','BWTS')+sysChip('EGCS','EGCS')+'</div>'+
+        sysChip('','전체','')+sysChip('BWTS','BWTS','sys-bwts')+sysChip('EGCS','EGCS','sys-egcs')+'</div>'+
       '<div><span style="font-size:11px;color:#64748b;margin-right:6px">단계</span>'+
         '<span class="chip'+(f.stage?'':' active')+'" onclick="REPAIR_FILTER.stage=\'\';renderRepairs()">전체</span>'+stageChips+'</div>'+
     '</div>'+
