@@ -426,7 +426,10 @@ async function mailToRepair(mailId) {
   try {
     await sb.from('repairs').insert(newR).select();
     REPAIRS.unshift(newR);
-    toast(esc(m.ship_code)+' 수리이력에 추가됨');
+    // Remove from mail_log
+    await sb.from('mail_log').delete().eq('id', mailId);
+    MAIL = MAIL.filter(function(x){return x.id!==mailId;});
+    toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
     goRepairs(m.ship_code);
   } catch(e) { toast('추가 실패: '+e.message); }
 }
