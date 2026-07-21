@@ -106,6 +106,7 @@ tr:hover{background:#f8fafc}
   <div class="tab" data-tab="repairs" onclick="switchTab('repairs')">🔧 수리이력</div>
   <div class="tab" data-tab="bwtsCal" onclick="switchTab('bwtsCal')">BWTS 검교정</div>
   <div class="tab" data-tab="egcsCal" onclick="switchTab('egcsCal')">EGCS 검교정</div>
+  <div class="tab" data-tab="ships" onclick="switchTab('ships')">🚢 선박관리</div>
 </div>
 
 <div id="mailView">
@@ -187,6 +188,9 @@ tr:hover{background:#f8fafc}
 </div>
 <div id="egcsCalView" style="display:none">
   <div class="wrap" id="egcsCalRoot"></div>
+</div>
+<div id="shipsView" style="display:none">
+  <div class="wrap" id="shipsRoot"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -275,7 +279,7 @@ function switchTab(t) {
   document.querySelectorAll('.tab').forEach(function(el) {
     el.classList.toggle('active', el.dataset.tab === t);
   });
-  ['mailView','repairsView','bwtsCalView','egcsCalView'].forEach(function(id) {
+  ['mailView','repairsView','bwtsCalView','egcsCalView','shipsView'].forEach(function(id) {
     document.getElementById(id).style.display = 'none';
   });
   document.getElementById(t + 'View').style.display = '';
@@ -286,6 +290,7 @@ function renderCurrent() {
   else if (TAB === 'repairs') renderRepairs();
   else if (TAB === 'bwtsCal') renderBwtsCal();
   else if (TAB === 'egcsCal') renderEgcsCal();
+  else if (TAB === 'ships') renderShips();
 }
 
 /* ===== Helpers ===== */
@@ -771,6 +776,104 @@ function renderEgcsCal() {
   document.getElementById('egcsCalRoot').innerHTML =
     '<div style="margin-bottom:12px;color:#64748b;font-size:12px">TriOS: PAH·탁도 검4년·신환8년 / pH 2년 · GI: PAH 모델별 · 탁도 광원5년 · pH 1년</div>'+
     '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">'+colg+'<thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>';
+}
+
+/* ===== Ship Management ===== */
+function renderShips() {
+  var SHIP_ORDER = ['KPS','KUS','KKL','KSG','KJT','KSH','KQD','KTJ','KHM','KNB','KSZ','KMB','KDB','KCN','KMN','KJA','KNH','KMU','KSL','KCB','KDE'];
+  var sorted = SHIPS.slice().sort(function(a,b) {
+    var ia = SHIP_ORDER.indexOf(a.code), ib = SHIP_ORDER.indexOf(b.code);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  var rows = sorted.map(function(s,idx) {
+    var hidden = s.hidden ? true : false;
+    return '<tr style="'+(hidden?'opacity:0.4':'')+'">' +
+      '<td style="text-align:center">'+(idx+1)+'</td>' +
+      '<td><b>'+esc(s.code)+'</b></td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'teu\',this)">'+esc(s.teu||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'bwts_maker\',this)">'+esc(s.bwts_maker||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'egcs_maker\',this)">'+esc(s.egcs_maker||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'wms\',this)">'+esc(s.wms||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'cems\',this)">'+esc(s.cems||'')+'</td>' +
+      '<td style="text-align:center">' +
+        '<button onclick="toggleShipHidden(\''+esc(s.code)+'\')" style="background:none;border:none;cursor:pointer;font-size:14px" title="'+(hidden?'표시':'숨김')+'">'+(hidden?'👁️':'🙈')+'</button>' +
+      '</td></tr>';
+  }).join('');
+
+  document.getElementById('shipsRoot').innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">' +
+      '<h3 style="margin:0">선박 관리</h3>' +
+      '<span style="font-size:12px;color:#64748b">'+SHIPS.length+'척 · 셀 클릭 → 수정 · 🙈 숨김/👁️ 표시</span>' +
+      '<div style="flex:1"></div>' +
+      '<button class="login-btn" onclick="addShip()" style="font-size:12px;padding:5px 12px">+ 선박 추가</button>' +
+    '</div>' +
+    '<table><thead><tr>' +
+      '<th style="width:30px">#</th>' +
+      '<th style="width:50px">코드</th>' +
+      '<th style="width:150px">선명</th>' +
+      '<th style="width:80px">TEU</th>' +
+      '<th style="width:80px">BWTS</th>' +
+      '<th style="width:80px">EGCS</th>' +
+      '<th style="width:70px">WMS</th>' +
+      '<th style="width:70px">CEMS</th>' +
+      '<th style="width:40px"></th>' +
+    '</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+function editShipField(code, field, el) {
+  var s = SHIPS.find(function(x){return x.code===code;});
+  if (!s) return;
+  var cur = s[field] || '';
+  var inp = document.createElement('input');
+  inp.value = cur;
+  inp.style.cssText = 'width:100%;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
+  el.textContent = '';
+  el.appendChild(inp);
+  inp.focus();
+  function save() {
+    var v = inp.value.trim();
+    s[field] = v;
+    el.textContent = v || '';
+    sb.from('ships').update(Object.fromEntries([[field, v]])).eq('code', code)
+      .then(function() { toast(code + ' ' + field + ' 저장됨'); });
+  }
+  inp.onblur = save;
+  inp.onkeydown = function(e) {
+    if (e.key==='Enter') save();
+    if (e.key==='Escape') { el.textContent = cur; }
+  };
+}
+
+async function toggleShipHidden(code) {
+  var s = SHIPS.find(function(x){return x.code===code;});
+  if (!s) return;
+  var newVal = !s.hidden;
+  s.hidden = newVal;
+  await sb.from('ships').update({hidden: newVal}).eq('code', code);
+  toast(code + (newVal ? ' 숨김' : ' 표시'));
+  renderShips();
+}
+
+async function addShip() {
+  var code = prompt('선박 코드 (예: KXX):');
+  if (!code) return;
+  code = code.toUpperCase().trim();
+  if (SHIPS.some(function(s){return s.code===code;})) {
+    toast('이미 존재하는 코드');
+    return;
+  }
+  var name = prompt('선명 (예: KMTC NEW VESSEL):') || '';
+  var newShip = {
+    code: code, name: name.trim(), teu: '', bwts_maker: '',
+    egcs_maker: '', wms: '', cems: '', hidden: false
+  };
+  try {
+    await sb.from('ships').insert(newShip).select();
+    SHIPS.push(newShip);
+    toast(code + ' 추가됨');
+    renderShips();
+  } catch(e) { toast('추가 실패: ' + e.message); }
 }
 
 /* ===== Start ===== */
