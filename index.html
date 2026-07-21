@@ -96,6 +96,8 @@ tr:hover{background:#f8fafc}
   <h1>BWTS·EGCS 정비 관리대장</h1>
   <span class="meta">V2 — Supabase + GitHub Pages</span>
   <div class="spacer"></div>
+  <button class="login-btn" id="collectBtn" onclick="triggerCollect()" style="background:#059669;display:none">📧 메일 수집</button>
+  <span id="collectStatus" style="font-size:11px;color:#16a34a;display:none"></span>
   <span class="user-info" id="userInfo" style="display:none"></span>
   <button class="login-btn" id="loginBtn" onclick="login()">Google 로그인</button>
   <button class="login-btn" id="logoutBtn" onclick="logout()" style="display:none;background:#64748b">로그아웃</button>
@@ -199,6 +201,9 @@ tr:hover{background:#f8fafc}
 /* ===== CONFIG — Supabase 프로젝트 생성 후 여기에 입력 ===== */
 var SUPA_URL  = 'https://ivsjskywdtsnoxhnozcd.supabase.co';
 var SUPA_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml2c2pza3l3ZHRzbm94aG5vemNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MDE4NjIsImV4cCI6MjEwMDE3Nzg2Mn0.5sF-TSA0WEeR5zj2gSJGuJPiCWWqke_SQB50Mt0Qvec';
+/* GitHub PAT — fine-grained, Actions:write only on this repo */
+var GH_PAT = '';  // <-- 여기에 GitHub PAT 입력
+var GH_REPO = 'hwjung-bit/bwts-egcs-maintenance';
 
 var sb = null;
 var USER = null;
@@ -237,6 +242,7 @@ function onLogin(user) {
   document.getElementById('userInfo').style.display = '';
   document.getElementById('loginBtn').style.display = 'none';
   document.getElementById('logoutBtn').style.display = '';
+  if (GH_PAT) document.getElementById('collectBtn').style.display = '';
   loadData();
 }
 function onLogout() {
@@ -271,6 +277,46 @@ async function loadData() {
   } catch(e) {
     toast('로드 실패: ' + e.message);
   }
+}
+
+/* ===== Mail Collect Trigger ===== */
+async function triggerCollect() {
+  if (!GH_PAT) { toast('GH_PAT 미설정'); return; }
+  var btn = document.getElementById('collectBtn');
+  var st = document.getElementById('collectStatus');
+  btn.disabled = true; btn.textContent = '⏳ 수집 중...';
+  st.style.display = 'inline'; st.textContent = '';
+  try {
+    var resp = await fetch(
+      'https://api.github.com/repos/' + GH_REPO +
+      '/dispatches', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + GH_PAT,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event_type: 'collect-mail'
+      }),
+    });
+    if (resp.status === 204 || resp.ok) {
+      st.textContent = '수집 트리거 완료! 2~3분 후 새로고침';
+      st.style.color = '#16a34a';
+      toast('GitHub Actions 수집 시작됨');
+      // 3분 후 자동 새로고침
+      setTimeout(function() { loadData(); }, 180000);
+    } else {
+      var err = await resp.text();
+      st.textContent = '실패: ' + resp.status;
+      st.style.color = '#dc2626';
+      toast('트리거 실패: ' + err);
+    }
+  } catch(e) {
+    st.textContent = '오류: ' + e.message;
+    st.style.color = '#dc2626';
+  }
+  btn.disabled = false; btn.textContent = '📧 메일 수집';
 }
 
 /* ===== Tab Switch ===== */
@@ -569,10 +615,10 @@ function renderRepairs() {
     if (f.stage && r.stage !== f.stage) return false;
     return true;
   });
-  // Sort: 미완료 먼저, 최신순
-  var DONE_RANK = {'완료':1,'확인':1};
+  // Sort: 완료만 아래, 나머지는 날짜 최신순
   filtered.sort(function(a,b) {
-    var da = DONE_RANK[a.stage]||0, db = DONE_RANK[b.stage]||0;
+    var da = a.stage==='완료'?1:0;
+    var db = b.stage==='완료'?1:0;
     if (da !== db) return da - db;
     return String(b.date||'').localeCompare(String(a.date||''));
   });
