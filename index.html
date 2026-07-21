@@ -128,9 +128,9 @@ tr:hover{background:#f8fafc}
     </select>
     <select id="fStatus" onchange="renderMail()">
       <option value="">전체 상태</option>
-      <option>미확인</option><option>수리준비중</option>
+      <option>미확인</option><option>확인</option><option>수리준비중</option>
       <option>자재준비중</option>
-      <option>방선예정</option><option>확인</option><option>완료</option>
+      <option>방선예정</option><option>완료</option>
     </select>
     <input type="text" id="search" placeholder="🔍 제목, 선박, 발신자..."
            oninput="renderMail()">
@@ -174,9 +174,9 @@ tr:hover{background:#f8fafc}
     </select>
     <select id="rfStage" onchange="REPAIR_FILTER.stage=this.value;renderRepairs()">
       <option value="">전체 단계</option>
-      <option>미확인</option><option>수리준비중</option>
+      <option>미확인</option><option>확인</option><option>수리준비중</option>
       <option>자재준비중</option>
-      <option>방선예정</option><option>확인</option><option>완료</option>
+      <option>방선예정</option><option>완료</option>
     </select>
     <span class="count" id="repairCnt"></span>
   </div>
@@ -201,8 +201,8 @@ var USER = null;
 var MAIL = [], REPAIRS = [], BWTS_CAL = [], EGCS_CAL = [], SHIPS = [];
 var TAB = 'mail';
 var FILTER = { sys: '', ship: '', status: '', q: '' };
-var STATUS_LIST = ['미확인','수리준비중','자재준비중',
-                   '방선예정','확인','완료'];
+var STATUS_LIST = ['미확인','확인','수리준비중','자재준비중',
+                   '방선예정','완료'];
 
 /* ===== Init ===== */
 function init() {
