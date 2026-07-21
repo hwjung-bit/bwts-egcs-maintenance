@@ -332,11 +332,14 @@ function buildShipChips() {
 function buildShipFilter() {
   var ships = {};
   MAIL.forEach(function(m) { if (m.ship_code) ships[m.ship_code]=1; });
+  var order = getShipOrder();
+  var sorted = Object.keys(ships).sort(function(a,b) {
+    var ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
   var sel = document.getElementById('fShip');
   sel.innerHTML = '<option value="">전체 선박</option>' +
-    Object.keys(ships).sort().map(function(c) {
-      return '<option>'+c+'</option>';
-    }).join('');
+    sorted.map(function(c) { return '<option>'+c+'</option>'; }).join('');
 }
 function filterShip(code) {
   FILTER.ship = code;
@@ -423,10 +426,15 @@ async function deleteMail(id) {
 function buildRepairShipFilter() {
   var ships = {};
   REPAIRS.forEach(function(r) { if(r.ship_code) ships[r.ship_code]=1; });
+  var order = getShipOrder();
+  var sorted = Object.keys(ships).sort(function(a,b) {
+    var ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
   var sel = document.getElementById('rfShip');
   if (!sel) return;
   sel.innerHTML = '<option value="">전체 선박</option>' +
-    Object.keys(ships).sort().map(function(c) {
+    sorted.map(function(c) {
       return '<option>'+c+'</option>';
     }).join('');
 }
@@ -779,37 +787,55 @@ function renderEgcsCal() {
 }
 
 /* ===== Ship Management ===== */
+var SHIP_TAB = 'active'; // 'active' or 'hidden'
+
+/** Global ship order — used by all tabs (filters, calibrations, etc.) */
+function getShipOrder() {
+  return SHIPS.filter(function(s){return !s.hidden;})
+    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);})
+    .map(function(s){return s.code;});
+}
+
 function renderShips() {
-  var SHIP_ORDER = ['KPS','KUS','KKL','KSG','KJT','KSH','KQD','KTJ','KHM','KNB','KSZ','KMB','KDB','KCN','KMN','KJA','KNH','KMU','KSL','KCB','KDE'];
-  var sorted = SHIPS.slice().sort(function(a,b) {
-    var ia = SHIP_ORDER.indexOf(a.code), ib = SHIP_ORDER.indexOf(b.code);
-    return (ia<0?99:ia)-(ib<0?99:ib);
-  });
-  var rows = sorted.map(function(s,idx) {
-    var hidden = s.hidden ? true : false;
-    return '<tr style="'+(hidden?'opacity:0.4':'')+'">' +
-      '<td style="text-align:center">'+(idx+1)+'</td>' +
-      '<td><b>'+esc(s.code)+'</b></td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'teu\',this)">'+esc(s.teu||'')+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'bwts_maker\',this)">'+esc(s.bwts_maker||'')+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'egcs_maker\',this)">'+esc(s.egcs_maker||'')+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'wms\',this)">'+esc(s.wms||'')+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+esc(s.code)+'\',\'cems\',this)">'+esc(s.cems||'')+'</td>' +
+  var active = SHIPS.filter(function(s){return !s.hidden;})
+    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
+  var hidden = SHIPS.filter(function(s){return s.hidden;});
+
+  var tabA = SHIP_TAB==='active' ? ' active' : '';
+  var tabH = SHIP_TAB==='hidden' ? ' active' : '';
+  var tabs = '<div style="display:flex;gap:4px;margin-bottom:12px">' +
+    '<div class="tab'+tabA+'" onclick="SHIP_TAB=\'active\';renderShips()">운항중 ('+active.length+')</div>' +
+    '<div class="tab'+tabH+'" onclick="SHIP_TAB=\'hidden\';renderShips()">숨김 ('+hidden.length+')</div></div>';
+
+  var list = SHIP_TAB==='active' ? active : hidden;
+  var rows = list.map(function(s,idx) {
+    var c = esc(s.code);
+    var arrows = SHIP_TAB==='active' ?
+      '<span onclick="moveShip(\''+c+'\',-1)" style="cursor:pointer;font-size:12px" title="위로">▲</span> ' +
+      '<span onclick="moveShip(\''+c+'\',1)" style="cursor:pointer;font-size:12px" title="아래로">▼</span>' : '';
+    return '<tr draggable="true" ondragstart="dragStart(event,\''+c+'\')" ondragover="event.preventDefault()" ondrop="dropShip(event,\''+c+'\')" style="cursor:grab">' +
+      '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+' '+arrows+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'teu\',this)">'+esc(s.teu||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'bwts_maker\',this)">'+esc(s.bwts_maker||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'egcs_maker\',this)">'+esc(s.egcs_maker||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'wms\',this)">'+esc(s.wms||'')+'</td>' +
+      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'cems\',this)">'+esc(s.cems||'')+'</td>' +
       '<td style="text-align:center">' +
-        '<button onclick="toggleShipHidden(\''+esc(s.code)+'\')" style="background:none;border:none;cursor:pointer;font-size:14px" title="'+(hidden?'표시':'숨김')+'">'+(hidden?'👁️':'🙈')+'</button>' +
+        '<button onclick="toggleShipHidden(\''+c+'\')" style="background:none;border:none;cursor:pointer;font-size:14px" title="'+(s.hidden?'복원':'숨김')+'">'+(s.hidden?'👁️':'🙈')+'</button>' +
       '</td></tr>';
   }).join('');
 
   document.getElementById('shipsRoot').innerHTML =
-    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
       '<h3 style="margin:0">선박 관리</h3>' +
-      '<span style="font-size:12px;color:#64748b">'+SHIPS.length+'척 · 셀 클릭 → 수정 · 🙈 숨김/👁️ 표시</span>' +
+      '<span style="font-size:12px;color:#64748b">드래그 또는 ▲▼로 순서 변경 · 셀 클릭 수정</span>' +
       '<div style="flex:1"></div>' +
       '<button class="login-btn" onclick="addShip()" style="font-size:12px;padding:5px 12px">+ 선박 추가</button>' +
-    '</div>' +
+    '</div>' + tabs +
     '<table><thead><tr>' +
-      '<th style="width:30px">#</th>' +
+      '<th style="width:50px">#</th>' +
       '<th style="width:50px">코드</th>' +
       '<th style="width:150px">선명</th>' +
       '<th style="width:80px">TEU</th>' +
@@ -819,6 +845,50 @@ function renderShips() {
       '<th style="width:70px">CEMS</th>' +
       '<th style="width:40px"></th>' +
     '</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+/* Drag & Drop reorder */
+var _dragCode = null;
+function dragStart(e, code) { _dragCode = code; e.dataTransfer.effectAllowed = 'move'; }
+function dropShip(e, targetCode) {
+  e.preventDefault();
+  if (!_dragCode || _dragCode === targetCode) return;
+  var active = SHIPS.filter(function(s){return !s.hidden;})
+    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
+  var codes = active.map(function(s){return s.code;});
+  var fromIdx = codes.indexOf(_dragCode);
+  var toIdx = codes.indexOf(targetCode);
+  if (fromIdx < 0 || toIdx < 0) return;
+  codes.splice(fromIdx, 1);
+  codes.splice(toIdx, 0, _dragCode);
+  saveShipOrder(codes);
+  _dragCode = null;
+}
+
+function moveShip(code, dir) {
+  var active = SHIPS.filter(function(s){return !s.hidden;})
+    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
+  var codes = active.map(function(s){return s.code;});
+  var idx = codes.indexOf(code);
+  if (idx < 0) return;
+  var newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= codes.length) return;
+  codes.splice(idx, 1);
+  codes.splice(newIdx, 0, code);
+  saveShipOrder(codes);
+}
+
+async function saveShipOrder(codes) {
+  for (var i = 0; i < codes.length; i++) {
+    var s = SHIPS.find(function(x){return x.code===codes[i];});
+    if (s) s.sort_order = i;
+  }
+  renderShips();
+  // Batch save to DB
+  for (var j = 0; j < codes.length; j++) {
+    sb.from('ships').update({sort_order: j}).eq('code', codes[j]).then(function(){});
+  }
+  toast('순서 저장됨');
 }
 
 function editShipField(code, field, el) {
@@ -833,15 +903,25 @@ function editShipField(code, field, el) {
   inp.focus();
   function save() {
     var v = inp.value.trim();
+    if (field === 'code') {
+      // Code change — need to update PK
+      var oldCode = code;
+      if (v && v !== oldCode) {
+        s.code = v;
+        sb.from('ships').update({code: v}).eq('code', oldCode)
+          .then(function(){ toast(oldCode+' → '+v); renderShips(); });
+      } else { el.innerHTML = '<b>'+esc(cur)+'</b>'; }
+      return;
+    }
     s[field] = v;
     el.textContent = v || '';
     sb.from('ships').update(Object.fromEntries([[field, v]])).eq('code', code)
-      .then(function() { toast(code + ' ' + field + ' 저장됨'); });
+      .then(function() { toast(code + ' 저장됨'); });
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
     if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.textContent = cur; }
+    if (e.key==='Escape') { el.textContent = cur; if(field==='code') el.innerHTML='<b>'+esc(cur)+'</b>'; }
   };
 }
 
@@ -851,7 +931,7 @@ async function toggleShipHidden(code) {
   var newVal = !s.hidden;
   s.hidden = newVal;
   await sb.from('ships').update({hidden: newVal}).eq('code', code);
-  toast(code + (newVal ? ' 숨김' : ' 표시'));
+  toast(code + (newVal ? ' 숨김' : ' 복원'));
   renderShips();
 }
 
@@ -860,13 +940,13 @@ async function addShip() {
   if (!code) return;
   code = code.toUpperCase().trim();
   if (SHIPS.some(function(s){return s.code===code;})) {
-    toast('이미 존재하는 코드');
-    return;
+    toast('이미 존재하는 코드'); return;
   }
   var name = prompt('선명 (예: KMTC NEW VESSEL):') || '';
+  var maxOrder = SHIPS.reduce(function(m,s){return Math.max(m,s.sort_order||0);},0);
   var newShip = {
     code: code, name: name.trim(), teu: '', bwts_maker: '',
-    egcs_maker: '', wms: '', cems: '', hidden: false
+    egcs_maker: '', wms: '', cems: '', hidden: false, sort_order: maxOrder+1
   };
   try {
     await sb.from('ships').insert(newShip).select();
