@@ -35,7 +35,9 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .chip.stg.active.stg-미확인{background:#fef3c7;border-color:#fbbf24;color:#92400e}
 .chip.stg.active.stg-진행중{background:#e0e7ff;border-color:#818cf8;color:#3730a3}
 .chip.stg.active.stg-수리견적중{background:#fce7f3;border-color:#f472b6;color:#9d174d}
-.chip.stg.active.stg-부품발주중{background:#fff7ed;border-color:#fb923c;color:#9a3412}
+.chip.stg.active.stg-발주{background:#fff7ed;border-color:#fb923c;color:#9a3412}
+.chip.stg.active.stg-자재준비중{background:#fef3c7;border-color:#fbbf24;color:#854d0e}
+.chip.stg.active.stg-수리준비중{background:#ecfccb;border-color:#a3e635;color:#3f6212}
 .chip.stg.active.stg-방선대기{background:#f0fdf4;border-color:#4ade80;color:#166534}
 .chip.stg.active.stg-확인{background:#dbeafe;border-color:#60a5fa;color:#1e40af}
 .chip.stg.active.stg-완료{background:#d1fae5;border-color:#34d399;color:#065f46}
@@ -57,7 +59,9 @@ tr:hover{background:#f8fafc}
 .st-미확인{background:#fef3c7;color:#92400e}
 .st-진행중{background:#e0e7ff;color:#3730a3}
 .st-수리견적중{background:#fce7f3;color:#9d174d}
-.st-부품발주중{background:#fff7ed;color:#9a3412}
+.st-발주{background:#fff7ed;color:#9a3412}
+.st-자재준비중{background:#fef3c7;color:#854d0e}
+.st-수리준비중{background:#ecfccb;color:#3f6212}
 .st-방선대기{background:#f0fdf4;color:#166534}
 .st-확인{background:#dbeafe;color:#1e40af}
 .st-완료{background:#d1fae5;color:#065f46}
@@ -125,8 +129,8 @@ tr:hover{background:#f8fafc}
     <select id="fStatus" onchange="renderMail()">
       <option value="">전체 상태</option>
       <option>미확인</option><option>진행중</option>
-      <option>수리견적중</option><option>부품발주중</option>
-      <option>방선대기</option><option>확인</option><option>완료</option>
+      <option>수리견적중</option><option>발주</option><option>자재준비중</option>
+      <option>수리준비중</option><option>방선대기</option><option>확인</option><option>완료</option>
     </select>
     <input type="text" id="search" placeholder="🔍 제목, 선박, 발신자..."
            oninput="renderMail()">
@@ -171,8 +175,8 @@ tr:hover{background:#f8fafc}
     <select id="rfStage" onchange="REPAIR_FILTER.stage=this.value;renderRepairs()">
       <option value="">전체 단계</option>
       <option>미확인</option><option>진행중</option>
-      <option>수리견적중</option><option>부품발주중</option>
-      <option>방선대기</option><option>확인</option><option>완료</option>
+      <option>수리견적중</option><option>발주</option><option>자재준비중</option>
+      <option>수리준비중</option><option>방선대기</option><option>확인</option><option>완료</option>
     </select>
     <span class="count" id="repairCnt"></span>
   </div>
@@ -197,8 +201,8 @@ var USER = null;
 var MAIL = [], REPAIRS = [], BWTS_CAL = [], EGCS_CAL = [], SHIPS = [];
 var TAB = 'mail';
 var FILTER = { sys: '', ship: '', status: '', q: '' };
-var STATUS_LIST = ['미확인','진행중','수리견적중','부품발주중',
-                   '방선대기','확인','완료'];
+var STATUS_LIST = ['미확인','진행중','수리견적중','발주','자재준비중',
+                   '수리준비중','방선대기','확인','완료'];
 
 /* ===== Init ===== */
 function init() {
@@ -567,11 +571,16 @@ function renderRepairs() {
     if (r.system==='EGCS') st.EGCS++;
     st[r.stage] = (st[r.stage]||0)+1;
   });
-  function card(l,n,cls) { return '<div class="card '+cls+'"><div class="num">'+n+'</div><div class="label">'+l+'</div></div>'; }
+  function card(l,n,cls,stage) {
+    var click = stage ? ' onclick="REPAIR_FILTER.stage=\''+stage+'\';document.getElementById(\'rfStage\').value=\''+stage+'\';renderRepairs()" style="cursor:pointer"' : '';
+    return '<div class="card '+cls+'"'+click+'><div class="num">'+n+'</div><div class="label">'+l+'</div></div>';
+  }
   document.getElementById('repairStats').innerHTML =
-    card('전체',st.total,'')+card('BWTS',st.BWTS,'blue')+card('EGCS',st.EGCS,'green')+
-    card('미확인',st['미확인']||0,'amber')+card('진행중',st['진행중']||0,'purple')+
-    card('완료',st['완료']||0,'teal');
+    card('전체',st.total,'','')+card('BWTS',st.BWTS,'blue','')+card('EGCS',st.EGCS,'green','')+
+    STATUS_LIST.map(function(s) {
+      var colors = {'미확인':'amber','진행중':'purple','수리견적중':'rose','발주':'','자재준비중':'','수리준비중':'','방선대기':'','확인':'blue','완료':'teal'};
+      return card(s, st[s]||0, colors[s]||'', s);
+    }).join('');
   document.getElementById('repairCnt').textContent = filtered.length+' / '+REPAIRS.length+'건';
 
   var rows = filtered.map(function(r) {
