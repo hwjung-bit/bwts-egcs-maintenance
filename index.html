@@ -129,6 +129,7 @@ tr:hover{background:#f8fafc}
       <th style="width:40px;text-align:center">📎</th>
       <th style="width:90px">상태</th>
       <th style="width:180px">비고</th>
+      <th style="width:30px"></th>
     </tr></thead>
     <tbody id="tbody"></tbody>
   </table></div>
@@ -165,7 +166,7 @@ function init() {
   sb.auth.getSession().then(function(res) {
     if (res.data.session) onLogin(res.data.session.user);
     else document.getElementById('tbody').innerHTML =
-      '<tr><td colspan="9" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
+      '<tr><td colspan="10" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
   });
   sb.auth.onAuthStateChange(function(event, session) {
     if (event === 'SIGNED_IN' && session) onLogin(session.user);
@@ -201,7 +202,7 @@ function onLogout() {
 /* ===== Data Loading ===== */
 async function loadData() {
   document.getElementById('tbody').innerHTML =
-    '<tr><td colspan="9" class="loading"><span class="spin"></span> 로딩...</td></tr>';
+    '<tr><td colspan="10" class="loading"><span class="spin"></span> 로딩...</td></tr>';
   try {
     var [m, r, bc, ec, s] = await Promise.all([
       sb.from('mail_log').select('*').order('date', {ascending:false}).limit(2000),
@@ -344,19 +345,22 @@ function renderMail() {
     var stOpts = STATUS_LIST.map(function(s) {
       return '<option value="'+s+'"'+(m.status===s?' selected':'')+'>'+s+'</option>';
     }).join('');
+    var eid = esc(m.id);
+    var shipClick = m.ship_code ? ' onclick="goRepairs(\''+esc(m.ship_code)+'\')" style="cursor:pointer" title="수리이력 보기"' : '';
     return '<tr>'+
       '<td style="white-space:nowrap">'+esc(m.date||'—')+'</td>'+
       '<td><span class="pill '+sysCls+'">'+esc(m.system)+'</span></td>'+
-      '<td><b>'+esc(m.ship_code||'—')+'</b></td>'+
+      '<td'+shipClick+'><b>'+esc(m.ship_code||'—')+'</b></td>'+
       '<td>'+esc(m.keyword||'')+'</td>'+
       '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+subj+reply+'</td>'+
       '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#64748b" title="'+esc(m.sender)+'">'+esc(fromShort)+'</td>'+
       '<td style="text-align:center">'+(m.attachments?'📎':'')+'</td>'+
-      '<td><select class="status-select st-'+esc(m.status)+'" onchange="updateStatus(\''+esc(m.id)+'\',this.value)">'+stOpts+'</select></td>'+
-      '<td class="note-cell"><div class="note-text" onclick="editNote(this,\''+esc(m.id)+'\')">'+esc(m.note||'')+'</div></td>'+
+      '<td style="padding:4px 6px"><select class="status-select st-'+esc(m.status)+'" style="padding:3px 18px 3px 6px" onchange="updateStatus(\''+eid+'\',this.value)">'+stOpts+'</select></td>'+
+      '<td class="note-cell"><div class="note-text" onclick="editNote(this,\''+eid+'\')">'+esc(m.note||'')+'</div></td>'+
+      '<td style="text-align:center"><button onclick="deleteMail(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="9" class="loading">데이터 없음</td></tr>';
+  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="10" class="loading">데이터 없음</td></tr>';
   document.getElementById('cnt').textContent = filtered.length + ' / ' + MAIL.length + '건';
 }
 
@@ -368,6 +372,49 @@ async function updateStatus(id, newStatus) {
     await sb.from('mail_log').update({status: newStatus}).eq('id', id);
     toast(newStatus + ' 저장됨');
   } catch(e) { toast('저장 실패'); }
+}
+
+/* ===== Delete Mail ===== */
+async function deleteMail(id) {
+  if (!confirm('이 메일을 삭제할까요?')) return;
+  await sb.from('mail_log').delete().eq('id', id);
+  MAIL = MAIL.filter(function(x){return x.id!==id;});
+  renderMail();
+  toast('삭제됨');
+}
+
+/* ===== Go to Repairs filtered by ship ===== */
+function goRepairs(shipCode) {
+  switchTab('repairs');
+  // Filter repairs by ship after tab switch
+  setTimeout(function() {
+    var filtered = REPAIRS.filter(function(r){return r.ship_code===shipCode;});
+    if (!filtered.length) {
+      document.getElementById('repairsRoot').innerHTML =
+        '<div class="loading">'+esc(shipCode)+' 수리이력 없음</div>'+
+        '<div style="text-align:center;margin-top:12px"><button class="refresh-btn" onclick="renderRepairs()">전체 수리이력 보기</button></div>';
+      return;
+    }
+    var rows = filtered.map(function(r) {
+      var stOpts = STATUS_LIST.map(function(s) {
+        return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
+      }).join('');
+      var eid = esc(r.id);
+      return '<tr>'+
+        '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
+        '<td>'+esc(r.ship_code)+'</td>'+
+        '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
+        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'equip\',this)" title="클릭하여 수정">'+esc(r.equip||'—')+'</td>'+
+        '<td style="padding:4px 6px"><select class="status-select st-'+esc(r.stage)+'" style="padding:3px 18px 3px 6px" onchange="updateRepairField(\''+eid+'\',\'stage\',this.value)">'+stOpts+'</select></td>'+
+        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
+        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
+        '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
+    }).join('');
+    document.getElementById('repairsRoot').innerHTML =
+      '<div style="margin-bottom:12px"><b>'+esc(shipCode)+'</b> 수리이력 <span style="color:#64748b">('+filtered.length+'건)</span> '+
+      '<button class="refresh-btn" onclick="renderRepairs()" style="margin-left:8px">전체 보기</button></div>'+
+      '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }, 100);
 }
 
 /* ===== Note Edit ===== */
