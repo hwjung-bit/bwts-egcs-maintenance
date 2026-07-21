@@ -570,7 +570,7 @@ function renderRepairs() {
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
-    '<table><thead style="position:sticky;top:140px;z-index:8"><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
 }
 
