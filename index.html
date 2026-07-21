@@ -105,8 +105,6 @@ tr:hover{background:#f8fafc}
 </div>
 
 <div id="mailView">
-  <div class="stats" id="stats"></div>
-  <div class="ships" id="shipChips"></div>
   <div class="filters">
     <select id="fSys" onchange="renderMail()">
       <option value="">전체 시스템</option>
@@ -146,7 +144,24 @@ tr:hover{background:#f8fafc}
 </div>
 
 <div id="repairsView" style="display:none">
-  <div id="repairsFilter" style="position:sticky;top:54px;z-index:9;background:#f1f5f9;padding:12px 24px 0"></div>
+  <div class="stats" id="repairStats"></div>
+  <div class="filters" id="repairFilters" style="top:54px">
+    <select id="rfSys" onchange="REPAIR_FILTER.system=this.value;renderRepairs()">
+      <option value="">전체 시스템</option>
+      <option value="BWTS">BWTS</option>
+      <option value="EGCS">EGCS</option>
+    </select>
+    <select id="rfShip" onchange="REPAIR_FILTER.ship=this.value;renderRepairs()">
+      <option value="">전체 선박</option>
+    </select>
+    <select id="rfStage" onchange="REPAIR_FILTER.stage=this.value;renderRepairs()">
+      <option value="">전체 단계</option>
+      <option>미확인</option><option>진행중</option>
+      <option>수리견적중</option><option>부품발주중</option>
+      <option>방선대기</option><option>확인</option><option>완료</option>
+    </select>
+    <span class="count" id="repairCnt"></span>
+  </div>
   <div class="wrap" id="repairsRoot"></div>
 </div>
 <div id="bwtsCalView" style="display:none">
@@ -227,8 +242,8 @@ async function loadData() {
     BWTS_CAL = bc.data || [];
     EGCS_CAL = ec.data || [];
     SHIPS = s.data || [];
-    buildShipChips();
     buildShipFilter();
+    buildRepairShipFilter();
     renderCurrent();
     toast('데이터 로드 완료 (' + MAIL.length + '건)');
   } catch(e) {
@@ -325,23 +340,6 @@ function renderMail() {
     }
     return true;
   });
-  // Stats
-  var st = {total:MAIL.length, BWTS:0, EGCS:0};
-  STATUS_LIST.forEach(function(s){st[s]=0;});
-  MAIL.forEach(function(m) {
-    if (m.system==='BWTS') st.BWTS++;
-    if (m.system==='EGCS') st.EGCS++;
-    st[m.status] = (st[m.status]||0)+1;
-  });
-  document.getElementById('stats').innerHTML =
-    card('전체',st.total,'')+card('BWTS',st.BWTS,'blue')+card('EGCS',st.EGCS,'green')+
-    card('미확인',st['미확인']||0,'amber')+card('진행중',st['진행중']||0,'purple')+
-    card('완료',st['완료']||0,'teal');
-
-  function card(l,n,cls) {
-    return '<div class="card '+cls+'"><div class="num">'+n+'</div><div class="label">'+l+'</div></div>';
-  }
-
   // Table rows
   var rows = filtered.map(function(m) {
     var sysCls = m.system==='BWTS'?'pill-bwts':m.system==='EGCS'?'pill-egcs':'pill-etc';
@@ -394,6 +392,18 @@ async function deleteMail(id) {
   MAIL = MAIL.filter(function(x){return x.id!==id;});
   renderMail();
   toast('삭제됨');
+}
+
+/* ===== Build repair ship filter dropdown ===== */
+function buildRepairShipFilter() {
+  var ships = {};
+  REPAIRS.forEach(function(r) { if(r.ship_code) ships[r.ship_code]=1; });
+  var sel = document.getElementById('rfShip');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">전체 선박</option>' +
+    Object.keys(ships).sort().map(function(c) {
+      return '<option>'+c+'</option>';
+    }).join('');
 }
 
 /* ===== Mail → Repair copy ===== */
@@ -508,6 +518,10 @@ function renderRepairs() {
     return;
   }
   var f = REPAIR_FILTER;
+  // Sync dropdowns
+  document.getElementById('rfSys').value = f.system;
+  document.getElementById('rfShip').value = f.ship;
+  document.getElementById('rfStage').value = f.stage;
   // Filter
   var filtered = REPAIRS.filter(function(r) {
     if (f.ship && r.ship_code !== f.ship) return false;
@@ -515,42 +529,27 @@ function renderRepairs() {
     if (f.stage && r.stage !== f.stage) return false;
     return true;
   });
-  // Sort: 미완료(미확인/진행중 등) 먼저, 그 안에서 최신순
+  // Sort: 미완료 먼저, 최신순
   var DONE_RANK = {'완료':1,'확인':1};
   filtered.sort(function(a,b) {
     var da = DONE_RANK[a.stage]||0, db = DONE_RANK[b.stage]||0;
     if (da !== db) return da - db;
     return String(b.date||'').localeCompare(String(a.date||''));
   });
-
-  // Ship chips for filter
-  var shipCounts = {};
-  REPAIRS.forEach(function(r) { if(r.ship_code) shipCounts[r.ship_code]=(shipCounts[r.ship_code]||0)+1; });
-  var shipChips = '<span class="chip'+(f.ship?'':' active')+'" onclick="REPAIR_FILTER.ship=\'\';renderRepairs()">전체</span>'+
-    Object.keys(shipCounts).sort().map(function(c) {
-      return '<span class="chip'+(f.ship===c?' active':'')+'" onclick="REPAIR_FILTER.ship=\''+c+'\';renderRepairs()">'+c+' <b>'+shipCounts[c]+'</b></span>';
-    }).join('');
-
-  // Filter bar
-  var sysChip = function(val,label,cls) {
-    return '<span class="chip'+(cls?' '+cls:'')+(f.system===val?' active':'')+'" onclick="REPAIR_FILTER.system=\''+val+'\';renderRepairs()">'+label+'</span>';
-  };
-  var stageChips = STATUS_LIST.map(function(s) {
-    return '<span class="chip stg stg-'+s+(f.stage===s?' active':'')+'" onclick="REPAIR_FILTER.stage=\''+s+'\';renderRepairs()">'+s+'</span>';
-  }).join('');
-
-  var filterBar = '<div style="margin-bottom:12px">'+
-    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;overflow-x:auto;white-space:nowrap;padding-bottom:4px">'+
-    '<span style="font-size:11px;color:#64748b;flex-shrink:0">선박</span>'+shipChips+'</div>'+
-    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">'+
-      '<div><span style="font-size:11px;color:#64748b;margin-right:6px">시스템</span>'+
-        sysChip('','전체','')+sysChip('BWTS','BWTS','sys-bwts')+sysChip('EGCS','EGCS','sys-egcs')+'</div>'+
-      '<div><span style="font-size:11px;color:#64748b;margin-right:6px">단계</span>'+
-        '<span class="chip'+(f.stage?'':' active')+'" onclick="REPAIR_FILTER.stage=\'\';renderRepairs()">전체</span>'+stageChips+'</div>'+
-    '</div>'+
-    '<div style="font-size:12px;color:#64748b">'+filtered.length+' / '+REPAIRS.length+'건'+
-      (f.ship||f.system||f.stage?' · <span style="color:#2563eb;cursor:pointer" onclick="REPAIR_FILTER={ship:\'\',system:\'\',stage:\'\'};renderRepairs()">필터 초기화</span>':'')+
-    '</div></div>';
+  // Stats cards
+  var st = {total:REPAIRS.length, BWTS:0, EGCS:0};
+  STATUS_LIST.forEach(function(s){st[s]=0;});
+  REPAIRS.forEach(function(r) {
+    if (r.system==='BWTS') st.BWTS++;
+    if (r.system==='EGCS') st.EGCS++;
+    st[r.stage] = (st[r.stage]||0)+1;
+  });
+  function card(l,n,cls) { return '<div class="card '+cls+'"><div class="num">'+n+'</div><div class="label">'+l+'</div></div>'; }
+  document.getElementById('repairStats').innerHTML =
+    card('전체',st.total,'')+card('BWTS',st.BWTS,'blue')+card('EGCS',st.EGCS,'green')+
+    card('미확인',st['미확인']||0,'amber')+card('진행중',st['진행중']||0,'purple')+
+    card('완료',st['완료']||0,'teal');
+  document.getElementById('repairCnt').textContent = filtered.length+' / '+REPAIRS.length+'건';
 
   var rows = filtered.map(function(r) {
     var stOpts = STATUS_LIST.map(function(s) {
@@ -570,7 +569,6 @@ function renderRepairs() {
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
-  document.getElementById('repairsFilter').innerHTML = filterBar;
   document.getElementById('repairsRoot').innerHTML =
     '<table><thead style="position:sticky;top:140px;z-index:8"><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
