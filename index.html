@@ -357,7 +357,9 @@ function renderMail() {
       '<td style="text-align:center">'+(m.attachments?'📎':'')+'</td>'+
       '<td style="padding:4px 6px"><select class="status-select st-'+esc(m.status)+'" style="padding:3px 18px 3px 6px" onchange="updateStatus(\''+eid+'\',this.value)">'+stOpts+'</select></td>'+
       '<td class="note-cell"><div class="note-text" onclick="editNote(this,\''+eid+'\')">'+esc(m.note||'')+'</div></td>'+
-      '<td style="text-align:center"><button onclick="deleteMail(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>'+
+      '<td style="text-align:center;white-space:nowrap">'+
+        '<button onclick="mailToRepair(\''+eid+'\')" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:13px;margin-right:4px" title="수리이력으로 복사">🔧</button>'+
+        '<button onclick="deleteMail(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>'+
       '</tr>';
   }).join('');
   document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="10" class="loading">데이터 없음</td></tr>';
@@ -383,10 +385,53 @@ async function deleteMail(id) {
   toast('삭제됨');
 }
 
+/* ===== Mail → Repair copy ===== */
+async function mailToRepair(mailId) {
+  var m = MAIL.find(function(x){return x.id===mailId;});
+  if (!m) return;
+  var repairId = 'ML_' + mailId;
+  if (REPAIRS.some(function(r){return r.id===repairId;})) {
+    toast('이미 수리이력에 있음');
+    goRepairs(m.ship_code);
+    return;
+  }
+  var newR = {
+    id: repairId,
+    ship_code: m.ship_code || '',
+    system: m.system || '기타',
+    date: m.date || null,
+    equip: m.keyword || '',
+    stage: '미확인',
+    symptom: m.subject || '',
+    action: '',
+    parts: '',
+    cost: '',
+    attachments: '[]',
+    history: '[]',
+    email_subject: m.subject || '',
+    email_link: m.mail_link || '',
+    needs_review: false,
+    source_msg_id: mailId,
+  };
+  try {
+    await sb.from('repairs').insert(newR).select();
+    REPAIRS.unshift(newR);
+    toast(esc(m.ship_code)+' 수리이력에 추가됨');
+    goRepairs(m.ship_code);
+  } catch(e) { toast('추가 실패: '+e.message); }
+}
+
 /* ===== Go to Repairs filtered by ship ===== */
+var REPAIR_FILTER = {ship:'',system:'',stage:''};
 function goRepairs(shipCode) {
+  REPAIR_FILTER.ship = shipCode || '';
   switchTab('repairs');
-  // Filter repairs by ship after tab switch
+  setTimeout(function() { renderRepairs(); }, 50);
+  return;
+}
+// Legacy compatibility
+function goRepairsOld(shipCode) {
+  switchTab('repairs');
   setTimeout(function() {
     var filtered = REPAIRS.filter(function(r){return r.ship_code===shipCode;});
     if (!filtered.length) {
@@ -448,24 +493,72 @@ function renderRepairs() {
     document.getElementById('repairsRoot').innerHTML = '<div class="loading">수리이력 없음</div>';
     return;
   }
-  var rows = REPAIRS.map(function(r) {
+  var f = REPAIR_FILTER;
+  // Filter
+  var filtered = REPAIRS.filter(function(r) {
+    if (f.ship && r.ship_code !== f.ship) return false;
+    if (f.system && r.system !== f.system) return false;
+    if (f.stage && r.stage !== f.stage) return false;
+    return true;
+  });
+  // Sort: 미완료(미확인/진행중 등) 먼저, 그 안에서 최신순
+  var DONE_RANK = {'완료':1,'확인':1};
+  filtered.sort(function(a,b) {
+    var da = DONE_RANK[a.stage]||0, db = DONE_RANK[b.stage]||0;
+    if (da !== db) return da - db;
+    return String(b.date||'').localeCompare(String(a.date||''));
+  });
+
+  // Ship chips for filter
+  var shipCounts = {};
+  REPAIRS.forEach(function(r) { if(r.ship_code) shipCounts[r.ship_code]=(shipCounts[r.ship_code]||0)+1; });
+  var shipChips = '<span class="chip'+(f.ship?'':' active')+'" onclick="REPAIR_FILTER.ship=\'\';renderRepairs()">전체</span>'+
+    Object.keys(shipCounts).sort().map(function(c) {
+      return '<span class="chip'+(f.ship===c?' active':'')+'" onclick="REPAIR_FILTER.ship=\''+c+'\';renderRepairs()">'+c+' <b>'+shipCounts[c]+'</b></span>';
+    }).join('');
+
+  // Filter bar
+  var sysChip = function(val,label) {
+    return '<span class="chip'+(f.system===val?' active':'')+'" onclick="REPAIR_FILTER.system=\''+val+'\';renderRepairs()">'+label+'</span>';
+  };
+  var stageChips = STATUS_LIST.map(function(s) {
+    return '<span class="chip'+(f.stage===s?' active':'')+'" onclick="REPAIR_FILTER.stage=\''+s+'\';renderRepairs()">'+s+'</span>';
+  }).join('');
+
+  var filterBar = '<div style="margin-bottom:12px">'+
+    '<div style="margin-bottom:6px;font-size:11px;color:#64748b">선박</div>'+
+    '<div class="chips" style="margin-bottom:8px">'+shipChips+'</div>'+
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div><span style="font-size:11px;color:#64748b;margin-right:6px">시스템</span>'+
+        sysChip('','전체')+sysChip('BWTS','BWTS')+sysChip('EGCS','EGCS')+'</div>'+
+      '<div><span style="font-size:11px;color:#64748b;margin-right:6px">단계</span>'+
+        '<span class="chip'+(f.stage?'':' active')+'" onclick="REPAIR_FILTER.stage=\'\';renderRepairs()">전체</span>'+stageChips+'</div>'+
+    '</div>'+
+    '<div style="font-size:12px;color:#64748b">'+filtered.length+' / '+REPAIRS.length+'건'+
+      (f.ship||f.system||f.stage?' · <span style="color:#2563eb;cursor:pointer" onclick="REPAIR_FILTER={ship:\'\',system:\'\',stage:\'\'};renderRepairs()">필터 초기화</span>':'')+
+    '</div></div>';
+
+  var rows = filtered.map(function(r) {
     var stOpts = STATUS_LIST.map(function(s) {
       return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
     }).join('');
     var eid = esc(r.id);
+    var mailIcon = r.email_link
+      ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none" title="'+esc(r.email_subject||'메일 열기')+'">📧</a> '
+      : '';
     return '<tr>'+
       '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
       '<td>'+esc(r.ship_code)+'</td>'+
       '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'equip\',this)" title="클릭하여 수정">'+esc(r.equip||'—')+'</td>'+
       '<td style="padding:4px 6px"><select class="status-select st-'+esc(r.stage)+'" style="padding:3px 18px 3px 6px" onchange="updateRepairField(\''+eid+'\',\'stage\',this.value)">'+stOpts+'</select></td>'+
-      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
-      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+mailIcon+esc(r.symptom||'—')+'</td>'+
+      '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
-  document.getElementById('repairsRoot').innerHTML =
+  document.getElementById('repairsRoot').innerHTML = filterBar +
     '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 인라인 수정 · 상태 드롭다운 → 즉시 저장 · ✕ → 삭제</div>';
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
 }
 
 /* Inline edit for repair fields */
