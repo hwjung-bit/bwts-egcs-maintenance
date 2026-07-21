@@ -106,6 +106,11 @@ tr:hover{background:#f8fafc}
 
 <div id="mailView">
   <div class="filters">
+    <select id="fYear" onchange="renderMail()">
+      <option value="">전체 년도</option>
+      <option value="2026">2026</option>
+      <option value="2025">2025</option>
+    </select>
     <select id="fSys" onchange="renderMail()">
       <option value="">전체 시스템</option>
       <option value="BWTS">BWTS</option>
@@ -146,6 +151,11 @@ tr:hover{background:#f8fafc}
 <div id="repairsView" style="display:none">
   <div class="stats" id="repairStats"></div>
   <div class="filters" id="repairFilters" style="top:54px">
+    <select id="rfYear" onchange="REPAIR_FILTER.year=this.value;renderRepairs()">
+      <option value="">전체 년도</option>
+      <option value="2026">2026</option>
+      <option value="2025">2025</option>
+    </select>
     <select id="rfSys" onchange="REPAIR_FILTER.system=this.value;renderRepairs()">
       <option value="">전체 시스템</option>
       <option value="BWTS">BWTS</option>
@@ -325,12 +335,14 @@ function filterShip(code) {
 /* ===== Mail Render ===== */
 function renderMail() {
   var f = {
+    year: document.getElementById('fYear').value,
     sys: document.getElementById('fSys').value,
     ship: document.getElementById('fShip').value || FILTER.ship,
     status: document.getElementById('fStatus').value,
     q: document.getElementById('search').value.toLowerCase()
   };
   var filtered = MAIL.filter(function(m) {
+    if (f.year && !(m.date||'').startsWith(f.year)) return false;
     if (f.sys && m.system !== f.sys) return false;
     if (f.ship && m.ship_code !== f.ship) return false;
     if (f.status && m.status !== f.status) return false;
@@ -451,7 +463,7 @@ async function mailToRepair(mailId) {
 }
 
 /* ===== Go to Repairs filtered by ship ===== */
-var REPAIR_FILTER = {ship:'',system:'',stage:''};
+var REPAIR_FILTER = {year:'',ship:'',system:'',stage:''};
 function goRepairs(shipCode) {
   REPAIR_FILTER.ship = shipCode || '';
   switchTab('repairs');
@@ -524,11 +536,13 @@ function renderRepairs() {
   }
   var f = REPAIR_FILTER;
   // Sync dropdowns
+  document.getElementById('rfYear').value = f.year || '';
   document.getElementById('rfSys').value = f.system;
   document.getElementById('rfShip').value = f.ship;
   document.getElementById('rfStage').value = f.stage;
   // Filter
   var filtered = REPAIRS.filter(function(r) {
+    if (f.year && !(r.date||'').startsWith(f.year)) return false;
     if (f.ship && r.ship_code !== f.ship) return false;
     if (f.system && r.system !== f.system) return false;
     if (f.stage && r.stage !== f.stage) return false;
