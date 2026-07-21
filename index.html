@@ -470,14 +470,22 @@ function renderEgcsCal() {
 }
 
 /* ===== Start ===== */
-if (SUPA_URL.indexOf('YOUR_') >= 0) {
-  document.getElementById('tbody').innerHTML =
-    '<tr><td colspan="9" class="loading">⚠️ Supabase 설정 필요<br><br>' +
-    '<code>SUPA_URL</code>과 <code>SUPA_ANON</code>을 index.html 상단에 입력하세요.<br>' +
-    '<a href="https://supabase.com" target="_blank">supabase.com</a>에서 프로젝트 생성 후 Settings → API에서 확인</td></tr>';
-} else {
-  init();
-}
+// Init — try loading data directly (RLS allows read for all)
+sb = supabase.createClient(SUPA_URL, SUPA_ANON);
+sb.auth.getSession().then(function(res) {
+  if (res.data.session) onLogin(res.data.session.user);
+  else {
+    // No login — try loading data anyway (anon read allowed by RLS)
+    USER = {email: 'guest'};
+    document.getElementById('userInfo').textContent = '비로그인 (읽기전용)';
+    document.getElementById('userInfo').style.display = '';
+    loadData();
+  }
+});
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_IN' && session) onLogin(session.user);
+  if (event === 'SIGNED_OUT') location.reload();
+});
 </script>
 </body>
 </html>
