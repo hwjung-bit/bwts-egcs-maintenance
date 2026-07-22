@@ -1046,7 +1046,8 @@ function dropShip(e, targetCode, el) {
   var toIdx = codes.indexOf(targetCode);
   if (fromIdx < 0 || toIdx < 0) return;
   codes.splice(fromIdx, 1);
-  codes.splice(toIdx, 0, _dragCode);
+  var insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
+  codes.splice(insertIdx, 0, _dragCode);
   saveShipOrder(codes);
   _dragCode = null;
 }
