@@ -992,7 +992,7 @@ function renderShips() {
   var list = SHIP_TAB==='active' ? active : hidden;
   var rows = list.map(function(s,idx) {
     var c = esc(s.code);
-    return '<tr draggable="true" ondragstart="dragStart(event,\''+c+'\')" ondragend="dragEnd(event)" ondragover="dragOver(event,this)" ondragleave="dragLeave(event,this)" ondrop="dropShip(event,\''+c+'\',this)" style="cursor:grab">' +
+    return '<tr data-code="'+c+'" draggable="true" style="cursor:grab">' +
       '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
@@ -1026,40 +1026,63 @@ function renderShips() {
     '</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
-/* Drag & Drop reorder */
+/* Drag & Drop reorder — event delegation on shipsRoot */
 var _dragCode = null;
-function dragStart(e, code) {
-  _dragCode = code;
+var _dragOverRow = null;
+document.addEventListener('dragstart', function(e) {
+  var tr = e.target.closest && e.target.closest('tr[data-code]');
+  if (!tr) return;
+  _dragCode = tr.dataset.code;
   e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', code);
-  e.target.style.opacity = '0.4';
-}
-function dragEnd(e) { e.target.style.opacity = '1'; }
-function dragOver(e, el) {
+  e.dataTransfer.setData('text/plain', _dragCode);
+  tr.style.opacity = '0.4';
+});
+document.addEventListener('dragend', function(e) {
+  var tr = e.target.closest && e.target.closest('tr[data-code]');
+  if (tr) tr.style.opacity = '1';
+  if (_dragOverRow) { _dragOverRow.style.background = ''; _dragOverRow = null; }
+});
+document.addEventListener('dragover', function(e) {
+  var tr = e.target.closest && e.target.closest('tr[data-code]');
+  if (!tr || !_dragCode) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  el.style.background = '#dbeafe';
-}
-function dragLeave(e, el) {
-  el.style.background = '';
-}
-function dropShip(e, targetCode, el) {
+  if (_dragOverRow && _dragOverRow !== tr) _dragOverRow.style.background = '';
+  tr.style.background = '#dbeafe';
+  _dragOverRow = tr;
+});
+document.addEventListener('dragleave', function(e) {
+  var tr = e.target.closest && e.target.closest('tr[data-code]');
+  if (tr && _dragOverRow === tr) {
+    var rect = tr.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right ||
+        e.clientY < rect.top || e.clientY > rect.bottom) {
+      tr.style.background = '';
+      _dragOverRow = null;
+    }
+  }
+});
+document.addEventListener('drop', function(e) {
+  var tr = e.target.closest && e.target.closest('tr[data-code]');
+  if (!tr || !_dragCode) return;
   e.preventDefault();
-  if (el) el.style.background = '';
-  if (!_dragCode || _dragCode === targetCode) return;
+  tr.style.background = '';
+  _dragOverRow = null;
+  var targetCode = tr.dataset.code;
+  if (_dragCode === targetCode) { _dragCode = null; return; }
   var active = SHIPS.filter(function(s){return !s.hidden;})
     .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
   var codes = active.map(function(s){return s.code;});
   var fromIdx = codes.indexOf(_dragCode);
   var toIdx = codes.indexOf(targetCode);
-  if (fromIdx < 0 || toIdx < 0) return;
-  // 1:1 swap — 두 선박 위치만 교환
+  if (fromIdx < 0 || toIdx < 0) { _dragCode = null; return; }
+  // 1:1 swap
   var tmp = codes[fromIdx];
   codes[fromIdx] = codes[toIdx];
   codes[toIdx] = tmp;
-  saveShipOrder(codes);
   _dragCode = null;
-}
+  saveShipOrder(codes);
+});
 
 async function saveShipOrder(codes) {
   for (var i = 0; i < codes.length; i++) {
