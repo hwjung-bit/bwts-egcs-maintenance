@@ -572,10 +572,10 @@ function stCell(code, field, val, memo) {
   var opts = STATUS_OPTS.map(function(s) {
     return '<option value="'+s+'"'+(val===s?' selected':'')+'>'+s+'</option>';
   }).join('');
-  var memoHtml = '<div class="note-text" onclick="editStatusMemo(this,\''+
-    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;margin-top:2px;min-height:14px">'+
-    esc(memo||'')+'</div>';
-  return '<td style="text-align:center;padding:4px 6px;'+stColor(val)+'">'+
+  var memoHtml = '<span class="note-text" onclick="editStatusMemo(this,\''+
+    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;margin-left:4px;cursor:pointer">'+
+    esc(memo||'')+'</span>';
+  return '<td style="padding:4px 6px;white-space:nowrap;'+stColor(val)+'">'+
     '<select class="status-select" style="'+stColor(val)+
     ';padding:2px 16px 2px 4px;font-size:11px;font-weight:600" onchange="updateShipStatus(\''+
     esc(code)+'\',\''+field+'\',this.value)">'+opts+'</select>'+memoHtml+'</td>';
