@@ -565,6 +565,7 @@ function renderStatus() {
       '<div class="loading"><span class="spin"></span> 데이터 로딩중...</div>';
     return;
   }
+  try {
   var order = getShipOrder();
   var ships = SHIPS.filter(function(s){return !s.hidden;})
     .sort(function(a,b){
@@ -723,6 +724,11 @@ function renderStatus() {
       '<th style="width:80px;text-align:center">Maker</th>'+
       '<th style="width:60px;text-align:center">최근메일</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table>';
+  } catch(err) {
+    document.getElementById('statusRoot').innerHTML =
+      '<div class="loading" style="color:#ef4444">현황 렌더링 오류: '+esc(err.message)+'</div>';
+    console.error('renderStatus error:', err);
+  }
 }
 
 /* ===== Repairs ===== */
@@ -1053,9 +1059,10 @@ function dropShip(e, targetCode, el) {
   var fromIdx = codes.indexOf(_dragCode);
   var toIdx = codes.indexOf(targetCode);
   if (fromIdx < 0 || toIdx < 0) return;
-  codes.splice(fromIdx, 1);
-  var insertIdx = fromIdx < toIdx ? toIdx - 1 : toIdx;
-  codes.splice(insertIdx, 0, _dragCode);
+  // 1:1 swap — 두 선박 위치만 교환
+  var tmp = codes[fromIdx];
+  codes[fromIdx] = codes[toIdx];
+  codes[toIdx] = tmp;
   saveShipOrder(codes);
   _dragCode = null;
 }
