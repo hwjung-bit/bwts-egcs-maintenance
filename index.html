@@ -105,6 +105,7 @@ tr:hover{background:#f8fafc}
 <div class="tabs" id="mainTabs">
   <div class="tab active" data-tab="mail" onclick="switchTab('mail')">📧 메일대장</div>
   <div class="tab" data-tab="repairs" onclick="switchTab('repairs')">🔧 수리이력</div>
+  <div class="tab" data-tab="status" onclick="switchTab('status')">📊 현황</div>
   <div class="tab" data-tab="bwtsCal" onclick="switchTab('bwtsCal')">BWTS 검교정</div>
   <div class="tab" data-tab="egcsCal" onclick="switchTab('egcsCal')">EGCS 검교정</div>
   <div class="tab" data-tab="ships" onclick="switchTab('ships')">🚢 선박관리</div>
@@ -183,6 +184,9 @@ tr:hover{background:#f8fafc}
     <span class="count" id="repairCnt"></span>
   </div>
   <div class="wrap" id="repairsRoot"></div>
+</div>
+<div id="statusView" style="display:none">
+  <div class="wrap" id="statusRoot"></div>
 </div>
 <div id="bwtsCalView" style="display:none">
   <div class="wrap" id="bwtsCalRoot"></div>
@@ -283,7 +287,7 @@ function switchTab(t) {
   document.querySelectorAll('.tab').forEach(function(el) {
     el.classList.toggle('active', el.dataset.tab === t);
   });
-  ['mailView','repairsView','bwtsCalView','egcsCalView','shipsView'].forEach(function(id) {
+  ['mailView','repairsView','statusView','bwtsCalView','egcsCalView','shipsView'].forEach(function(id) {
     document.getElementById(id).style.display = 'none';
   });
   document.getElementById(t + 'View').style.display = '';
@@ -292,6 +296,7 @@ function switchTab(t) {
 function renderCurrent() {
   if (TAB === 'mail') renderMail();
   else if (TAB === 'repairs') renderRepairs();
+  else if (TAB === 'status') renderStatus();
   else if (TAB === 'bwtsCal') renderBwtsCal();
   else if (TAB === 'egcsCal') renderEgcsCal();
   else if (TAB === 'ships') renderShips();
@@ -551,6 +556,168 @@ function editNote(el, id) {
   }
   input.onblur = save;
   input.onkeydown = function(e) { if (e.key==='Enter') save(); if (e.key==='Escape') { el.style.display=''; input.remove(); } };
+}
+
+/* ===== Status Overview ===== */
+function renderStatus() {
+  var order = getShipOrder();
+  var ships = SHIPS.filter(function(s){return !s.hidden;})
+    .sort(function(a,b){
+      var ia=order.indexOf(a.code),ib=order.indexOf(b.code);
+      return (ia<0?99:ia)-(ib<0?99:ib);
+    });
+
+  // Build status per ship
+  var DAY = 86400000;
+  var now = new Date();
+  var rows = ships.map(function(s) {
+    var code = s.code;
+
+    // BWTS calibration status
+    var bwtsCal = BWTS_CAL.find(function(c){
+      return c.ship_code===code;});
+    var bwtsCalLv='unknown', bwtsCalTxt='미등록';
+    if (bwtsCal && bwtsCal.last_date) {
+      var bd = new Date(bwtsCal.last_date+'T00:00:00');
+      bd.setMonth(bd.getMonth()+12);
+      var bDays = Math.round((bd-now)/DAY);
+      bwtsCalLv = bDays<=0?'expired':(bDays<=60?'soon':'ok');
+      bwtsCalTxt = bDays<=0?'만료 '+Math.abs(bDays)+'일':
+        (bDays<=60?'D-'+bDays:'정상 (D-'+bDays+')');
+    }
+
+    // EGCS WMS sensor status (worst of all sensors)
+    var egcsSensors = EGCS_CAL.filter(function(c){
+      return c.ship_code===code;});
+    var egcsLv='unknown', egcsTxt='미등록';
+    if (egcsSensors.length) {
+      var worstDays = 99999;
+      egcsSensors.forEach(function(c) {
+        if (!c.last_date) return;
+        var ed = new Date(c.last_date+'T00:00:00');
+        var months = c.interval_months||12;
+        if (months===0) months=12;
+        ed.setMonth(ed.getMonth()+months);
+        var d = Math.round((ed-now)/DAY);
+        if (d < worstDays) worstDays = d;
+      });
+      if (worstDays < 99999) {
+        egcsLv = worstDays<=0?'expired':
+          (worstDays<=60?'soon':'ok');
+        egcsTxt = worstDays<=0?'만료 '+Math.abs(worstDays)+'일':
+          (worstDays<=60?'D-'+worstDays:'정상 (D-'+worstDays+')');
+      }
+    }
+
+    // Active repairs count
+    var bwtsRepairs = REPAIRS.filter(function(r){
+      return r.ship_code===code && r.system==='BWTS'
+        && r.stage!=='완료';});
+    var egcsRepairs = REPAIRS.filter(function(r){
+      return r.ship_code===code && r.system==='EGCS'
+        && r.stage!=='완료';});
+
+    // Recent mails (last 30 days)
+    var cutoff = new Date();
+    cutoff.setDate(cutoff.getDate()-30);
+    var cutStr = cutoff.toISOString().slice(0,10);
+    var recentMails = MAIL.filter(function(m){
+      return m.ship_code===code && m.date>=cutStr;
+    }).length;
+
+    // Overall status
+    var bwtsOk = bwtsCalLv==='ok' && !bwtsRepairs.length;
+    var egcsOk = egcsCalLv==='ok' && !egcsRepairs.length;
+
+    return '<tr>'+
+      '<td><b>'+esc(code)+'</b></td>'+
+      '<td style="font-size:12px;color:#64748b">'+
+        esc(s.name||'')+'</td>'+
+      '<td class="center"><span class="pill '+
+        (bwtsOk?'lv-ok':
+        (bwtsRepairs.length||bwtsCalLv==='expired')?
+        'lv-expired':'lv-soon')+'">'+
+        (bwtsOk?'정상':bwtsRepairs.length?
+        '수리 '+bwtsRepairs.length+'건':'점검필요')+
+        '</span></td>'+
+      '<td class="center"><span class="pill lv-'+
+        bwtsCalLv+'">'+esc(bwtsCalTxt)+'</span></td>'+
+      '<td class="center">'+esc(s.bwts_maker||'—')+'</td>'+
+      '<td class="center"><span class="pill '+
+        (egcsOk?'lv-ok':egcsRepairs.length||egcsLv==='expired'?
+        'lv-expired':'lv-soon')+'">'+
+        (egcsOk?'정상':egcsRepairs.length?
+        '수리 '+egcsRepairs.length+'건':'점검필요')+
+        '</span></td>'+
+      '<td class="center"><span class="pill lv-'+
+        egcsLv+'">'+esc(egcsTxt)+'</span></td>'+
+      '<td class="center">'+esc(s.egcs_maker||'—')+'</td>'+
+      '<td class="center" style="font-size:12px">'+
+        (recentMails?'📧 '+recentMails:'—')+'</td>'+
+      '</tr>';
+  }).join('');
+
+  // Summary counts
+  var totalShips = ships.length;
+  var bwtsOkCnt=0, egcsOkCnt=0, bwtsIssueCnt=0, egcsIssueCnt=0;
+  ships.forEach(function(s) {
+    var bc = BWTS_CAL.find(function(c){
+      return c.ship_code===s.code;});
+    var br = REPAIRS.filter(function(r){
+      return r.ship_code===s.code && r.system==='BWTS'
+        && r.stage!=='완료';});
+    var bcOk = false;
+    if (bc && bc.last_date) {
+      var bd = new Date(bc.last_date+'T00:00:00');
+      bd.setMonth(bd.getMonth()+12);
+      bcOk = Math.round((bd-now)/DAY) > 60;
+    }
+    if (bcOk && !br.length) bwtsOkCnt++; else bwtsIssueCnt++;
+
+    var ec = EGCS_CAL.filter(function(c){
+      return c.ship_code===s.code;});
+    var er = REPAIRS.filter(function(r){
+      return r.ship_code===s.code && r.system==='EGCS'
+        && r.stage!=='완료';});
+    var ecOk = true;
+    ec.forEach(function(c) {
+      if (!c.last_date) { ecOk=false; return; }
+      var ed = new Date(c.last_date+'T00:00:00');
+      var m = c.interval_months||12;
+      if(m===0)m=12;
+      ed.setMonth(ed.getMonth()+m);
+      if (Math.round((ed-now)/DAY) <= 60) ecOk=false;
+    });
+    if (!ec.length) ecOk=false;
+    if (ecOk && !er.length) egcsOkCnt++; else egcsIssueCnt++;
+  });
+
+  document.getElementById('statusRoot').innerHTML =
+    '<div style="margin-bottom:16px">'+
+    '<h3 style="margin:0 0 12px">BWTS · EGCS 현황</h3>'+
+    '<div class="stats" style="padding:0;margin-bottom:16px">'+
+      '<div class="card"><div class="num">'+totalShips+
+        '</div><div class="label">전체 선박</div></div>'+
+      '<div class="card blue"><div class="num">'+bwtsOkCnt+
+        '</div><div class="label">BWTS 정상</div></div>'+
+      '<div class="card amber"><div class="num">'+bwtsIssueCnt+
+        '</div><div class="label">BWTS 점검</div></div>'+
+      '<div class="card green"><div class="num">'+egcsOkCnt+
+        '</div><div class="label">EGCS 정상</div></div>'+
+      '<div class="card amber"><div class="num">'+egcsIssueCnt+
+        '</div><div class="label">EGCS 점검</div></div>'+
+    '</div></div>'+
+    '<table><thead><tr>'+
+      '<th style="width:50px">코드</th>'+
+      '<th style="width:140px">선명</th>'+
+      '<th style="width:80px;text-align:center">BWTS</th>'+
+      '<th style="width:120px;text-align:center">BWTS 검교정</th>'+
+      '<th style="width:80px;text-align:center">Maker</th>'+
+      '<th style="width:80px;text-align:center">EGCS</th>'+
+      '<th style="width:120px;text-align:center">EGCS 센서</th>'+
+      '<th style="width:80px;text-align:center">Maker</th>'+
+      '<th style="width:60px;text-align:center">최근메일</th>'+
+    '</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
 /* ===== Repairs ===== */
@@ -817,7 +984,7 @@ function renderShips() {
     var arrows = SHIP_TAB==='active' ?
       '<span onclick="moveShip(\''+c+'\',-1)" style="cursor:pointer;font-size:12px" title="위로">▲</span> ' +
       '<span onclick="moveShip(\''+c+'\',1)" style="cursor:pointer;font-size:12px" title="아래로">▼</span>' : '';
-    return '<tr draggable="true" ondragstart="dragStart(event,\''+c+'\')" ondragover="event.preventDefault()" ondrop="dropShip(event,\''+c+'\')" style="cursor:grab">' +
+    return '<tr draggable="true" ondragstart="dragStart(event,\''+c+'\')" ondragend="dragEnd(event)" ondragover="dragOver(event,this)" ondragleave="dragLeave(event,this)" ondrop="dropShip(event,\''+c+'\',this)" style="cursor:grab">' +
       '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+' '+arrows+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
@@ -853,9 +1020,24 @@ function renderShips() {
 
 /* Drag & Drop reorder */
 var _dragCode = null;
-function dragStart(e, code) { _dragCode = code; e.dataTransfer.effectAllowed = 'move'; }
-function dropShip(e, targetCode) {
+function dragStart(e, code) {
+  _dragCode = code;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', code);
+  e.target.style.opacity = '0.4';
+}
+function dragEnd(e) { e.target.style.opacity = '1'; }
+function dragOver(e, el) {
   e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  el.style.borderTop = '2px solid #3b82f6';
+}
+function dragLeave(e, el) {
+  el.style.borderTop = '';
+}
+function dropShip(e, targetCode, el) {
+  e.preventDefault();
+  if (el) el.style.borderTop = '';
   if (!_dragCode || _dragCode === targetCode) return;
   var active = SHIPS.filter(function(s){return !s.hidden;})
     .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
