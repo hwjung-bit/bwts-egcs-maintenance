@@ -559,13 +559,34 @@ function editNote(el, id) {
 }
 
 /* ===== Status Overview ===== */
+var STATUS_OPTS = ['정상','수리중','문제'];
+
+function stColor(st) {
+  if (st==='정상') return 'background:#d1fae5;color:#065f46';
+  if (st==='수리중') return 'background:#fef3c7;color:#92400e';
+  if (st==='문제') return 'background:#fee2e2;color:#b91c1c';
+  return 'background:#f1f5f9;color:#64748b';
+}
+
+function stCell(code, field, val, memo) {
+  var opts = STATUS_OPTS.map(function(s) {
+    return '<option value="'+s+'"'+(val===s?' selected':'')+'>'+s+'</option>';
+  }).join('');
+  var memoHtml = '<div class="note-text" onclick="editStatusMemo(this,\''+
+    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;margin-top:2px;min-height:14px">'+
+    esc(memo||'')+'</div>';
+  return '<td style="text-align:center;padding:4px 6px;'+stColor(val)+'">'+
+    '<select class="status-select" style="'+stColor(val)+
+    ';padding:2px 16px 2px 4px;font-size:11px;font-weight:600" onchange="updateShipStatus(\''+
+    esc(code)+'\',\''+field+'\',this.value)">'+opts+'</select>'+memoHtml+'</td>';
+}
+
 function renderStatus() {
   if (!SHIPS.length) {
     document.getElementById('statusRoot').innerHTML =
       '<div class="loading"><span class="spin"></span> 데이터 로딩중...</div>';
     return;
   }
-  try {
   var order = getShipOrder();
   var ships = SHIPS.filter(function(s){return !s.hidden;})
     .sort(function(a,b){
@@ -573,162 +594,82 @@ function renderStatus() {
       return (ia<0?99:ia)-(ib<0?99:ib);
     });
 
-  // Build status per ship
-  var DAY = 86400000;
-  var now = new Date();
+  // Summary
+  var total=ships.length, okCnt=0, repairCnt=0, issueCnt=0;
+  ships.forEach(function(s) {
+    var fields = [s.bwts_status,s.egcs_wms_status,s.egcs_cems_status,s.egcs_body_status];
+    var hasIssue = fields.some(function(f){return f==='문제';});
+    var hasRepair = fields.some(function(f){return f==='수리중';});
+    if (hasIssue) issueCnt++;
+    else if (hasRepair) repairCnt++;
+    else okCnt++;
+  });
+
   var rows = ships.map(function(s) {
-    var code = s.code;
-
-    // BWTS calibration status
-    var bwtsCal = BWTS_CAL.find(function(c){
-      return c.ship_code===code;});
-    var bwtsCalLv='unknown', bwtsCalTxt='미등록';
-    if (bwtsCal && bwtsCal.last_date) {
-      var bd = new Date(bwtsCal.last_date+'T00:00:00');
-      bd.setMonth(bd.getMonth()+12);
-      var bDays = Math.round((bd-now)/DAY);
-      bwtsCalLv = bDays<=0?'expired':(bDays<=60?'soon':'ok');
-      bwtsCalTxt = bDays<=0?'만료 '+Math.abs(bDays)+'일':
-        (bDays<=60?'D-'+bDays:'정상 (D-'+bDays+')');
-    }
-
-    // EGCS WMS sensor status (worst of all sensors)
-    var egcsSensors = EGCS_CAL.filter(function(c){
-      return c.ship_code===code;});
-    var egcsLv='unknown', egcsTxt='미등록';
-    if (egcsSensors.length) {
-      var worstDays = 99999;
-      egcsSensors.forEach(function(c) {
-        if (!c.last_date) return;
-        var ed = new Date(c.last_date+'T00:00:00');
-        var months = c.interval_months||12;
-        if (months===0) months=12;
-        ed.setMonth(ed.getMonth()+months);
-        var d = Math.round((ed-now)/DAY);
-        if (d < worstDays) worstDays = d;
-      });
-      if (worstDays < 99999) {
-        egcsLv = worstDays<=0?'expired':
-          (worstDays<=60?'soon':'ok');
-        egcsTxt = worstDays<=0?'만료 '+Math.abs(worstDays)+'일':
-          (worstDays<=60?'D-'+worstDays:'정상 (D-'+worstDays+')');
-      }
-    }
-
-    // Active repairs count
-    var bwtsRepairs = REPAIRS.filter(function(r){
-      return r.ship_code===code && r.system==='BWTS'
-        && r.stage!=='완료';});
-    var egcsRepairs = REPAIRS.filter(function(r){
-      return r.ship_code===code && r.system==='EGCS'
-        && r.stage!=='완료';});
-
-    // Recent mails (last 30 days)
-    var cutoff = new Date();
-    cutoff.setDate(cutoff.getDate()-30);
-    var cutStr = cutoff.toISOString().slice(0,10);
-    var recentMails = MAIL.filter(function(m){
-      return m.ship_code===code && m.date>=cutStr;
-    }).length;
-
-    // Overall status
-    var bwtsOk = bwtsCalLv==='ok' && !bwtsRepairs.length;
-    var egcsOk = egcsLv==='ok' && !egcsRepairs.length;
-
     return '<tr>'+
-      '<td><b>'+esc(code)+'</b></td>'+
-      '<td style="font-size:12px;color:#64748b">'+
-        esc(s.name||'')+'</td>'+
-      '<td class="center"><span class="pill '+
-        (bwtsOk?'lv-ok':
-        (bwtsRepairs.length||bwtsCalLv==='expired')?
-        'lv-expired':'lv-soon')+'">'+
-        (bwtsOk?'정상':bwtsRepairs.length?
-        '수리 '+bwtsRepairs.length+'건':'점검필요')+
-        '</span></td>'+
-      '<td class="center"><span class="pill lv-'+
-        bwtsCalLv+'">'+esc(bwtsCalTxt)+'</span></td>'+
-      '<td class="center">'+esc(s.bwts_maker||'—')+'</td>'+
-      '<td class="center"><span class="pill '+
-        (egcsOk?'lv-ok':egcsRepairs.length||egcsLv==='expired'?
-        'lv-expired':'lv-soon')+'">'+
-        (egcsOk?'정상':egcsRepairs.length?
-        '수리 '+egcsRepairs.length+'건':'점검필요')+
-        '</span></td>'+
-      '<td class="center"><span class="pill lv-'+
-        egcsLv+'">'+esc(egcsTxt)+'</span></td>'+
-      '<td class="center">'+esc(s.egcs_maker||'—')+'</td>'+
-      '<td class="center" style="font-size:12px">'+
-        (recentMails?'📧 '+recentMails:'—')+'</td>'+
+      '<td><b>'+esc(s.code)+'</b></td>'+
+      '<td style="font-size:12px;color:#64748b">'+esc(s.name||'')+'</td>'+
+      stCell(s.code,'bwts_status',s.bwts_status||'정상',s.bwts_memo)+
+      stCell(s.code,'egcs_wms_status',s.egcs_wms_status||'정상',s.egcs_wms_memo)+
+      stCell(s.code,'egcs_cems_status',s.egcs_cems_status||'정상',s.egcs_cems_memo)+
+      stCell(s.code,'egcs_body_status',s.egcs_body_status||'정상',s.egcs_body_memo)+
       '</tr>';
   }).join('');
-
-  // Summary counts
-  var totalShips = ships.length;
-  var bwtsOkCnt=0, egcsOkCnt=0, bwtsIssueCnt=0, egcsIssueCnt=0;
-  ships.forEach(function(s) {
-    var bc = BWTS_CAL.find(function(c){
-      return c.ship_code===s.code;});
-    var br = REPAIRS.filter(function(r){
-      return r.ship_code===s.code && r.system==='BWTS'
-        && r.stage!=='완료';});
-    var bcOk = false;
-    if (bc && bc.last_date) {
-      var bd = new Date(bc.last_date+'T00:00:00');
-      bd.setMonth(bd.getMonth()+12);
-      bcOk = Math.round((bd-now)/DAY) > 60;
-    }
-    if (bcOk && !br.length) bwtsOkCnt++; else bwtsIssueCnt++;
-
-    var ec = EGCS_CAL.filter(function(c){
-      return c.ship_code===s.code;});
-    var er = REPAIRS.filter(function(r){
-      return r.ship_code===s.code && r.system==='EGCS'
-        && r.stage!=='완료';});
-    var ecOk = true;
-    ec.forEach(function(c) {
-      if (!c.last_date) { ecOk=false; return; }
-      var ed = new Date(c.last_date+'T00:00:00');
-      var m = c.interval_months||12;
-      if(m===0)m=12;
-      ed.setMonth(ed.getMonth()+m);
-      if (Math.round((ed-now)/DAY) <= 60) ecOk=false;
-    });
-    if (!ec.length) ecOk=false;
-    if (ecOk && !er.length) egcsOkCnt++; else egcsIssueCnt++;
-  });
 
   document.getElementById('statusRoot').innerHTML =
     '<div style="margin-bottom:16px">'+
     '<h3 style="margin:0 0 12px">BWTS · EGCS 현황</h3>'+
     '<div class="stats" style="padding:0;margin-bottom:16px">'+
-      '<div class="card"><div class="num">'+totalShips+
-        '</div><div class="label">전체 선박</div></div>'+
-      '<div class="card blue"><div class="num">'+bwtsOkCnt+
-        '</div><div class="label">BWTS 정상</div></div>'+
-      '<div class="card amber"><div class="num">'+bwtsIssueCnt+
-        '</div><div class="label">BWTS 점검</div></div>'+
-      '<div class="card green"><div class="num">'+egcsOkCnt+
-        '</div><div class="label">EGCS 정상</div></div>'+
-      '<div class="card amber"><div class="num">'+egcsIssueCnt+
-        '</div><div class="label">EGCS 점검</div></div>'+
+      '<div class="card"><div class="num">'+total+'</div><div class="label">전체</div></div>'+
+      '<div class="card green"><div class="num">'+okCnt+'</div><div class="label">정상</div></div>'+
+      '<div class="card amber"><div class="num">'+repairCnt+'</div><div class="label">수리중</div></div>'+
+      '<div class="card rose"><div class="num">'+issueCnt+'</div><div class="label">문제</div></div>'+
     '</div></div>'+
     '<table><thead><tr>'+
       '<th style="width:50px">코드</th>'+
-      '<th style="width:140px">선명</th>'+
-      '<th style="width:80px;text-align:center">BWTS</th>'+
-      '<th style="width:120px;text-align:center">BWTS 검교정</th>'+
-      '<th style="width:80px;text-align:center">Maker</th>'+
-      '<th style="width:80px;text-align:center">EGCS</th>'+
-      '<th style="width:120px;text-align:center">EGCS 센서</th>'+
-      '<th style="width:80px;text-align:center">Maker</th>'+
-      '<th style="width:60px;text-align:center">최근메일</th>'+
+      '<th style="width:130px">선명</th>'+
+      '<th style="width:110px;text-align:center">BWTS</th>'+
+      '<th style="width:110px;text-align:center">EGCS WMS</th>'+
+      '<th style="width:110px;text-align:center">EGCS CEMS</th>'+
+      '<th style="width:110px;text-align:center">EGCS BODY</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table>';
-  } catch(err) {
-    document.getElementById('statusRoot').innerHTML =
-      '<div class="loading" style="color:#ef4444">현황 렌더링 오류: '+esc(err.message)+'</div>';
-    console.error('renderStatus error:', err);
+}
+
+async function updateShipStatus(code, field, val) {
+  var s = SHIPS.find(function(x){return x.code===code;});
+  if (s) s[field] = val;
+  var patch = {}; patch[field] = val;
+  await sb.from('ships').update(patch).eq('code', code);
+  renderStatus();
+  toast(code+' '+val);
+}
+
+function editStatusMemo(el, code, field) {
+  var s = SHIPS.find(function(x){return x.code===code;});
+  if (!s) return;
+  var cur = s[field] || '';
+  var inp = document.createElement('input');
+  inp.value = cur;
+  inp.style.cssText = 'width:90px;font-size:10px;padding:2px 4px;border:1px solid #3b82f6;border-radius:3px;outline:none';
+  inp.placeholder = '메모...';
+  el.style.display = 'none';
+  el.parentNode.appendChild(inp);
+  inp.focus();
+  function save() {
+    var v = inp.value.trim();
+    s[field] = v;
+    el.textContent = v;
+    el.style.display = '';
+    inp.remove();
+    var patch = {}; patch[field] = v;
+    sb.from('ships').update(patch).eq('code', code);
+    toast('메모 저장');
   }
+  inp.onblur = save;
+  inp.onkeydown = function(e) {
+    if (e.key==='Enter') save();
+    if (e.key==='Escape') { el.style.display=''; inp.remove(); }
+  };
 }
 
 /* ===== Repairs ===== */
@@ -985,14 +926,21 @@ function renderShips() {
 
   var tabA = SHIP_TAB==='active' ? ' active' : '';
   var tabH = SHIP_TAB==='hidden' ? ' active' : '';
+  var tabO = SHIP_TAB==='order' ? ' active' : '';
   var tabs = '<div style="display:flex;gap:4px;margin-bottom:12px">' +
-    '<div class="tab'+tabA+'" onclick="SHIP_TAB=\'active\';renderShips()">운항중 ('+active.length+')</div>' +
+    '<div class="tab'+tabA+'" onclick="SHIP_TAB=\'active\';renderShips()">선박 정보 ('+active.length+')</div>' +
+    '<div class="tab'+tabO+'" onclick="SHIP_TAB=\'order\';renderShips()">순서 설정</div>' +
     '<div class="tab'+tabH+'" onclick="SHIP_TAB=\'hidden\';renderShips()">숨김 ('+hidden.length+')</div></div>';
+
+  if (SHIP_TAB==='order') {
+    renderShipOrder(active, tabs);
+    return;
+  }
 
   var list = SHIP_TAB==='active' ? active : hidden;
   var rows = list.map(function(s,idx) {
     var c = esc(s.code);
-    return '<tr data-code="'+c+'" draggable="true" style="cursor:grab">' +
+    return '<tr>' +
       '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
@@ -1009,12 +957,12 @@ function renderShips() {
   document.getElementById('shipsRoot').innerHTML =
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
       '<h3 style="margin:0">선박 관리</h3>' +
-      '<span style="font-size:12px;color:#64748b">드래그로 순서 변경 (1:1 교환) · 셀 클릭 수정</span>' +
+      '<span style="font-size:12px;color:#64748b">셀 클릭 수정</span>' +
       '<div style="flex:1"></div>' +
       '<button class="login-btn" onclick="addShip()" style="font-size:12px;padding:5px 12px">+ 선박 추가</button>' +
     '</div>' + tabs +
     '<table><thead><tr>' +
-      '<th style="width:50px">#</th>' +
+      '<th style="width:40px">#</th>' +
       '<th style="width:50px">코드</th>' +
       '<th style="width:150px">선명</th>' +
       '<th style="width:80px">TEU</th>' +
@@ -1026,75 +974,60 @@ function renderShips() {
     '</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
-/* Drag & Drop reorder — event delegation on shipsRoot */
-var _dragCode = null;
-var _dragOverRow = null;
-document.addEventListener('dragstart', function(e) {
-  var tr = e.target.closest && e.target.closest('tr[data-code]');
-  if (!tr) return;
-  _dragCode = tr.dataset.code;
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', _dragCode);
-  tr.style.opacity = '0.4';
-});
-document.addEventListener('dragend', function(e) {
-  var tr = e.target.closest && e.target.closest('tr[data-code]');
-  if (tr) tr.style.opacity = '1';
-  if (_dragOverRow) { _dragOverRow.style.background = ''; _dragOverRow = null; }
-});
-document.addEventListener('dragover', function(e) {
-  var tr = e.target.closest && e.target.closest('tr[data-code]');
-  if (!tr || !_dragCode) return;
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  if (_dragOverRow && _dragOverRow !== tr) _dragOverRow.style.background = '';
-  tr.style.background = '#dbeafe';
-  _dragOverRow = tr;
-});
-document.addEventListener('dragleave', function(e) {
-  var tr = e.target.closest && e.target.closest('tr[data-code]');
-  if (tr && _dragOverRow === tr) {
-    var rect = tr.getBoundingClientRect();
-    if (e.clientX < rect.left || e.clientX > rect.right ||
-        e.clientY < rect.top || e.clientY > rect.bottom) {
-      tr.style.background = '';
-      _dragOverRow = null;
-    }
-  }
-});
-document.addEventListener('drop', function(e) {
-  var tr = e.target.closest && e.target.closest('tr[data-code]');
-  if (!tr || !_dragCode) return;
-  e.preventDefault();
-  tr.style.background = '';
-  _dragOverRow = null;
-  var targetCode = tr.dataset.code;
-  if (_dragCode === targetCode) { _dragCode = null; return; }
-  var active = SHIPS.filter(function(s){return !s.hidden;})
-    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
-  var codes = active.map(function(s){return s.code;});
-  var fromIdx = codes.indexOf(_dragCode);
-  var toIdx = codes.indexOf(targetCode);
-  if (fromIdx < 0 || toIdx < 0) { _dragCode = null; return; }
-  // 1:1 swap
-  var tmp = codes[fromIdx];
-  codes[fromIdx] = codes[toIdx];
-  codes[toIdx] = tmp;
-  _dragCode = null;
-  saveShipOrder(codes);
-});
+/* ===== Ship Order Settings ===== */
+function renderShipOrder(active, tabs) {
+  var rows = active.map(function(s,idx) {
+    return '<tr>' +
+      '<td style="width:60px;text-align:center"><input type="number" min="1" value="'+(idx+1)+'" ' +
+        'data-ship-order="'+esc(s.code)+'" ' +
+        'style="width:50px;text-align:center;padding:4px;border:1px solid #d1d5db;border-radius:4px;font-size:13px"></td>' +
+      '<td><b>'+esc(s.code)+'</b></td>' +
+      '<td style="color:#64748b;font-size:12px">'+esc(s.name||'')+'</td>' +
+      '</tr>';
+  }).join('');
 
-async function saveShipOrder(codes) {
-  for (var i = 0; i < codes.length; i++) {
-    var s = SHIPS.find(function(x){return x.code===codes[i];});
+  document.getElementById('shipsRoot').innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
+      '<h3 style="margin:0">선박 관리</h3>' +
+      '<div style="flex:1"></div>' +
+    '</div>' + tabs +
+    '<div style="margin-bottom:12px;display:flex;align-items:center;gap:12px">' +
+      '<span style="font-size:12px;color:#64748b">순번을 수정한 후 [순서 저장] 클릭</span>' +
+      '<button class="login-btn" onclick="saveShipOrderFromInputs()" style="font-size:13px;padding:6px 20px">순서 저장</button>' +
+    '</div>' +
+    '<table style="width:auto"><thead><tr>' +
+      '<th style="width:60px">순번</th>' +
+      '<th style="width:60px">코드</th>' +
+      '<th style="width:180px">선명</th>' +
+    '</tr></thead><tbody>'+rows+'</tbody></table>';
+}
+
+async function saveShipOrderFromInputs() {
+  var inputs = document.querySelectorAll('[data-ship-order]');
+  var items = [];
+  inputs.forEach(function(inp) {
+    items.push({
+      code: inp.dataset.shipOrder,
+      num: parseInt(inp.value) || 999
+    });
+  });
+  // Sort by input number, then code alphabetically for ties
+  items.sort(function(a,b) {
+    if (a.num !== b.num) return a.num - b.num;
+    return a.code.localeCompare(b.code);
+  });
+  // Assign sort_order 0,1,2...
+  var promises = [];
+  for (var i = 0; i < items.length; i++) {
+    var s = SHIPS.find(function(x){return x.code===items[i].code;});
     if (s) s.sort_order = i;
+    promises.push(
+      sb.from('ships').update({sort_order: i}).eq('code', items[i].code)
+    );
   }
+  await Promise.all(promises);
+  toast('순서 저장 완료 (' + items.length + '척)');
   renderShips();
-  // Batch save to DB
-  for (var j = 0; j < codes.length; j++) {
-    sb.from('ships').update({sort_order: j}).eq('code', codes[j]).then(function(){});
-  }
-  toast('순서 저장됨');
 }
 
 function editShipField(code, field, el) {
