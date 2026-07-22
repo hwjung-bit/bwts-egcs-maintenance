@@ -1019,24 +1019,20 @@ async function saveShipOrderFromInputs() {
   }
   var inputs = document.querySelectorAll('[data-ship-order]');
   var items = [];
-  inputs.forEach(function(inp, idx) {
+  inputs.forEach(function(inp) {
     var v = parseInt(inp.value);
     items.push({
       code: inp.dataset.shipOrder,
-      num: isNaN(v) ? 999 : v,
-      orig: idx
+      num: isNaN(v) ? 999 : v
     });
   });
-  // Sort by input number, keep original order for ties
-  items.sort(function(a,b) {
-    if (a.num !== b.num) return a.num - b.num;
-    return a.orig - b.orig;
-  });
+  // Sort by user-entered number (1-based)
+  items.sort(function(a,b) { return a.num - b.num; });
   var failCount = 0;
   for (var i = 0; i < items.length; i++) {
     var s = SHIPS.find(function(x){return x.code===items[i].code;});
-    if (s) s.sort_order = i;
-    var res = await sb.from('ships').update({sort_order: i}).eq('code', items[i].code);
+    if (s) s.sort_order = i + 1;
+    var res = await sb.from('ships').update({sort_order: i + 1}).eq('code', items[i].code);
     if (res.error) failCount++;
   }
   if (failCount) {
