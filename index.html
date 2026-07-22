@@ -992,14 +992,8 @@ function renderShips() {
   var list = SHIP_TAB==='active' ? active : hidden;
   var rows = list.map(function(s,idx) {
     var c = esc(s.code);
-    var arrows = SHIP_TAB==='active' ?
-      '<span onclick="moveShip(\''+c+'\',-1)" style="cursor:pointer;font-size:12px" title="위로">▲</span> ' +
-      '<span onclick="moveShip(\''+c+'\',1)" style="cursor:pointer;font-size:12px" title="아래로">▼</span>' : '';
-    var orderNum = SHIP_TAB==='active' ?
-      '<span onclick="editShipOrder(this,\''+c+'\','+idx+')" style="cursor:pointer;background:#f1f5f9;padding:2px 6px;border-radius:4px;font-weight:600" title="클릭→순번 직접 입력">'+(idx+1)+'</span>' :
-      '<span style="color:#94a3b8">'+(idx+1)+'</span>';
     return '<tr draggable="true" ondragstart="dragStart(event,\''+c+'\')" ondragend="dragEnd(event)" ondragover="dragOver(event,this)" ondragleave="dragLeave(event,this)" ondrop="dropShip(event,\''+c+'\',this)" style="cursor:grab">' +
-      '<td style="text-align:center;font-size:11px">'+orderNum+' '+arrows+'</td>' +
+      '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'teu\',this)">'+esc(s.teu||'')+'</td>' +
@@ -1015,7 +1009,7 @@ function renderShips() {
   document.getElementById('shipsRoot').innerHTML =
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">' +
       '<h3 style="margin:0">선박 관리</h3>' +
-      '<span style="font-size:12px;color:#64748b">순번 클릭→직접 입력 · ▲▼ · 드래그 · 셀 클릭 수정</span>' +
+      '<span style="font-size:12px;color:#64748b">드래그로 순서 변경 (1:1 교환) · 셀 클릭 수정</span>' +
       '<div style="flex:1"></div>' +
       '<button class="login-btn" onclick="addShip()" style="font-size:12px;padding:5px 12px">+ 선박 추가</button>' +
     '</div>' + tabs +
@@ -1044,14 +1038,14 @@ function dragEnd(e) { e.target.style.opacity = '1'; }
 function dragOver(e, el) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  el.style.borderTop = '2px solid #3b82f6';
+  el.style.background = '#dbeafe';
 }
 function dragLeave(e, el) {
-  el.style.borderTop = '';
+  el.style.background = '';
 }
 function dropShip(e, targetCode, el) {
   e.preventDefault();
-  if (el) el.style.borderTop = '';
+  if (el) el.style.background = '';
   if (!_dragCode || _dragCode === targetCode) return;
   var active = SHIPS.filter(function(s){return !s.hidden;})
     .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
@@ -1065,47 +1059,6 @@ function dropShip(e, targetCode, el) {
   codes[toIdx] = tmp;
   saveShipOrder(codes);
   _dragCode = null;
-}
-
-function moveShip(code, dir) {
-  var active = SHIPS.filter(function(s){return !s.hidden;})
-    .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
-  var codes = active.map(function(s){return s.code;});
-  var idx = codes.indexOf(code);
-  if (idx < 0) return;
-  var newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= codes.length) return;
-  codes.splice(idx, 1);
-  codes.splice(newIdx, 0, code);
-  saveShipOrder(codes);
-}
-
-function editShipOrder(el, code, curIdx) {
-  var inp = document.createElement('input');
-  inp.type = 'number'; inp.min = 1;
-  inp.style.cssText = 'width:44px;font-size:12px;padding:2px 4px;border:1px solid #3b82f6;border-radius:4px;outline:none;text-align:center';
-  inp.value = curIdx + 1;
-  el.replaceWith(inp);
-  inp.focus(); inp.select();
-  function apply() {
-    var newPos = parseInt(inp.value) - 1;
-    var active = SHIPS.filter(function(s){return !s.hidden;})
-      .sort(function(a,b){return (a.sort_order||999)-(b.sort_order||999);});
-    var codes = active.map(function(s){return s.code;});
-    if (isNaN(newPos) || newPos < 0) newPos = 0;
-    if (newPos >= codes.length) newPos = codes.length - 1;
-    var fromIdx = codes.indexOf(code);
-    if (fromIdx >= 0 && fromIdx !== newPos) {
-      codes.splice(fromIdx, 1);
-      codes.splice(newPos, 0, code);
-      saveShipOrder(codes);
-    } else { renderShips(); }
-  }
-  inp.onblur = apply;
-  inp.onkeydown = function(e) {
-    if (e.key==='Enter') { e.preventDefault(); apply(); }
-    if (e.key==='Escape') renderShips();
-  };
 }
 
 async function saveShipOrder(codes) {
