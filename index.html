@@ -636,12 +636,19 @@ function renderStatus() {
 }
 
 async function updateShipStatus(code, field, val) {
+  if (!USER || USER.email==='guest') {
+    toast('로그인 필요'); return;
+  }
   var s = SHIPS.find(function(x){return x.code===code;});
   if (s) s[field] = val;
   var patch = {}; patch[field] = val;
-  await sb.from('ships').update(patch).eq('code', code);
-  renderStatus();
-  toast(code+' '+val);
+  var res = await sb.from('ships').update(patch).eq('code', code);
+  if (res.error) {
+    toast('저장 실패: '+res.error.message);
+  } else {
+    renderStatus();
+    toast(code+' '+val);
+  }
 }
 
 function editStatusMemo(el, code, field) {
@@ -1003,6 +1010,10 @@ function renderShipOrder(active, tabs) {
 }
 
 async function saveShipOrderFromInputs() {
+  if (!USER || USER.email==='guest') {
+    toast('로그인 필요 — 순서 저장 불가');
+    return;
+  }
   var inputs = document.querySelectorAll('[data-ship-order]');
   var items = [];
   inputs.forEach(function(inp) {
@@ -1011,22 +1022,22 @@ async function saveShipOrderFromInputs() {
       num: parseInt(inp.value) || 999
     });
   });
-  // Sort by input number, then code alphabetically for ties
   items.sort(function(a,b) {
     if (a.num !== b.num) return a.num - b.num;
     return a.code.localeCompare(b.code);
   });
-  // Assign sort_order 0,1,2...
-  var promises = [];
+  var failCount = 0;
   for (var i = 0; i < items.length; i++) {
     var s = SHIPS.find(function(x){return x.code===items[i].code;});
     if (s) s.sort_order = i;
-    promises.push(
-      sb.from('ships').update({sort_order: i}).eq('code', items[i].code)
-    );
+    var res = await sb.from('ships').update({sort_order: i}).eq('code', items[i].code);
+    if (res.error) failCount++;
   }
-  await Promise.all(promises);
-  toast('순서 저장 완료 (' + items.length + '척)');
+  if (failCount) {
+    toast('저장 실패 '+failCount+'건 — 권한 확인');
+  } else {
+    toast('순서 저장 완료 (' + items.length + '척)');
+  }
   renderShips();
 }
 
