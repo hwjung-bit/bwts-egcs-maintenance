@@ -1019,15 +1019,18 @@ async function saveShipOrderFromInputs() {
   }
   var inputs = document.querySelectorAll('[data-ship-order]');
   var items = [];
-  inputs.forEach(function(inp) {
+  inputs.forEach(function(inp, idx) {
+    var v = parseInt(inp.value);
     items.push({
       code: inp.dataset.shipOrder,
-      num: parseInt(inp.value) || 999
+      num: isNaN(v) ? 999 : v,
+      orig: idx
     });
   });
+  // Sort by input number, keep original order for ties
   items.sort(function(a,b) {
     if (a.num !== b.num) return a.num - b.num;
-    return a.code.localeCompare(b.code);
+    return a.orig - b.orig;
   });
   var failCount = 0;
   for (var i = 0; i < items.length; i++) {
