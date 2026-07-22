@@ -633,7 +633,7 @@ function renderStatus() {
 
     // Overall status
     var bwtsOk = bwtsCalLv==='ok' && !bwtsRepairs.length;
-    var egcsOk = egcsCalLv==='ok' && !egcsRepairs.length;
+    var egcsOk = egcsLv==='ok' && !egcsRepairs.length;
 
     return '<tr>'+
       '<td><b>'+esc(code)+'</b></td>'+
