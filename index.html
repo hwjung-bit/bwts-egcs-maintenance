@@ -559,13 +559,13 @@ function editNote(el, id) {
 }
 
 /* ===== Status Overview ===== */
-var STATUS_OPTS = ['정상','수리중','문제'];
+var STATUS_OPTS = ['-','정상','수리중','문제'];
 
 function stColor(st) {
   if (st==='정상') return 'background:#d1fae5;color:#065f46';
-  if (st==='수리중') return 'background:#fef3c7;color:#92400e';
-  if (st==='문제') return 'background:#fee2e2;color:#b91c1c';
-  return 'background:#f1f5f9;color:#64748b';
+  if (st==='수리중') return 'background:#fff7ed;color:#c2410c';
+  if (st==='문제') return 'background:#fce7f3;color:#be185d';
+  return 'background:#f8fafc;color:#cbd5e1';
 }
 
 function stCell(code, field, val, memo) {
@@ -597,7 +597,8 @@ function renderStatus() {
   // Summary
   var total=ships.length, okCnt=0, repairCnt=0, issueCnt=0;
   ships.forEach(function(s) {
-    var fields = [s.bwts_status,s.egcs_wms_status,s.egcs_cems_status,s.egcs_body_status];
+    var fields = [s.bwts_status,s.egcs_wms_status,s.egcs_cems_status,s.egcs_body_status]
+      .filter(function(f){return f && f!=='-';});
     var hasIssue = fields.some(function(f){return f==='문제';});
     var hasRepair = fields.some(function(f){return f==='수리중';});
     if (hasIssue) issueCnt++;
@@ -606,13 +607,15 @@ function renderStatus() {
   });
 
   var rows = ships.map(function(s) {
+    var hasEgcs = !!(s.egcs_maker);
+    var egcsDefault = hasEgcs ? '정상' : '-';
     return '<tr>'+
       '<td><b>'+esc(s.code)+'</b></td>'+
       '<td style="font-size:12px;color:#64748b">'+esc(s.name||'')+'</td>'+
       stCell(s.code,'bwts_status',s.bwts_status||'정상',s.bwts_memo)+
-      stCell(s.code,'egcs_wms_status',s.egcs_wms_status||'정상',s.egcs_wms_memo)+
-      stCell(s.code,'egcs_cems_status',s.egcs_cems_status||'정상',s.egcs_cems_memo)+
-      stCell(s.code,'egcs_body_status',s.egcs_body_status||'정상',s.egcs_body_memo)+
+      stCell(s.code,'egcs_wms_status',s.egcs_wms_status||egcsDefault,s.egcs_wms_memo)+
+      stCell(s.code,'egcs_cems_status',s.egcs_cems_status||egcsDefault,s.egcs_cems_memo)+
+      stCell(s.code,'egcs_body_status',s.egcs_body_status||egcsDefault,s.egcs_body_memo)+
       '</tr>';
   }).join('');
 
