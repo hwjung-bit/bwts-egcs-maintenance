@@ -967,8 +967,10 @@ async function searchBwtsCert(shipCode, shipName, lastDate) {
   toast(searchName + (year ? ' ' + year + '년' : '') + ' CERT 검색중...');
   try {
     var folderId = year ? await findYearFolder(year) : null;
-    // Search for ship name in year folder (or all drives if no folder found)
-    var q = "name contains '" + searchName.replace(/'/g, "\\'") + "'" +
+    // Search for ship name + Calibration in year folder
+    var safeName = searchName.replace(/'/g, "\\'");
+    var q = "name contains '" + safeName + "'" +
+      " and (name contains 'Calibration' or name contains 'CALIBRATION' or name contains 'Cert')" +
       " and mimeType='application/pdf'";
     if (folderId) {
       // Search in year folder + subfolders: use two queries
@@ -1010,10 +1012,9 @@ async function searchBwtsCert(shipCode, shipName, lastDate) {
           var data2 = await res2.json();
           files = (data2.files || []).filter(function(f) {
             var n = f.name.toUpperCase();
-            return n.indexOf('CALIBRATION') >= 0 || n.indexOf('CERT') >= 0;
+            return (n.indexOf('CALIBRATION') >= 0 || n.indexOf('CERT') >= 0)
+              && n.indexOf('SERVICE REPORT') < 0;
           });
-          // If no calibration cert, show all files in subfolder
-          if (files.length === 0) files = data2.files || [];
         }
       }
     } else {
