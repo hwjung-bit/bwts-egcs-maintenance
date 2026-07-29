@@ -49,7 +49,7 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .refresh-btn:hover{background:#e2e8f0}
 .wrap{padding:8px 16px 24px}
 table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap;position:sticky;top:120px;z-index:8}
+th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap}
 td{padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px}
 tr:hover{background:#f8fafc}
 .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer}
@@ -303,6 +303,23 @@ function renderCurrent() {
   else if (TAB === 'bwtsCal') renderBwtsCal();
   else if (TAB === 'egcsCal') renderEgcsCal();
   else if (TAB === 'ships') renderShips();
+  setTimeout(fixStickyHeaders, 50);
+}
+function fixStickyHeaders() {
+  var view = document.getElementById(TAB + 'View');
+  if (!view) return;
+  var header = document.querySelector('.header');
+  var tabs = document.querySelector('.tabs');
+  var baseTop = (header?header.offsetHeight:0) + (tabs?tabs.offsetHeight:0);
+  // Find stats and filters INSIDE the active view
+  var stats = view.querySelector('.stats');
+  var filters = view.querySelector('.filters');
+  var stickyTop = baseTop;
+  if (stats) { stats.style.position='sticky'; stats.style.top=stickyTop+'px'; stats.style.zIndex='9'; stats.style.background='#f1f5f9'; stickyTop += stats.offsetHeight; }
+  if (filters) { filters.style.top = stickyTop+'px'; stickyTop += filters.offsetHeight; }
+  // Set th sticky top
+  var ths = view.querySelectorAll('th');
+  ths.forEach(function(th) { th.style.position='sticky'; th.style.top=stickyTop+'px'; th.style.zIndex='8'; });
 }
 
 /* ===== Helpers ===== */
