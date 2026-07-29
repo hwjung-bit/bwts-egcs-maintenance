@@ -933,15 +933,7 @@ function editBwtsCalCertUrl(id, btn) {
   var c = BWTS_CAL.find(function(x){return (x.id||x.ship_code)===id;});
   if (!c) return;
   var cur = c.cert_url || '';
-  var val = prompt(
-    c.ship_code + ' CERT 링크 지정
-
-' +
-    'Google Drive에서 파일 우클릭 → 링크 복사 → 붙여넣기
-' +
-    '비우면 링크 삭제',
-    cur
-  );
+  var val = prompt(c.ship_code + ' CERT 링크 지정 — Drive 파일 우클릭 > 링크복사 > 붙여넣기 (비우면 삭제)', cur);
   if (val === null) return;
   val = val.trim();
   c.cert_url = val || null;
