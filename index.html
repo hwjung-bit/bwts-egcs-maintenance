@@ -14,7 +14,7 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .login-btn{background:#2563eb;color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
 .login-btn:hover{background:#1d4ed8}
 .user-info{font-size:12px;color:#64748b}
-.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:46px;z-index:99}
+.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:0;z-index:99}
 .tab{padding:6px 14px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;color:#64748b}
 .tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .stats{display:flex;gap:10px;padding:16px 24px;flex-wrap:wrap}
@@ -308,22 +308,48 @@ function renderCurrent() {
 function fixStickyHeaders() {
   var view = document.getElementById(TAB + 'View');
   if (!view) return;
+  // Measure actual heights
   var header = document.querySelector('.header');
   var tabs = document.querySelector('.tabs');
-  var baseTop = (header?header.offsetHeight:0) + (tabs?tabs.offsetHeight:0);
-  // Find stats and filters INSIDE the active view
+  var headerH = header ? header.getBoundingClientRect().height : 0;
+  var tabsH = tabs ? tabs.getBoundingClientRect().height : 0;
+  // Fix tabs top to match header height exactly
+  if (tabs) tabs.style.top = headerH + 'px';
+  var stickyTop = headerH + tabsH;
+  // Stats
   var stats = view.querySelector('.stats');
-  var filters = view.querySelector('.filters');
-  var stickyTop = baseTop;
-  if (stats) { stats.style.position='sticky'; stats.style.top=stickyTop+'px'; stats.style.zIndex='98'; stats.style.background='#f1f5f9'; stickyTop += stats.offsetHeight; }
-  if (filters) { filters.style.top=stickyTop+'px'; filters.style.background='#fff'; filters.style.zIndex='97'; stickyTop += filters.offsetHeight; }
-  // Remove overflow from parents (breaks sticky) — skip egcsCal (needs horizontal scroll)
-  if (TAB !== 'egcsCal') {
-    var overflows = view.querySelectorAll('[style*="overflow"]');
-    overflows.forEach(function(el) { if (el.tagName!=='TABLE') el.style.overflowX='visible'; });
+  if (stats) {
+    stats.style.position = 'sticky';
+    stats.style.top = stickyTop + 'px';
+    stats.style.zIndex = '98';
+    stats.style.background = '#f1f5f9';
+    stickyTop += stats.getBoundingClientRect().height;
   }
+  // Filters
+  var filters = view.querySelector('.filters');
+  if (filters) {
+    filters.style.position = 'sticky';
+    filters.style.top = stickyTop + 'px';
+    filters.style.zIndex = '97';
+    filters.style.background = '#fff';
+    stickyTop += filters.getBoundingClientRect().height;
+  }
+  // Skip sticky th for egcsCal (needs overflow-x scroll)
+  if (TAB === 'egcsCal') return;
+  // Remove overflow from parents (breaks sticky)
+  view.querySelectorAll('div').forEach(function(el) {
+    var ov = getComputedStyle(el).overflowX;
+    if (ov === 'auto' || ov === 'scroll') el.style.overflowX = 'visible';
+  });
+  // Sticky th
   var ths = view.querySelectorAll('th');
-  ths.forEach(function(th) { th.style.position='sticky'; th.style.top=stickyTop+'px'; th.style.zIndex='96'; th.style.background='#f8fafc'; });
+  ths.forEach(function(th) {
+    th.style.position = 'sticky';
+    th.style.top = stickyTop + 'px';
+    th.style.zIndex = '96';
+    th.style.background = '#f8fafc';
+    th.style.boxShadow = '0 1px 0 #e2e8f0';
+  });
 }
 
 /* ===== Helpers ===== */
