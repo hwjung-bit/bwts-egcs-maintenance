@@ -794,21 +794,40 @@ async function deleteRepair(id) {
 }
 
 /* ===== BWTS Calibration ===== */
+var BWTS_SORT = {key:'status', dir:1}; // key: ship|maker|status, dir: 1=asc/-1=desc
+function toggleBwtsSort(key) {
+  if (BWTS_SORT.key === key) BWTS_SORT.dir *= -1;
+  else { BWTS_SORT.key = key; BWTS_SORT.dir = 1; }
+  renderBwtsCal();
+}
 function renderBwtsCal() {
   var DAY = 86400000;
   var order = getShipOrder();
-  var sorted = BWTS_CAL.slice().sort(function(a,b) {
-    // Sort by status (expired first), then by ship order
-    var da = a.last_date?new Date(a.last_date):new Date(9999,0);
-    var db = b.last_date?new Date(b.last_date):new Date(9999,0);
-    var dueA = new Date(da); dueA.setMonth(dueA.getMonth()+12);
-    var dueB = new Date(db); dueB.setMonth(dueB.getMonth()+12);
-    var daysA = Math.round((dueA-new Date())/DAY);
-    var daysB = Math.round((dueB-new Date())/DAY);
-    if ((daysA<=60) !== (daysB<=60)) return daysA<=60?-1:1;
-    var ia = order.indexOf(a.ship_code), ib = order.indexOf(b.ship_code);
-    return (ia<0?99:ia)-(ib<0?99:ib);
+  // Pre-compute sort values
+  var enriched = BWTS_CAL.slice().map(function(c) {
+    var s = SHIPS.find(function(x){return x.code===c.ship_code;});
+    var maker = s?(s.bwts_maker||''):'';
+    var due = null, days = 9999;
+    if (c.last_date) {
+      due = new Date(c.last_date+'T00:00:00');
+      due.setMonth(due.getMonth()+12);
+      days = Math.round((due-new Date())/DAY);
+    }
+    return {c:c, maker:maker, days:days, shipIdx: order.indexOf(c.ship_code)};
   });
+  var sk = BWTS_SORT.key, sd = BWTS_SORT.dir;
+  enriched.sort(function(a,b) {
+    var v = 0;
+    if (sk === 'ship') {
+      v = (a.shipIdx<0?99:a.shipIdx) - (b.shipIdx<0?99:b.shipIdx);
+    } else if (sk === 'maker') {
+      v = a.maker.localeCompare(b.maker);
+    } else { // status
+      v = a.days - b.days;
+    }
+    return v * sd;
+  });
+  var sorted = enriched.map(function(e){return e.c;});
   var expCnt=0, soonCnt=0, okCnt=0;
   var rows = sorted.map(function(c) {
     var due = null, days = null, lv = 'unknown', label = '미상';
@@ -868,7 +887,11 @@ function renderBwtsCal() {
       '</div>'+
     '</div>'+
     '<table class="cal-table"><thead><tr>'+
-      '<th>선박</th><th>메이커</th><th>최근 검교정</th><th>다음 만료</th><th>상태</th><th>CERT</th><th>비고</th>'+
+      '<th style="cursor:pointer" onclick="toggleBwtsSort(\'ship\')">선박'+(BWTS_SORT.key==='ship'?(BWTS_SORT.dir>0?' ▲':' ▼'):'')+'</th>'+
+      '<th style="cursor:pointer" onclick="toggleBwtsSort(\'maker\')">메이커'+(BWTS_SORT.key==='maker'?(BWTS_SORT.dir>0?' ▲':' ▼'):'')+'</th>'+
+      '<th>최근 검교정</th><th>다음 만료</th>'+
+      '<th style="cursor:pointer" onclick="toggleBwtsSort(\'status\')">상태'+(BWTS_SORT.key==='status'?(BWTS_SORT.dir>0?' ▲':' ▼'):'')+'</th>'+
+      '<th>CERT</th><th>비고</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
