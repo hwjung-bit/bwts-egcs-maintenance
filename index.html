@@ -749,11 +749,17 @@ function renderRepairs() {
       '<td>'+mailCell+'</td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
+      '<td style="white-space:nowrap">'+
+        (r.file_url
+          ? '<a href="'+esc(r.file_url)+'" target="_blank" style="text-decoration:none;border:1px solid #c7d2fe;border-radius:6px;padding:2px 6px;font-size:11px;color:#4f46e5">📄 파일</a>'
+          : '')+
+        '<button onclick="editRepairFileUrl(\''+eid+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8" title="Drive 링크 지정/변경">🔗</button>'+
+      '</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔧 메일대장에서 복사 가능</div>';
+    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:55px">파일</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔗 → Drive 파일 연결</div>';
 }
 
 /* Inline edit for repair fields */
@@ -780,6 +786,22 @@ function editRepairField(id, field, el) {
     inp.onkeydown = function(e) { if (e.key==='Enter') save2(); if (e.key==='Escape') el.textContent=cur||'—'; };
   }
 }
+function editRepairFileUrl(id) {
+  var r = REPAIRS.find(function(x){return x.id===id;});
+  if (!r) return;
+  var cur = r.file_url || '';
+  var val = prompt(r.ship_code + ' 파일 링크 지정 — Drive 파일 우클릭 > 링크복사 > 붙여넣기 (비우면 삭제)', cur);
+  if (val === null) return;
+  val = val.trim();
+  r.file_url = val || null;
+  var patch = {file_url: val || null};
+  sb.from('repairs').update(patch).eq('id', id)
+    .then(function(res) {
+      if (res.error) toast('저장 실패: '+res.error.message);
+      else { toast(r.ship_code + (val ? ' 파일 링크 저장' : ' 파일 링크 삭제')); renderRepairs(); }
+    });
+}
+
 async function updateRepairField(id, field, val) {
   var patch = {}; patch[field] = val;
   await sb.from('repairs').update(patch).eq('id', id);
