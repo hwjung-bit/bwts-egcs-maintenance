@@ -14,7 +14,7 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .login-btn{background:#2563eb;color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
 .login-btn:hover{background:#1d4ed8}
 .user-info{font-size:12px;color:#64748b}
-.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0}
+.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:54px;z-index:10}
 .tab{padding:6px 14px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;color:#64748b}
 .tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .stats{display:flex;gap:10px;padding:16px 24px;flex-wrap:wrap}
@@ -41,15 +41,15 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .chip.stg.active.stg-방선예정{background:#f0fdf4;border-color:#4ade80;color:#166534}
 .chip.stg.active.stg-확인{background:#dbeafe;border-color:#60a5fa;color:#1e40af}
 .chip.stg.active.stg-완료{background:#d1fae5;border-color:#34d399;color:#065f46}
-.filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:54px;z-index:9}
+.filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:92px;z-index:9}
 .filters select,.filters input{padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px}
 .filters input[type="text"]{width:220px}
 .count{font-size:12px;color:#94a3b8;margin-left:auto}
 .refresh-btn{background:#f1f5f9;border:1px solid #d1d5db;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px}
 .refresh-btn:hover{background:#e2e8f0}
 .wrap{padding:8px 16px 24px;overflow-x:auto}
-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:1000px}
-th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:1000px}
+th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap;position:sticky;top:92px;z-index:8}
 td{padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px}
 tr:hover{background:#f8fafc}
 .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer}
@@ -159,7 +159,7 @@ tr:hover{background:#f8fafc}
 
 <div id="repairsView" style="display:none">
   <div class="stats" id="repairStats"></div>
-  <div class="filters" id="repairFilters" style="top:54px">
+  <div class="filters" id="repairFilters" style="top:92px">
     <select id="rfYear" onchange="REPAIR_FILTER.year=this.value;renderRepairs()">
       <option value="">전체 년도</option>
       <option value="2026">2026</option>
@@ -578,13 +578,14 @@ function stCell(code, field, val, memo, disabled) {
   var opts = STATUS_OPTS.map(function(s) {
     return '<option value="'+s+'"'+(val===s?' selected':'')+'>'+s+'</option>';
   }).join('');
-  var memoHtml = '<div class="note-text" onclick="editStatusMemo(this,\''+
-    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;min-height:14px">'+
-    esc(memo||'')+'</div>';
-  return '<td style="padding:4px 6px;'+stColor(val)+';overflow:hidden">'+
+  var memoHtml = '<span class="note-text" onclick="editStatusMemo(this,\''+
+    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;cursor:pointer;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">'+
+    esc(memo||'')+'</span>';
+  return '<td style="padding:2px 4px;'+stColor(val)+';overflow:hidden">'+
+    '<div style="display:flex;align-items:center;gap:2px">'+
     '<select class="status-select" style="'+stColor(val)+
-    ';padding:2px 16px 2px 4px;font-size:11px;font-weight:600;width:auto" onchange="updateShipStatus(\''+
-    esc(code)+'\',\''+field+'\',this.value)">'+opts+'</select>'+memoHtml+'</td>';
+    ';padding:1px 14px 1px 4px;font-size:11px;font-weight:600;flex-shrink:0" onchange="updateShipStatus(\''+
+    esc(code)+'\',\''+field+'\',this.value)">'+opts+'</select>'+memoHtml+'</div></td>';
 }
 
 function renderStatus() {
@@ -633,11 +634,11 @@ function renderStatus() {
       '<div class="card rose"><div class="num">'+issueCnt+'</div><div class="label">문제</div></div>'+
     '</div></div>'+
     '<table style="table-layout:fixed;width:100%"><thead><tr>'+
-      '<th style="width:50px">코드</th>'+
-      '<th style="width:22%">BWTS</th>'+
-      '<th style="width:22%">EGCS WMS</th>'+
-      '<th style="width:22%">EGCS CEMS</th>'+
-      '<th style="width:22%">EGCS BODY</th>'+
+      '<th style="width:36px">코드</th>'+
+      '<th style="width:24%">BWTS</th>'+
+      '<th style="width:24%">EGCS WMS</th>'+
+      '<th style="width:24%">EGCS CEMS</th>'+
+      '<th style="width:24%">EGCS BODY</th>'+
     '</tr></thead><tbody>'+rows+'</tbody></table>';
 }
 
