@@ -8,13 +8,13 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:#f1f5f9;color:#1e293b;font-size:13px}
-.header{background:#fff;border-bottom:1px solid #e2e8f0;padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+.header{background:#fff;border-bottom:1px solid #e2e8f0;padding:10px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
 .header h1{font-size:18px}.header .meta{font-size:11px;color:#94a3b8}
 .spacer{flex:1}
 .login-btn{background:#2563eb;color:#fff;border:none;padding:6px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}
 .login-btn:hover{background:#1d4ed8}
 .user-info{font-size:12px;color:#64748b}
-.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:54px;z-index:10}
+.tabs{display:flex;gap:4px;padding:8px 24px;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:46px;z-index:10}
 .tab{padding:6px 14px;border:1px solid #e2e8f0;background:#fff;border-radius:8px;cursor:pointer;font-weight:600;font-size:12px;color:#64748b}
 .tab.active{background:#2563eb;color:#fff;border-color:#2563eb}
 .stats{display:flex;gap:10px;padding:16px 24px;flex-wrap:wrap}
@@ -41,7 +41,7 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .chip.stg.active.stg-방선예정{background:#f0fdf4;border-color:#4ade80;color:#166534}
 .chip.stg.active.stg-확인{background:#dbeafe;border-color:#60a5fa;color:#1e40af}
 .chip.stg.active.stg-완료{background:#d1fae5;border-color:#34d399;color:#065f46}
-.filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:92px;z-index:9}
+.filters{padding:8px 24px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff;border-bottom:1px solid #e2e8f0;position:sticky;top:84px;z-index:9}
 .filters select,.filters input{padding:5px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:12px}
 .filters input[type="text"]{width:220px}
 .count{font-size:12px;color:#94a3b8;margin-left:auto}
@@ -49,7 +49,7 @@ body{font-family:-apple-system,'Segoe UI','Malgun Gothic',sans-serif;background:
 .refresh-btn:hover{background:#e2e8f0}
 .wrap{padding:8px 16px 24px;overflow-x:auto}
 table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);min-width:1000px}
-th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap;position:sticky;top:92px;z-index:8}
+th{background:#f8fafc;text-align:left;padding:8px 10px;font-size:11px;color:#64748b;border-bottom:2px solid #e2e8f0;white-space:nowrap}
 td{padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:13px}
 tr:hover{background:#f8fafc}
 .pill{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer}
@@ -159,7 +159,7 @@ tr:hover{background:#f8fafc}
 
 <div id="repairsView" style="display:none">
   <div class="stats" id="repairStats"></div>
-  <div class="filters" id="repairFilters" style="top:92px">
+  <div class="filters" id="repairFilters" style="top:84px">
     <select id="rfYear" onchange="REPAIR_FILTER.year=this.value;renderRepairs()">
       <option value="">전체 년도</option>
       <option value="2026">2026</option>
