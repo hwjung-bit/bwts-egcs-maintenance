@@ -855,6 +855,9 @@ function renderBwtsCal() {
   document.getElementById('bwtsCalRoot').innerHTML =
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">'+
       '<div style="font-size:12px;color:#64748b">검교정 주기 1년 · 날짜 클릭하여 수정 · 📄 CERT 클릭시 Drive 자동검색</div>'+
+      '<button onclick="openCertFolder()" '+
+        'style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;cursor:pointer;font-size:12px;font-weight:600;color:#15803d;margin-left:8px" '+
+        'title="Google Drive CERT 폴더 열기">📁 CERT 폴더</button>'+
       '<div style="margin-left:auto;display:flex;gap:6px">'+
         '<span class="pill lv-expired" style="font-size:11px;padding:3px 8px">만료 '+expCnt+'</span>'+
         '<span class="pill lv-soon" style="font-size:11px;padding:3px 8px">임박 '+soonCnt+'</span>'+
@@ -960,6 +963,42 @@ async function searchBwtsCert(shipCode, shipName) {
     toast(files[0].name);
   } catch(e) {
     toast('Drive 검색 실패: ' + e.message);
+  }
+}
+
+/* ===== BWTS CERT folder — open on Drive ===== */
+async function openCertFolder() {
+  if (!GOOGLE_TOKEN) {
+    toast('Google 로그인 필요 — 재로그인하세요');
+    return;
+  }
+  toast('CERT 폴더 검색중...');
+  try {
+    var q = "name='02. CERT' and mimeType='application/vnd.google-apps.folder'";
+    var url = 'https://www.googleapis.com/drive/v3/files' +
+      '?q=' + encodeURIComponent(q) +
+      '&includeItemsFromAllDrives=true&supportsAllDrives=true' +
+      '&corpora=allDrives' +
+      '&pageSize=3' +
+      '&fields=files(id,name,webViewLink)';
+    var res = await fetch(url, {
+      headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+    });
+    if (res.status === 401) {
+      GOOGLE_TOKEN = null;
+      toast('Drive 토큰 만료 — 재로그인 필요');
+      return;
+    }
+    var data = await res.json();
+    var folders = data.files || [];
+    if (folders.length > 0) {
+      window.open('https://drive.google.com/drive/folders/' + folders[0].id, '_blank');
+      toast('CERT 폴더 열림');
+    } else {
+      toast('CERT 폴더 못 찾음');
+    }
+  } catch(e) {
+    toast('폴더 검색 실패: ' + e.message);
   }
 }
 
