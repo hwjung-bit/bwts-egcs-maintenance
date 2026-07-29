@@ -843,7 +843,7 @@ function renderBwtsCal() {
         (days!=null?'<span style="color:#64748b;font-size:11px">'+(days<=0?Math.abs(days)+'일 경과':'D-'+days)+'</span>':'')+
       '</td>'+
       '<td style="white-space:nowrap">'+
-        '<button onclick="searchBwtsCert(\''+esc(c.ship_code)+'\',\''+esc(shipName)+'\')" '+
+        '<button onclick="searchBwtsCert(\''+esc(c.ship_code)+'\',\''+esc(shipName)+'\',\''+esc(c.last_date||'')+'\')" '+
           'style="background:none;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px;color:#4f46e5" '+
           'title="Google Drive에서 CERT 검색">'+
           '📄 CERT</button>'+
@@ -925,40 +925,121 @@ function editBwtsCalNote(id, el) {
   };
 }
 
-/* ===== BWTS CERT — Google Drive search ===== */
-async function searchBwtsCert(shipCode, shipName) {
+/* ===== BWTS CERT — Google Drive search (연도 기반) ===== */
+var CERT_FOLDER_CACHE = {}; // '2026년' → folderId
+
+async function findYearFolder(year) {
+  var key = year + '년';
+  if (CERT_FOLDER_CACHE[key]) return CERT_FOLDER_CACHE[key];
+  // 1) Find "02. CERT" folder
+  var q1 = "name='02. CERT' and mimeType='application/vnd.google-apps.folder'";
+  var r1 = await fetch('https://www.googleapis.com/drive/v3/files?q=' +
+    encodeURIComponent(q1) +
+    '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+    '&pageSize=3&fields=files(id,name)', {
+    headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+  });
+  var d1 = await r1.json();
+  var certFolder = (d1.files || [])[0];
+  if (!certFolder) return null;
+  // 2) Find year subfolder inside CERT folder
+  var q2 = "name='" + key + "' and mimeType='application/vnd.google-apps.folder'" +
+    " and '" + certFolder.id + "' in parents";
+  var r2 = await fetch('https://www.googleapis.com/drive/v3/files?q=' +
+    encodeURIComponent(q2) +
+    '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+    '&pageSize=1&fields=files(id,name)', {
+    headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+  });
+  var d2 = await r2.json();
+  var yearFolder = (d2.files || [])[0];
+  if (yearFolder) CERT_FOLDER_CACHE[key] = yearFolder.id;
+  return yearFolder ? yearFolder.id : null;
+}
+
+async function searchBwtsCert(shipCode, shipName, lastDate) {
   if (!GOOGLE_TOKEN) {
     toast('CERT 검색에 Google 로그인 필요 — 재로그인하세요');
     return;
   }
   var searchName = shipName || ('KMTC ' + shipCode);
-  toast(searchName + ' CERT 검색중...');
+  var year = lastDate ? lastDate.slice(0, 4) : null;
+  toast(searchName + (year ? ' ' + year + '년' : '') + ' CERT 검색중...');
   try {
-    var q = "name contains 'Calibration' and name contains '" +
-      searchName.replace(/'/g, "\\'") +
-      "' and mimeType='application/pdf'";
-    var url = 'https://www.googleapis.com/drive/v3/files' +
-      '?q=' + encodeURIComponent(q) +
-      '&includeItemsFromAllDrives=true&supportsAllDrives=true' +
-      '&corpora=allDrives' +
-      '&orderBy=modifiedTime desc' +
-      '&pageSize=5' +
-      '&fields=files(id,name,webViewLink,modifiedTime)';
-    var res = await fetch(url, {
-      headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
-    });
-    if (res.status === 401) {
-      GOOGLE_TOKEN = null;
-      toast('Drive 토큰 만료 — 재로그인 필요');
+    var folderId = year ? await findYearFolder(year) : null;
+    // Search for ship name in year folder (or all drives if no folder found)
+    var q = "name contains '" + searchName.replace(/'/g, "\\'") + "'" +
+      " and mimeType='application/pdf'";
+    if (folderId) {
+      // Search in year folder + subfolders: use two queries
+      // First try direct children of year folder
+      var q1 = q + " and '" + folderId + "' in parents";
+      var url1 = 'https://www.googleapis.com/drive/v3/files?q=' +
+        encodeURIComponent(q1) +
+        '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+        '&orderBy=createdTime desc&pageSize=5' +
+        '&fields=files(id,name,webViewLink)';
+      var res1 = await fetch(url1, {
+        headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+      });
+      var data1 = await res1.json();
+      var files = data1.files || [];
+      // If not found directly, search subfolders of year folder
+      if (files.length === 0) {
+        // Find subfolders
+        var qSub = "'" + folderId + "' in parents and mimeType='application/vnd.google-apps.folder'";
+        var resSub = await fetch('https://www.googleapis.com/drive/v3/files?q=' +
+          encodeURIComponent(qSub) +
+          '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+          '&pageSize=30&fields=files(id,name)', {
+          headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+        });
+        var dataSub = await resSub.json();
+        var subs = (dataSub.files || []).filter(function(f) {
+          return f.name.indexOf(shipCode) >= 0;
+        });
+        if (subs.length > 0) {
+          // Search inside matching subfolder
+          var q2 = "'" + subs[0].id + "' in parents and mimeType='application/pdf'";
+          var res2 = await fetch('https://www.googleapis.com/drive/v3/files?q=' +
+            encodeURIComponent(q2) +
+            '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+            '&pageSize=10&fields=files(id,name,webViewLink)', {
+            headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+          });
+          var data2 = await res2.json();
+          files = (data2.files || []).filter(function(f) {
+            var n = f.name.toUpperCase();
+            return n.indexOf('CALIBRATION') >= 0 || n.indexOf('CERT') >= 0;
+          });
+          // If no calibration cert, show all files in subfolder
+          if (files.length === 0) files = data2.files || [];
+        }
+      }
+    } else {
+      // Fallback: search all drives
+      q += " and name contains 'Calibration'";
+      var url = 'https://www.googleapis.com/drive/v3/files?q=' +
+        encodeURIComponent(q) +
+        '&includeItemsFromAllDrives=true&supportsAllDrives=true&corpora=allDrives' +
+        '&orderBy=modifiedTime desc&pageSize=5' +
+        '&fields=files(id,name,webViewLink)';
+      var res = await fetch(url, {
+        headers: { 'Authorization': 'Bearer ' + GOOGLE_TOKEN }
+      });
+      if (res.status === 401) {
+        GOOGLE_TOKEN = null;
+        toast('Drive 토큰 만료 — 재로그인 필요');
+        return;
+      }
+      var data = await res.json();
+      files = data.files || [];
+    }
+    if (!files || files.length === 0) {
+      toast(searchName + ' ' + (year||'') + ' CERT 없음');
       return;
     }
-    var data = await res.json();
-    var files = data.files || [];
-    if (files.length === 0) {
-      toast(searchName + ' CERT 없음 — Drive 직접 확인');
-      return;
-    }
-    // Open most recent cert
+    // Open first matching cert
     window.open(files[0].webViewLink || ('https://drive.google.com/file/d/' + files[0].id + '/view'), '_blank');
     toast(files[0].name);
   } catch(e) {
