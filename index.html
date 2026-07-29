@@ -316,10 +316,9 @@ function fixStickyHeaders() {
   var filters = view.querySelector('.filters');
   var stickyTop = baseTop;
   if (stats) { stats.style.position='sticky'; stats.style.top=stickyTop+'px'; stats.style.zIndex='9'; stats.style.background='#f1f5f9'; stickyTop += stats.offsetHeight; }
-  if (filters) { filters.style.top = stickyTop+'px'; stickyTop += filters.offsetHeight; }
-  // Set th sticky top
+  if (filters) { filters.style.top=stickyTop+'px'; filters.style.background='#fff'; filters.style.zIndex='9'; stickyTop += filters.offsetHeight; }
   var ths = view.querySelectorAll('th');
-  ths.forEach(function(th) { th.style.position='sticky'; th.style.top=stickyTop+'px'; th.style.zIndex='8'; });
+  ths.forEach(function(th) { th.style.position='sticky'; th.style.top=stickyTop+'px'; th.style.zIndex='8'; th.style.background='#f8fafc'; });
 }
 
 /* ===== Helpers ===== */
