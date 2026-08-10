@@ -1,29 +1,24 @@
 """
-Weekly Calibration Expiry Alert — Supabase → Gmail
+Weekly Calibration Expiry Alert — Supabase → Gmail SMTP
 
 GitHub Actions cron으로 매주 월요일 KST 08:00 실행.
 BWTS/EGCS 검교정 만료·임박 항목을 집계하여 HTML 메일 발송.
 
 환경변수:
-  GMAIL_TOKEN_JSON   — OAuth token JSON (refresh_token 포함)
-  GOOGLE_CLIENT_ID
-  GOOGLE_CLIENT_SECRET
+  GMAIL_USER          — Gmail 계정 (기본: hwjung@ekmtc.com)
+  GMAIL_APP_PASSWORD  — Google 앱 비밀번호 (16자리)
   SUPABASE_URL
   SUPABASE_SERVICE_KEY
-  ALERT_TO            — 수신자 이메일 (기본: hwjung@ekmtc.com)
+  ALERT_TO            — 수신자 이메일 (기본: GMAIL_USER)
 """
 
-import base64
-import json
 import logging
 import os
+import smtplib
 import sys
-from datetime import date, timedelta
+from datetime import date
 from email.mime.text import MIMEText
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
 from supabase import create_client
 
 logging.basicConfig(
@@ -32,10 +27,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-SCOPES = [
-    "https://www.googleapis.com/auth/gmail.send",
-]
-ALERT_TO = os.environ.get("ALERT_TO", "hwjung@ekmtc.com")
+GMAIL_USER = os.environ.get("GMAIL_USER", "hwjung@ekmtc.com")
+GMAIL_APP_PW = os.environ.get("GMAIL_APP_PASSWORD", "")
+ALERT_TO = os.environ.get("ALERT_TO", "") or GMAIL_USER
 
 # BWTS: 12개월 주기, 만료=0일 이내, 임박=60일 이내
 BWTS_INTERVAL = 12
@@ -52,30 +46,6 @@ SENSOR_CYCLE = {
     "G6130":    {"cal": 12, "repl": 12},
 }
 EGCS_SOON_DAYS = 30
-
-
-def get_creds():
-    token_json = os.environ.get("GMAIL_TOKEN_JSON", "")
-    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
-    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-    if not token_json:
-        log.error("GMAIL_TOKEN_JSON not set")
-        sys.exit(1)
-    token_data = json.loads(token_json)
-    creds = Credentials(
-        token=token_data.get("access_token"),
-        refresh_token=token_data.get("refresh_token"),
-        token_uri="https://oauth2.googleapis.com/token",
-        client_id=token_data.get("client_id") or client_id,
-        client_secret=(
-            token_data.get("client_secret") or client_secret
-        ),
-        scopes=SCOPES,
-    )
-    if creds.expired or not creds.valid:
-        creds.refresh(Request())
-        log.info("Token refreshed")
-    return creds
 
 
 def get_supabase():
@@ -363,19 +333,18 @@ border-top:1px solid #e2e8f0;padding-top:10px">\
     return html, total, len(bwts_alerts), len(egcs_alerts)
 
 
-def send_email(creds, to, subject, html_body):
-    service = build("gmail", "v1", credentials=creds)
+def send_email(to, subject, html_body):
+    if not GMAIL_APP_PW:
+        log.error("GMAIL_APP_PASSWORD not set")
+        sys.exit(1)
     msg = MIMEText(html_body, "html", "utf-8")
+    msg["From"] = GMAIL_USER
     msg["To"] = to
     msg["Subject"] = subject
-    raw = base64.urlsafe_b64encode(
-        msg.as_bytes()
-    ).decode("ascii")
-    result = service.users().messages().send(
-        userId="me", body={"raw": raw}
-    ).execute()
-    log.info("Email sent: id=%s", result.get("id"))
-    return result
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
+        srv.login(GMAIL_USER, GMAIL_APP_PW)
+        srv.send_message(msg)
+    log.info("Email sent via SMTP to %s", to)
 
 
 def main():
@@ -427,8 +396,7 @@ def main():
         f"(BWTS {bwts_cnt} · EGCS {egcs_cnt})"
     )
 
-    creds = get_creds()
-    send_email(creds, ALERT_TO, subject, html)
+    send_email(ALERT_TO, subject, html)
     log.info("Done — %s", subject)
 
 
