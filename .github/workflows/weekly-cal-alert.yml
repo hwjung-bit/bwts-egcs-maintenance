@@ -1,0 +1,29 @@
+name: Weekly Calibration Alert
+
+on:
+  schedule:
+    - cron: '0 23 * * 0'  # Sunday 23:00 UTC = Monday 08:00 KST
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  alert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Send weekly calibration alert
+        env:
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ALERT_TO: ${{ secrets.ALERT_TO }}
+        run: python scripts/weekly_cal_alert.py
