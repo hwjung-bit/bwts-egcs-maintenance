@@ -9,7 +9,7 @@ GitHub Actions에서 실행. 환경변수:
   SUPABASE_SERVICE_KEY
 """
 
-import json, os, re, sys, logging
+import base64, json, os, re, sys, logging
 from datetime import datetime, timedelta
 
 from google.oauth2.credentials import Credentials
@@ -111,6 +111,36 @@ KEYWORD_PATTERNS = [
         r"[Ii]nvoice|인보이스|송장", re.I), "Invoice"),
 ]
 
+# Category auto-classification (priority order)
+CATEGORY_RULES = [
+    (re.compile(
+        r"고장|수리|교체|[Bb]reakdown|[Ff]ailure"
+        r"|[Dd]efect|불량|이상|작동.?불|error",
+        re.I), "수리요청"),
+    (re.compile(
+        r"견적|[Qq]uot|[Ee]stimate|단가|가격",
+        re.I), "견적"),
+    (re.compile(
+        r"검교정|[Cc]alibrat|성적서|시험성적",
+        re.I), "검교정"),
+    (re.compile(
+        r"[Ss]ervice\s*[Rr]eport|서비스\s*리포트"
+        r"|SR\s*#|방선\s*보고",
+        re.I), "SR"),
+    (re.compile(
+        r"부품|[Ss]pare|발주|[Oo]rder|납품|배송",
+        re.I), "부품"),
+    (re.compile(
+        r"[Ii]nvoice|인보이스|송장|청구",
+        re.I), "Invoice"),
+    (re.compile(
+        r"방선|[Vv]isit|입항|출항|일정|[Ss]chedule",
+        re.I), "방선"),
+    (re.compile(
+        r"인증서|[Cc]ertificat|승인서|[Aa]pproval",
+        re.I), "인증서"),
+]
+
 
 # ── Helpers ────────────────────────────────────
 def find_ship(text):
@@ -131,6 +161,71 @@ def find_keywords(text):
         if pat.search(text):
             found.append(kw)
     return ", ".join(found)
+
+
+def detect_category(text):
+    """Auto-classify mail intent by keywords."""
+    for pat, cat in CATEGORY_RULES:
+        if pat.search(text):
+            return cat
+    return ""
+
+
+def extract_body_text(payload):
+    """Extract plain-text body from Gmail payload."""
+    parts = payload.get("parts", [])
+    # Single-part message
+    if not parts:
+        body_data = (payload.get("body", {})
+                     .get("data", ""))
+        if body_data:
+            try:
+                return base64.urlsafe_b64decode(
+                    body_data).decode("utf-8", "replace")
+            except Exception:
+                return ""
+        return ""
+    # Multi-part: prefer text/plain
+    for p in parts:
+        mime = p.get("mimeType", "")
+        if mime == "text/plain":
+            data = p.get("body", {}).get("data", "")
+            if data:
+                try:
+                    return base64.urlsafe_b64decode(
+                        data).decode("utf-8", "replace")
+                except Exception:
+                    pass
+        # Nested parts (e.g. multipart/alternative)
+        if p.get("parts"):
+            for sp in p["parts"]:
+                if sp.get("mimeType") == "text/plain":
+                    data = (sp.get("body", {})
+                            .get("data", ""))
+                    if data:
+                        try:
+                            return (
+                                base64.urlsafe_b64decode(
+                                    data)
+                                .decode("utf-8", "replace")
+                            )
+                        except Exception:
+                            pass
+    return ""
+
+
+def make_preview(body_text, max_len=200):
+    """Clean body text and truncate for preview."""
+    # Remove excessive whitespace/newlines
+    text = re.sub(r"\s+", " ", body_text).strip()
+    # Remove common email signatures
+    text = re.sub(
+        r"(--\s*$|_{3,}|Best [Rr]egards.*$"
+        r"|감사합니다.*$|Sent from.*$)",
+        "", text, flags=re.M)
+    if len(text) > max_len:
+        text = text[:max_len] + "…"
+    return text
 
 
 def detect_system(from_addr, subject):
@@ -230,11 +325,11 @@ def fetch_messages(gmail, query, max_results=500):
 def parse_message(gmail, msg_stub):
     msg = gmail.users().messages().get(
         userId="me", id=msg_stub["id"],
-        format="metadata",
-        metadataHeaders=["Subject", "From", "Date"],
+        format="full",
     ).execute()
 
-    headers = msg.get("payload", {}).get("headers", [])
+    payload = msg.get("payload", {})
+    headers = payload.get("headers", [])
     subject = get_header(headers, "Subject") or ""
     from_addr = get_header(headers, "From") or ""
     thread_id = msg.get("threadId", "")
@@ -249,16 +344,22 @@ def parse_message(gmail, msg_stub):
     except Exception:
         pass
 
+    # Extract body for preview and better detection
+    body_text = extract_body_text(payload)
+    body_preview = make_preview(body_text)
+    combined = f"{subject} {body_text[:500]}"
+
     system = detect_system(from_addr, subject)
-    ship = find_ship(subject)
-    keywords = find_keywords(subject)
+    ship = find_ship(combined)
+    keywords = find_keywords(combined)
+    category = detect_category(combined)
     link = (
         f"https://mail.google.com/mail/u/0/"
         f"#inbox/{thread_id}")
 
     # Attachments
     att_names = []
-    parts = msg.get("payload", {}).get("parts", [])
+    parts = payload.get("parts", [])
     for p in parts:
         fn = p.get("filename", "")
         if fn:
@@ -272,10 +373,12 @@ def parse_message(gmail, msg_stub):
         "ship_code": ship,
         "ship_name": SHIP_MAP.get(ship, ""),
         "keyword": keywords,
+        "category": category,
         "subject": subject,
         "sender": from_addr,
         "mail_link": link,
         "attachments": ", ".join(att_names),
+        "body_preview": body_preview,
         "note": "",
         "status": "미확인",
         "reply_count": 0,

@@ -71,6 +71,20 @@ tr:hover{background:#f8fafc}
 .note-text:empty::after{content:'메모 추가...';color:#cbd5e1;font-style:italic}
 .note-input{width:100%;border:1px solid #3b82f6;border-radius:4px;padding:4px 6px;font-size:12px;outline:none;display:none}
 .reply-badge{background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;margin-left:4px}
+.cat-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap}
+.cat-수리요청{background:#fee2e2;color:#b91c1c}.cat-견적{background:#fef3c7;color:#92400e}
+.cat-검교정{background:#e0e7ff;color:#3730a3}.cat-SR{background:#f3e8ff;color:#6b21a8}
+.cat-부품{background:#fff7ed;color:#c2410c}.cat-Invoice{background:#f1f5f9;color:#475569}
+.cat-방선{background:#ecfccb;color:#3f6212}.cat-인증서{background:#cffafe;color:#155e75}
+tr.stale{background:#fffbeb !important}
+tr.stale:hover{background:#fef3c7 !important}
+.stale-dot{display:inline-block;width:6px;height:6px;background:#f59e0b;border-radius:50%;margin-right:4px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.repair-suggest{animation:glow 1.5s ease-in-out infinite alternate}
+@keyframes glow{from{text-shadow:0 0 2px #3b82f6}to{text-shadow:0 0 8px #3b82f6}}
+.preview-tip{position:relative;cursor:help}
+.preview-tip .tip-text{visibility:hidden;position:absolute;z-index:200;bottom:125%;left:0;background:#1e293b;color:#f8fafc;padding:8px 12px;border-radius:8px;font-size:11px;line-height:1.4;width:300px;max-height:120px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:none;opacity:0;transition:opacity .15s}
+.preview-tip:hover .tip-text{visibility:visible;opacity:1}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
 .toast.show{display:block;animation:fadeIn .3s}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -131,9 +145,17 @@ tr:hover{background:#f8fafc}
     </select>
     <select id="fStatus" onchange="renderMail()">
       <option value="">전체 상태</option>
-      <option>미확인</option><option>확인</option><option>수리준비중</option>
+      <option>미확인</option><option>확인</option>
+      <option>수리준비중</option>
       <option>자재준비중</option>
       <option>방선예정</option><option>완료</option>
+    </select>
+    <select id="fCat" onchange="renderMail()">
+      <option value="">전체 분류</option>
+      <option>수리요청</option><option>견적</option>
+      <option>검교정</option><option>SR</option>
+      <option>부품</option><option>Invoice</option>
+      <option>방선</option><option>인증서</option>
     </select>
     <input type="text" id="search" placeholder="🔍 제목, 선박, 발신자..."
            oninput="renderMail()">
@@ -145,6 +167,7 @@ tr:hover{background:#f8fafc}
       <th style="width:80px">날짜</th>
       <th style="width:50px">시스템</th>
       <th style="width:45px">선박</th>
+      <th style="width:55px">분류</th>
       <th style="width:70px">키워드</th>
       <th>메일 제목</th>
       <th style="width:120px">발신자</th>
@@ -414,6 +437,7 @@ function renderMail() {
     sys: document.getElementById('fSys').value,
     ship: document.getElementById('fShip').value || FILTER.ship,
     status: document.getElementById('fStatus').value,
+    cat: document.getElementById('fCat').value,
     q: document.getElementById('search').value.toLowerCase()
   };
   var filtered = MAIL.filter(function(m) {
@@ -421,21 +445,37 @@ function renderMail() {
     if (f.sys && m.system !== f.sys) return false;
     if (f.ship && m.ship_code !== f.ship) return false;
     if (f.status && m.status !== f.status) return false;
+    if (f.cat && m.category !== f.cat) return false;
     if (f.q) {
-      var txt = ((m.subject||'')+(m.ship_code||'')+(m.sender||'')+(m.keyword||'')+(m.note||'')).toLowerCase();
+      var txt = ((m.subject||'')+(m.ship_code||'')+(m.sender||'')+(m.keyword||'')+(m.note||'')+(m.category||'')+(m.body_preview||'')).toLowerCase();
       if (txt.indexOf(f.q) < 0) return false;
     }
     return true;
   });
+  var now = new Date();
+  var STALE_DAYS = 3;
   // Table rows
   var rows = filtered.map(function(m) {
     var sysCls = m.system==='BWTS'?'pill-bwts':m.system==='EGCS'?'pill-egcs':'pill-etc';
     var fromShort = (m.sender||'').replace(/<[^>]+>/g,'').replace(/"/g,'').trim();
     if (fromShort.length>20) fromShort = fromShort.slice(0,18)+'…';
-    var subj = m.mail_link
-      ? '<a href="'+esc(m.mail_link)+'" target="_blank" title="'+esc(m.subject)+'">'+
-        esc((m.subject||'').slice(0,55))+(m.subject&&m.subject.length>55?'…':'')+'</a>'
-      : esc((m.subject||'').slice(0,55));
+    // Stale detection: 미확인 for > STALE_DAYS
+    var isStale = false;
+    if (m.status === '미확인' && m.date) {
+      var diff = (now - new Date(m.date+'T00:00:00')) / 86400000;
+      isStale = diff >= STALE_DAYS;
+    }
+    // Repair suggestion: category is 수리요청
+    var isRepairCandidate = (m.category === '수리요청');
+    // Subject with preview tooltip
+    var subjText = esc((m.subject||'').slice(0,55))+(m.subject&&m.subject.length>55?'…':'');
+    var preview = m.body_preview ? '<span class="tip-text">'+esc(m.body_preview)+'</span>' : '';
+    var subjWrap = m.mail_link
+      ? '<a href="'+esc(m.mail_link)+'" target="_blank" title="'+esc(m.subject)+'">'+subjText+'</a>'
+      : subjText;
+    var subj = preview
+      ? '<span class="preview-tip">'+subjWrap+preview+'</span>'
+      : subjWrap;
     var reply = (m.reply_count&&m.reply_count>0)
       ? '<span class="reply-badge">↩'+m.reply_count+'</span>' : '';
     var stOpts = STATUS_LIST.map(function(s) {
@@ -443,23 +483,39 @@ function renderMail() {
     }).join('');
     var eid = esc(m.id);
     var shipClick = m.ship_code ? ' onclick="goRepairs(\''+esc(m.ship_code)+'\')" style="cursor:pointer" title="수리이력 보기"' : '';
-    return '<tr>'+
-      '<td style="white-space:nowrap">'+esc(m.date||'—')+'</td>'+
+    // Category badge
+    var catHtml = m.category
+      ? '<span class="cat-badge cat-'+esc(m.category)+'">'+esc(m.category)+'</span>'
+      : '';
+    // Date with stale dot
+    var dateHtml = (isStale ? '<span class="stale-dot"></span>' : '') + esc(m.date||'—');
+    // Repair button — glow if candidate
+    var repairBtnCls = isRepairCandidate ? ' class="repair-suggest"' : '';
+    return '<tr'+(isStale?' class="stale"':'')+'>'+
+      '<td style="white-space:nowrap">'+dateHtml+'</td>'+
       '<td><span class="pill '+sysCls+'">'+esc(m.system)+'</span></td>'+
       '<td'+shipClick+'><b>'+esc(m.ship_code||'—')+'</b></td>'+
-      '<td>'+esc(m.keyword||'')+'</td>'+
-      '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+subj+reply+'</td>'+
+      '<td>'+catHtml+'</td>'+
+      '<td style="font-size:11px">'+esc(m.keyword||'')+'</td>'+
+      '<td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+subj+reply+'</td>'+
       '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#64748b" title="'+esc(m.sender)+'">'+esc(fromShort)+'</td>'+
       '<td style="text-align:center">'+(m.attachments?'📎':'')+'</td>'+
       '<td style="padding:4px 6px"><select class="status-select st-'+esc(m.status)+'" style="padding:3px 18px 3px 6px" onchange="updateStatus(\''+eid+'\',this.value)">'+stOpts+'</select></td>'+
       '<td class="note-cell"><div class="note-text" onclick="editNote(this,\''+eid+'\')">'+esc(m.note||'')+'</div></td>'+
       '<td style="text-align:center;white-space:nowrap">'+
-        '<button onclick="mailToRepair(\''+eid+'\')" style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:13px;margin-right:4px" title="수리이력으로 복사">🔧</button>'+
+        '<button onclick="mailToRepair(\''+eid+'\')"'+repairBtnCls+' style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:13px;margin-right:4px" title="'+(isRepairCandidate?'⚡ 수리요청 메일 — 수리이력 전환 추천':'수리이력으로 복사')+'">🔧</button>'+
         '<button onclick="deleteMail(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="10" class="loading">데이터 없음</td></tr>';
-  document.getElementById('cnt').textContent = filtered.length + ' / ' + MAIL.length + '건';
+  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="11" class="loading">데이터 없음</td></tr>';
+  // Count summary with stale count
+  var staleCnt = filtered.filter(function(m) {
+    if (m.status !== '미확인' || !m.date) return false;
+    return (now - new Date(m.date+'T00:00:00')) / 86400000 >= STALE_DAYS;
+  }).length;
+  var cntText = filtered.length + ' / ' + MAIL.length + '건';
+  if (staleCnt > 0) cntText += ' · ⚠️ 미확인 '+staleCnt+'건 (3일+)';
+  document.getElementById('cnt').textContent = cntText;
 }
 
 /* ===== Status Update ===== */
