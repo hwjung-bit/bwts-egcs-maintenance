@@ -36,7 +36,7 @@ DOMAIN_SYSTEM = {
     "hhi-power.com": "EGCS",
     "worldpanasia.com": "EGCS",
     "greeninstruments.com": "EGCS",
-    "lastech.kr": "BOTH",
+    "lastech.kr": "BWTS",  # Techcross AS agent
     "ms-sox.com": "EGCS",
     "itskr.co.kr": "EGCS",
     "kc-cottrell.com": "EGCS",
@@ -489,6 +489,14 @@ def collect():
             continue
 
         if is_excluded(parsed["subject"]):
+            continue
+
+        # Vessel mailboxes carry all shipboard traffic, and some
+        # vendors also handle unrelated work — keep only what is
+        # actually about BWTS/EGCS. 선급 is left unfiltered:
+        # low volume, and surveys are always relevant.
+        if (parsed["source"] in ("본선", "메이커")
+                and parsed["system"] == "기타"):
             continue
 
         th_id = parsed["thread_id"]

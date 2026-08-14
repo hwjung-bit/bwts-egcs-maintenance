@@ -27,7 +27,7 @@ UPDATE mail_log m
 SET system = CASE
   WHEN t.bw AND NOT t.eg THEN 'BWTS'
   WHEN t.eg AND NOT t.bw THEN 'EGCS'
-  WHEN m.sender ~* '@(techcross|alfalaval|ermafirst)\.'
+  WHEN m.sender ~* '@(techcross|alfalaval|ermafirst|lastech)\.'
     THEN 'BWTS'
   WHEN m.sender ~* '@(unionkr|hyundaimaterials|hhi-power'
                    '|worldpanasia|greeninstruments|ms-sox'
