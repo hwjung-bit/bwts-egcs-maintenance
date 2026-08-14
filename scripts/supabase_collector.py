@@ -36,15 +36,29 @@ DOMAIN_SYSTEM = {
     "hhi-power.com": "EGCS",
     "worldpanasia.com": "EGCS",
     "greeninstruments.com": "EGCS",
-    "lastech.kr": "EGCS",
+    "lastech.kr": "BOTH",
     "ms-sox.com": "EGCS",
     "itskr.co.kr": "EGCS",
     "kc-cottrell.com": "EGCS",
-    "sea-one.com": "BOTH",
-    "hd.com": "BOTH",
     "panstar.kr": "BOTH",
     "gweng.co.kr": "BOTH",
 }
+
+# Classification societies
+CLASS_DOMAINS = [
+    "krs.co.kr",          # KR
+    "classnk.or.jp",      # NK
+    "classnk.com",
+    "dnv.com",            # DNV
+    "lr.org",             # LR
+    "eagle.org",          # ABS
+    "bureauveritas.com",  # BV
+    "rina.org",           # RINA
+    "ccs.org.cn",         # CCS
+]
+
+# Vessel mailbox domain (address form: kmtc<code>@sea-one.com)
+VESSEL_DOMAIN = "sea-one.com"
 
 SHIP_MAP = {
     "KPS": "KMTC PUSAN", "KUS": "KMTC ULSAN",
@@ -228,21 +242,50 @@ def make_preview(body_text, max_len=200):
     return text
 
 
-def detect_system(from_addr, subject):
+BWTS_RE = re.compile(
+    r"BWTS|BWMS|평형수|[Bb]allast\s*[Ww]ater|BWRB"
+    r"|\bTRO\b|\bECU\b|\bCPC\b", re.I)
+EGCS_RE = re.compile(
+    r"EGCS|스크러버|[Ss]crubber|\bWMS\b|\bCEMS\b|\bPAH\b"
+    r"|탈황|[Ww]ash\s*[Ww]ater", re.I)
+
+
+def get_domain(from_addr):
     m = re.search(r"@([\w.-]+)", from_addr or "")
-    if m:
-        domain = m.group(1).lower()
-        sv = DOMAIN_SYSTEM.get(domain)
-        if sv and sv != "BOTH":
-            return sv
-    if re.search(
-            r"BWTS|BWT|평형수|techcross|alfalaval",
-            subject, re.I):
+    return m.group(1).lower() if m else ""
+
+
+def detect_system(from_addr, text):
+    """Content wins over sender domain — vendors handle both."""
+    hit_bwts = bool(BWTS_RE.search(text))
+    hit_egcs = bool(EGCS_RE.search(text))
+    if hit_bwts and not hit_egcs:
         return "BWTS"
-    if re.search(
-            r"EGCS|스크러버|scrubber|WMS|CEMS",
-            subject, re.I):
+    if hit_egcs and not hit_bwts:
         return "EGCS"
+
+    # Ambiguous or nothing matched → fall back to sender domain
+    sv = DOMAIN_SYSTEM.get(get_domain(from_addr))
+    if sv and sv != "BOTH":
+        return sv
+    if hit_bwts:
+        return "BWTS"
+    if hit_egcs:
+        return "EGCS"
+    return "기타"
+
+
+def detect_source(from_addr):
+    """본선 / 선급 / 메이커 / 기타"""
+    addr = (from_addr or "").lower()
+    domain = get_domain(addr)
+    if domain == VESSEL_DOMAIN:
+        return "본선" if re.search(
+            r"kmtc[a-z]{2,3}@", addr) else "기타"
+    if domain in CLASS_DOMAINS:
+        return "선급"
+    if domain in DOMAIN_SYSTEM:
+        return "메이커"
     return "기타"
 
 
@@ -290,15 +333,15 @@ def get_gmail_creds():
 
 # ── Gmail Fetch ────────────────────────────────
 def build_query():
-    domains = list(DOMAIN_SYSTEM.keys())
-    domain_q = " OR ".join(f"from:{d}" for d in domains)
-    kw_q = ("subject:BWTS OR subject:EGCS OR "
-            "subject:scrubber OR subject:WMS "
-            "OR subject:검교정")
+    """Sender allowlist only: 본선 + 선급 + 메이커."""
+    senders = [f"kmtc{c.lower()}@{VESSEL_DOMAIN}"
+               for c in SHIP_MAP]
+    senders += CLASS_DOMAINS
+    senders += list(DOMAIN_SYSTEM.keys())
+    sender_q = " OR ".join(f"from:{s}" for s in senders)
     after = (datetime.now() - timedelta(days=SCAN_DAYS)
              ).strftime("%Y/%m/%d")
-    return (f"({domain_q} OR {kw_q}) "
-            f"after:{after} -from:ekmtc.com")
+    return f"({sender_q}) after:{after} -from:ekmtc.com"
 
 
 def fetch_messages(gmail, query, max_results=500):
@@ -349,8 +392,13 @@ def parse_message(gmail, msg_stub):
     body_preview = make_preview(body_text)
     combined = f"{subject} {body_text[:500]}"
 
-    system = detect_system(from_addr, subject)
+    system = detect_system(from_addr, combined)
+    source = detect_source(from_addr)
     ship = find_ship(combined)
+    if not ship and source == "본선":
+        m = re.search(r"kmtc([a-z]{2,3})@", from_addr, re.I)
+        code = m.group(1).upper() if m else ""
+        ship = code if code in SHIP_MAP else ""
     keywords = find_keywords(combined)
     category = detect_category(combined)
     link = (
@@ -370,6 +418,7 @@ def parse_message(gmail, msg_stub):
         "thread_id": thread_id,
         "date": date_fmt,
         "system": system,
+        "source": source,
         "ship_code": ship,
         "ship_name": SHIP_MAP.get(ship, ""),
         "keyword": keywords,

@@ -76,6 +76,9 @@ tr:hover{background:#f8fafc}
 .cat-검교정{background:#e0e7ff;color:#3730a3}.cat-SR{background:#f3e8ff;color:#6b21a8}
 .cat-부품{background:#fff7ed;color:#c2410c}.cat-Invoice{background:#f1f5f9;color:#475569}
 .cat-방선{background:#ecfccb;color:#3f6212}.cat-인증서{background:#cffafe;color:#155e75}
+.src-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:600;white-space:nowrap}
+.src-본선{background:#dbeafe;color:#1d4ed8}.src-선급{background:#dcfce7;color:#15803d}
+.src-메이커{background:#fae8ff;color:#a21caf}.src-기타{background:#f1f5f9;color:#94a3b8}
 tr.stale{background:#fffbeb !important}
 tr.stale:hover{background:#fef3c7 !important}
 .stale-dot{display:inline-block;width:6px;height:6px;background:#f59e0b;border-radius:50%;margin-right:4px;animation:pulse 2s infinite}
@@ -139,6 +142,11 @@ tr.stale:hover{background:#fef3c7 !important}
       <option value="EGCS">EGCS</option>
       <option value="기타">기타</option>
     </select>
+    <select id="fSrc" onchange="renderMail()">
+      <option value="">전체 출처</option>
+      <option>본선</option><option>선급</option>
+      <option>메이커</option><option>기타</option>
+    </select>
     <select id="fShip" onchange="renderMail()">
       <option value="">전체 선박</option>
     </select>
@@ -165,6 +173,7 @@ tr.stale:hover{background:#fef3c7 !important}
     <thead><tr>
       <th style="width:80px">날짜</th>
       <th style="width:50px">시스템</th>
+      <th style="width:50px">출처</th>
       <th style="width:45px">선박</th>
       <th style="width:55px">분류</th>
       <th style="width:70px">키워드</th>
@@ -244,7 +253,7 @@ function init() {
   sb.auth.getSession().then(function(res) {
     if (res.data.session) onLogin(res.data.session);
     else document.getElementById('tbody').innerHTML =
-      '<tr><td colspan="10" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
+      '<tr><td colspan="12" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
   });
   sb.auth.onAuthStateChange(function(event, session) {
     if (event === 'SIGNED_IN' && session) onLogin(session);
@@ -284,7 +293,7 @@ function onLogout() {
 /* ===== Data Loading ===== */
 async function loadData() {
   document.getElementById('tbody').innerHTML =
-    '<tr><td colspan="10" class="loading"><span class="spin"></span> 로딩...</td></tr>';
+    '<tr><td colspan="12" class="loading"><span class="spin"></span> 로딩...</td></tr>';
   try {
     var [m, r, bc, ec, s] = await Promise.all([
       sb.from('mail_log').select('*').order('date', {ascending:false}).limit(2000),
@@ -435,6 +444,7 @@ function renderMail() {
   var f = {
     year: document.getElementById('fYear').value,
     sys: document.getElementById('fSys').value,
+    src: document.getElementById('fSrc').value,
     ship: document.getElementById('fShip').value || FILTER.ship,
     status: document.getElementById('fStatus').value,
     cat: document.getElementById('fCat').value,
@@ -443,6 +453,7 @@ function renderMail() {
   var filtered = MAIL.filter(function(m) {
     if (f.year && !(m.date||'').startsWith(f.year)) return false;
     if (f.sys && m.system !== f.sys) return false;
+    if (f.src && (m.source||'기타') !== f.src) return false;
     if (f.ship && m.ship_code !== f.ship) return false;
     if (f.status && m.status !== f.status) return false;
     if (f.cat && m.category !== f.cat) return false;
@@ -486,6 +497,9 @@ function renderMail() {
     var catHtml = m.category
       ? '<span class="cat-badge cat-'+esc(m.category)+'">'+esc(m.category)+'</span>'
       : '';
+    // Source badge
+    var srcVal = m.source || '기타';
+    var srcHtml = '<span class="src-badge src-'+esc(srcVal)+'">'+esc(srcVal)+'</span>';
     // Date with stale dot
     var dateHtml = (isStale ? '<span class="stale-dot"></span>' : '') + esc(m.date||'—');
     // Repair button — glow if candidate
@@ -493,6 +507,7 @@ function renderMail() {
     return '<tr'+(isStale?' class="stale"':'')+'>'+
       '<td style="white-space:nowrap">'+dateHtml+'</td>'+
       '<td><span class="pill '+sysCls+'">'+esc(m.system)+'</span></td>'+
+      '<td>'+srcHtml+'</td>'+
       '<td'+shipClick+'><b>'+esc(m.ship_code||'—')+'</b></td>'+
       '<td>'+catHtml+'</td>'+
       '<td style="font-size:11px">'+esc(m.keyword||'')+'</td>'+
@@ -506,7 +521,7 @@ function renderMail() {
         '<button onclick="deleteMail(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>'+
       '</tr>';
   }).join('');
-  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="11" class="loading">데이터 없음</td></tr>';
+  document.getElementById('tbody').innerHTML = rows || '<tr><td colspan="12" class="loading">데이터 없음</td></tr>';
   // Count summary with stale count
   var staleCnt = filtered.filter(function(m) {
     if (m.status !== '미확인' || !m.date) return false;
