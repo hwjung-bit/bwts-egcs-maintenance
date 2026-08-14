@@ -491,12 +491,11 @@ def collect():
         if is_excluded(parsed["subject"]):
             continue
 
-        # Vessel mailboxes carry all shipboard traffic, and some
-        # vendors also handle unrelated work — keep only what is
-        # actually about BWTS/EGCS. 선급 is left unfiltered:
-        # low volume, and surveys are always relevant.
-        if (parsed["source"] in ("본선", "메이커")
-                and parsed["system"] == "기타"):
+        # An allowlisted sender is not enough: vessels, class
+        # societies and vendors all send plenty of mail that has
+        # nothing to do with BWTS/EGCS. Keep only what the
+        # content classifies as one of the two systems.
+        if parsed["system"] == "기타":
             continue
 
         th_id = parsed["thread_id"]
