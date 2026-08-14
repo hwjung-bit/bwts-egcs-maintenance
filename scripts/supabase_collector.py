@@ -432,6 +432,11 @@ def parse_message(gmail, msg_stub):
         "status": "미확인",
         "reply_count": 0,
         "last_reply": None,
+        "thread_body": [{
+            "d": date_fmt,
+            "f": from_addr,
+            "p": body_preview,
+        }],
     }
 
 
@@ -504,8 +509,7 @@ def collect():
             # Reply to existing thread
             reply_updates.append({
                 "orig_id": thread_map[th_id],
-                "date": parsed["date"],
-                "sender": parsed["sender"],
+                "parsed": parsed,
             })
         else:
             new_rows.append(parsed)
@@ -521,35 +525,49 @@ def collect():
             sb.table("mail_log").upsert(batch).execute()
         log.info("Inserted %d new mails", len(new_rows))
 
-    # Update reply counts
+    # Fold replies into the thread's row
     for u in reply_updates:
+        p = u["parsed"]
         try:
             row = sb.table("mail_log").select(
-                "reply_count,note,status"
+                "date,reply_count,status,thread_body"
             ).eq("id", u["orig_id"]).single().execute()
             d = row.data
-            cur_count = int(d.get("reply_count") or 0)
-            cur_note = d.get("note") or ""
-            cur_status = d.get("status") or ""
+            cur_date = d.get("date") or ""
+            body = d.get("thread_body") or []
 
-            from_short = re.sub(
-                r"<[^>]+>", "", u["sender"]).strip()
-            note_add = f"[{u['date']}] {from_short}"
-            new_note = cur_note
-            if note_add not in cur_note:
-                new_note = (
-                    f"{cur_note} | {note_add}"
-                    if cur_note else note_add)
+            entry = {
+                "d": p["date"],
+                "f": p["sender"],
+                "p": p["body_preview"],
+            }
+            if entry not in body:
+                body.append(entry)
+            body.sort(key=lambda x: x.get("d") or "",
+                      reverse=True)
 
-            new_status = (cur_status if cur_status == "완료"
-                          else "진행중")
+            patch = {
+                "reply_count": int(d.get("reply_count") or 0) + 1,
+                "last_reply": max(p["date"], cur_date),
+                "thread_body": body,
+            }
+            if (d.get("status") or "") != "완료":
+                patch["status"] = "진행중"
 
-            sb.table("mail_log").update({
-                "reply_count": cur_count + 1,
-                "last_reply": u["date"],
-                "note": new_note,
-                "status": new_status,
-            }).eq("id", u["orig_id"]).execute()
+            # The row represents the thread, so it shows the
+            # newest message — replies arrive out of order.
+            if p["date"] > cur_date:
+                patch.update({
+                    "date": p["date"],
+                    "subject": p["subject"],
+                    "sender": p["sender"],
+                    "body_preview": p["body_preview"],
+                    "mail_link": p["mail_link"],
+                    "attachments": p["attachments"],
+                })
+
+            sb.table("mail_log").update(
+                patch).eq("id", u["orig_id"]).execute()
         except Exception as e:
             log.warning("Reply update failed: %s", e)
 

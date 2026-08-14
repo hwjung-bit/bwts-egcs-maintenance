@@ -86,7 +86,7 @@ tr.stale:hover{background:#fef3c7 !important}
 .repair-suggest{animation:glow 1.5s ease-in-out infinite alternate}
 @keyframes glow{from{text-shadow:0 0 2px #3b82f6}to{text-shadow:0 0 8px #3b82f6}}
 .preview-tip{cursor:help}
-#previewFloat{display:none;position:fixed;z-index:9999;background:#1e293b;color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5;width:320px;max-height:160px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.35);pointer-events:none;white-space:normal;word-break:break-word}
+#previewFloat{display:none;position:fixed;z-index:9999;background:#1e293b;color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5;width:360px;max-height:340px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.35);pointer-events:none;white-space:pre-wrap;word-break:break-word}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
 .toast.show{display:block;animation:fadeIn .3s}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -483,8 +483,21 @@ function renderMail() {
     var subjWrap = m.mail_link
       ? '<a href="'+esc(m.mail_link)+'" target="_blank" title="'+esc(m.subject)+'">'+subjText+'</a>'
       : subjText;
-    var subj = m.body_preview
-      ? '<span class="preview-tip" data-preview="'+esc(m.body_preview)+'" onmouseenter="showPreview(event)" onmouseleave="hidePreview()">'+subjWrap+'</span>'
+    // Hover text: whole thread when it has more than one mail
+    var thread = m.thread_body || [];
+    var tipText = '';
+    if (thread.length > 1) {
+      tipText = thread.slice(0, 5).map(function(x) {
+        var who = (x.f||'').replace(/<[^>]+>/g,'').replace(/"/g,'').trim();
+        return '● '+(x.d||'')+' · '+who+'\n'+(x.p||'');
+      }).join('\n\n');
+      if (thread.length > 5)
+        tipText += '\n\n… 외 '+(thread.length-5)+'건';
+    } else {
+      tipText = m.body_preview || '';
+    }
+    var subj = tipText
+      ? '<span class="preview-tip" data-preview="'+esc(tipText)+'" onmouseenter="showPreview(event)" onmouseleave="hidePreview()">'+subjWrap+'</span>'
       : subjWrap;
     var reply = (m.reply_count&&m.reply_count>0)
       ? '<span class="reply-badge">↩'+m.reply_count+'</span>' : '';
