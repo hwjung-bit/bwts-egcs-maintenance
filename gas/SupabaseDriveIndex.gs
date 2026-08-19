@@ -33,7 +33,9 @@ function setupAll() {
   var saved = saveSupabaseCreds_();
   var n = indexDriveFolders();
   var trg = installDriveIndexTrigger();
-  var msg = saved + ' / 색인 ' + n + '건 / 트리거: ' + trg;
+  var trg2 = installFolderRequestTrigger();
+  var msg = saved + ' / 색인 ' + n + '건 / 색인 트리거: ' + trg +
+            ' / 큐 트리거: ' + trg2;
   Logger.log(msg);
   return msg;
 }
@@ -148,4 +150,145 @@ function installDriveIndexTrigger() {
   ScriptApp.newTrigger('indexDriveFolders')
     .timeBased().everyDays(1).atHour(7).create();
   return '설치 완료 — 매일 07시';
+}
+
+/* ===================================================================
+ * 폴더 요청 큐 — 대시보드에서 수리이력으로 옮긴 건의 작업 폴더를
+ * 찾거나 만든다. 폴더를 만들기 전에 색인을 먼저 조회하므로 이미
+ * 있는 폴더는 다시 만들지 않는다.
+ * =================================================================== */
+
+var REQ_SIM_MIN = 0.35;   // 프론트와 동일한 제목 유사도 기준
+var REQ_DAY_GAP = 3;      // 프론트와 동일한 날짜 허용 범위
+
+function supaGet_(path) {
+  var cfg = supaCfg_();
+  var res = UrlFetchApp.fetch(cfg.url + '/rest/v1/' + path, {
+    method: 'get',
+    headers: { apikey: cfg.key, Authorization: 'Bearer ' + cfg.key },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() >= 300) {
+    throw new Error('Supabase GET ' + res.getResponseCode() + ': ' +
+                    res.getContentText().slice(0, 200));
+  }
+  return JSON.parse(res.getContentText());
+}
+
+function supaPatch_(path, body) {
+  var cfg = supaCfg_();
+  var res = UrlFetchApp.fetch(cfg.url + '/rest/v1/' + path, {
+    method: 'patch',
+    contentType: 'application/json',
+    headers: {
+      apikey: cfg.key,
+      Authorization: 'Bearer ' + cfg.key,
+      Prefer: 'return=minimal',
+    },
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() >= 300) {
+    throw new Error('Supabase PATCH ' + res.getResponseCode() + ': ' +
+                    res.getContentText().slice(0, 200));
+  }
+}
+
+/** 제목 정규화 — 프론트 normTitle 과 같은 규칙. */
+function reqNorm_(s) {
+  return String(s == null ? '' : s).toUpperCase()
+    .replace(/\b(RE|FW|FWD)\s*:/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/[^0-9A-Z가-힣]+/g, '');
+}
+
+/** 짧은 쪽 기준 trigram 겹침 — 프론트 titleOverlap 과 같은 규칙. */
+function reqOverlap_(a, b) {
+  if (!a || !b) return 0;
+  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 1;
+  function tri(s) {
+    var o = {};
+    for (var i = 0; i + 3 <= s.length; i++) o[s.substring(i, i + 3)] = 1;
+    return o;
+  }
+  var ta = tri(a), tb = tri(b);
+  var ka = Object.keys(ta), kb = Object.keys(tb);
+  if (!ka.length || !kb.length) return 0;
+  var hit = 0;
+  ka.forEach(function (k) { if (tb[k]) hit++; });
+  return hit / Math.min(ka.length, kb.length);
+}
+
+function reqDayGap_(a, b) {
+  if (!a || !b) return 999;
+  return Math.abs((new Date(a) - new Date(b)) / 86400000);
+}
+
+/** 색인에서 이미 있는 폴더를 찾는다. 없으면 null. */
+function findIndexedFolder_(req) {
+  var rows = supaGet_('drive_folders?select=id,folder_date,title' +
+    '&ship_code=eq.' + encodeURIComponent(req.ship_code) +
+    '&system=eq.' + encodeURIComponent(req.system));
+  var want = reqNorm_(req.title);
+  var sameDay = [], best = null, bestSim = -1;
+
+  rows.forEach(function (f) {
+    if (reqDayGap_(f.folder_date, req.req_date) > REQ_DAY_GAP) return;
+    if (f.folder_date === req.req_date) sameDay.push(f);
+    var sim = reqOverlap_(want, reqNorm_(f.title));
+    if (f.folder_date === req.req_date) sim += 0.15;
+    if (sim > bestSim) { bestSim = sim; best = f; }
+  });
+
+  if (bestSim >= REQ_SIM_MIN) return best;
+  if (sameDay.length === 1) return sameDay[0];
+  return null;
+}
+
+/** 요청 큐를 처리한다. 트리거로 15분마다 도는 진입점. */
+function processFolderRequests() {
+  var reqs = supaGet_('folder_requests?select=*&status=eq.pending' +
+                      '&order=created_at.asc&limit=50');
+  if (!reqs.length) return 0;
+
+  var done = 0;
+  reqs.forEach(function (req) {
+    var patch = { processed_at: new Date().toISOString() };
+    try {
+      var hit = findIndexedFolder_(req);
+      if (hit) {
+        patch.status = 'linked';
+        patch.folder_id = hit.id;
+      } else {
+        // 정확 이름 find-or-create — 기존 수집 로직과 같은 경로
+        var id = getEventFolder_(req.system, req.ship_code,
+                                 req.req_date, req.title);
+        patch.status = 'created';
+        patch.folder_id = id;
+        var shipId = getShipFolder_(req.system, req.ship_code);
+        supaUpsertFolders_(indexShipFolder_(
+          DriveApp.getFolderById(shipId), req.ship_code, req.system));
+      }
+      done++;
+    } catch (e) {
+      patch.status = 'error';
+      patch.note = String(e.message).slice(0, 300);
+    }
+    supaPatch_('folder_requests?repair_id=eq.' +
+               encodeURIComponent(req.repair_id), patch);
+  });
+
+  Logger.log('folder_requests 처리: ' + done + '/' + reqs.length);
+  return done;
+}
+
+/** 15분마다 큐 처리. 에디터에서 1회 실행. */
+function installFolderRequestTrigger() {
+  var exists = ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'processFolderRequests';
+  });
+  if (exists) return '이미 설치됨';
+  ScriptApp.newTrigger('processFolderRequests')
+    .timeBased().everyMinutes(15).create();
+  return '설치 완료 — 15분마다';
 }

@@ -661,6 +661,7 @@ async function mailToRepair(mailId) {
   try {
     await sb.from('repairs').upsert(newR).select();
     if (!REPAIRS.some(function(r){return r.id===repairId;})) REPAIRS.unshift(newR);
+    await requestDriveFolder(newR);
   } catch(e) { toast('수리이력 추가 실패: '+e.message); }
   // Always remove from mail_log
   try {
@@ -669,6 +670,23 @@ async function mailToRepair(mailId) {
     renderMail();
     toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
   } catch(e2) { toast('메일 제거 실패: '+e2.message); }
+}
+
+/* ===== Drive folder request =====
+   The GAS side owns folder creation, so ask it for one instead of
+   making it here. Skipped when the index already has a match, and
+   repair_id is the primary key, so a row can only queue once. */
+async function requestDriveFolder(r) {
+  if (!r.ship_code || findDriveFolder(r)) return;
+  var res = await sb.from('folder_requests').upsert({
+    repair_id: r.id,
+    ship_code: r.ship_code,
+    system: r.system || 'BWTS',
+    req_date: r.date || null,
+    title: r.symptom || r.email_subject || '',
+    status: 'pending',
+  }, {onConflict: 'repair_id', ignoreDuplicates: true});
+  if (res.error) toast('폴더 요청 실패: '+res.error.message);
 }
 
 /* ===== Go to Repairs filtered by ship ===== */
