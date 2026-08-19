@@ -920,6 +920,16 @@ function findDriveFolder(r) {
   return null;
 }
 
+/* Ship folder for the fallback link. Rows copied from 메일대장 have no
+   file_url, so derive it from the index — parent_id is the ship folder. */
+function shipFolderUrl(r) {
+  if (r.file_url) return r.file_url;
+  var f = DRIVE_FOLDERS.find(function(x) {
+    return x.ship_code === r.ship_code && x.system === r.system;
+  });
+  return f ? 'https://drive.google.com/drive/folders/'+f.parent_id : '';
+}
+
 /* ===== Repair attachments (Drive links kept on the row) ===== */
 function repairAtts(r) {
   var a = r.attachments;
@@ -1007,10 +1017,11 @@ function renderRepairs() {
       ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none;display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.email_subject||'메일 열기')+'">📧 '+esc((r.email_subject||'').slice(0,30))+'</a>'
       : '<span class="muted" style="font-size:11px">—</span>';
     var fold = findDriveFolder(r);
+    var shipUrl = fold ? '' : shipFolderUrl(r);
     var foldCell = fold
       ? '<a class="fold-link" href="'+esc(fold.url)+'" target="_blank" title="'+esc(fold.name)+'">📁 폴더</a>'
-      : (r.file_url
-          ? '<a class="fold-link ship" href="'+esc(r.file_url)+'" target="_blank" title="매칭 폴더 없음 — 선박 폴더 열기">📁 선박</a>'
+      : (shipUrl
+          ? '<a class="fold-link ship" href="'+esc(shipUrl)+'" target="_blank" title="매칭 폴더 없음 — 선박 폴더 열기">📁 선박</a>'
           : '');
     var atts = repairAtts(r);
     var attCell = atts.length
