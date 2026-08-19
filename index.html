@@ -87,6 +87,12 @@ tr.stale:hover{background:#fef3c7 !important}
 @keyframes glow{from{text-shadow:0 0 2px #3b82f6}to{text-shadow:0 0 8px #3b82f6}}
 .preview-tip{cursor:help}
 #previewFloat{display:none;position:fixed;z-index:9999;background:#1e293b;color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:12px;line-height:1.5;width:360px;max-height:340px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.35);pointer-events:none;white-space:pre-wrap;word-break:break-word}
+#attPop{display:none;position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:8px;font-size:12px;width:340px;max-height:300px;overflow:auto;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+#attPop a{display:block;padding:4px 6px;color:#4f46e5;text-decoration:none;border-radius:4px;word-break:break-all}
+#attPop a:hover{background:#eef2ff}
+.att-badge{background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:2px 6px;font-size:11px;color:#4f46e5;cursor:pointer}
+.fold-link{text-decoration:none;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:6px;padding:2px 6px;font-size:11px;color:#15803d}
+.fold-link.ship{border-color:#e2e8f0;background:#f8fafc;color:#94a3b8}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
 .toast.show{display:block;animation:fadeIn .3s}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
@@ -230,6 +236,7 @@ tr.stale:hover{background:#fef3c7 !important}
 </div>
 
 <div id="previewFloat"></div>
+<div id="attPop"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -242,6 +249,7 @@ var GH_REPO = 'hwjung-bit/bwts-egcs-maintenance';
 var sb = null;
 var USER = null;
 var MAIL = [], REPAIRS = [], BWTS_CAL = [], EGCS_CAL = [], SHIPS = [];
+var DRIVE_FOLDERS = [];
 var TAB = 'mail';
 var FILTER = { sys: '', ship: '', status: '', q: '' };
 var STATUS_LIST = ['미확인','확인','수리준비중','자재준비중',
@@ -295,18 +303,20 @@ async function loadData() {
   document.getElementById('tbody').innerHTML =
     '<tr><td colspan="12" class="loading"><span class="spin"></span> 로딩...</td></tr>';
   try {
-    var [m, r, bc, ec, s] = await Promise.all([
+    var [m, r, bc, ec, s, df] = await Promise.all([
       sb.from('mail_log').select('*').order('date', {ascending:false}).limit(2000),
       sb.from('repairs').select('*').order('date', {ascending:false}),
       sb.from('calibrations').select('*').eq('system','BWTS'),
       sb.from('calibrations').select('*').eq('system','EGCS'),
       sb.from('ships').select('*'),
+      sb.from('drive_folders').select('*'),
     ]);
     MAIL = m.data || [];
     REPAIRS = r.data || [];
     BWTS_CAL = bc.data || [];
     EGCS_CAL = ec.data || [];
     SHIPS = s.data || [];
+    DRIVE_FOLDERS = df.data || [];
     buildShipFilter();
     buildRepairShipFilter();
     renderCurrent();
@@ -629,7 +639,12 @@ async function mailToRepair(mailId) {
     action: '',
     parts: '',
     cost: '',
-    attachments: '[]',
+    // Gmail gives names only — Drive links come from the folder index
+    attachments: JSON.stringify(
+      String(m.attachments||'').split(',')
+        .map(function(n){return n.trim();})
+        .filter(Boolean)
+        .map(function(n){return {name:n};})),
     history: '[]',
     email_subject: m.subject || '',
     email_link: m.mail_link || '',
@@ -840,6 +855,75 @@ function editStatusMemo(el, code, field) {
   };
 }
 
+/* ===== Drive folder matching =====
+   Indexed folders are named "YYYY-MM-DD <mail subject>" under the
+   ship folder, so a repair matches on ship + system + date, and the
+   subject settles ties when one day holds several folders. */
+function normTitle(s) {
+  return String(s==null?'':s).toUpperCase()
+    .replace(/[^0-9A-Z가-힣]+/g, '');
+}
+function trigrams(s) {
+  var out = {};
+  for (var i = 0; i + 3 <= s.length; i++) out[s.slice(i, i+3)] = 1;
+  return out;
+}
+function titleOverlap(a, b) {
+  if (!a || !b) return 0;
+  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 1;
+  var ta = trigrams(a), tb = trigrams(b), hit = 0, n = 0;
+  Object.keys(ta).forEach(function(k) { n++; if (tb[k]) hit++; });
+  return n ? hit / n : 0;
+}
+function dayGap(a, b) {
+  if (!a || !b) return 999;
+  return Math.abs((new Date(a) - new Date(b)) / 86400000);
+}
+function findDriveFolder(r) {
+  var want = normTitle(r.symptom || r.email_subject);
+  var best = null, bestScore = -1;
+  DRIVE_FOLDERS.forEach(function(f) {
+    if (f.ship_code !== r.ship_code || f.system !== r.system) return;
+    var gap = dayGap(f.folder_date, r.date);
+    if (gap > 3) return;
+    var score = (100 - gap * 20) +
+                titleOverlap(want, normTitle(f.title)) * 60;
+    if (score > bestScore) { bestScore = score; best = f; }
+  });
+  return best;
+}
+
+/* ===== Repair attachments (Drive links kept on the row) ===== */
+function repairAtts(r) {
+  var a = r.attachments;
+  if (!a) return [];
+  if (typeof a === 'string') {
+    try { a = JSON.parse(a); } catch(e) { return []; }
+  }
+  if (!Array.isArray(a)) return [];
+  return a.filter(function(x) { return x && x.name; });
+}
+function showAtts(id, ev) {
+  ev.stopPropagation();
+  var r = REPAIRS.find(function(x){return x.id===id;});
+  if (!r) return;
+  var pop = document.getElementById('attPop');
+  pop.innerHTML = repairAtts(r).map(function(x) {
+    return x.url
+      ? '<a href="'+esc(x.url)+'" target="_blank">📄 '+esc(x.name)+'</a>'
+      : '<div style="padding:4px 6px;color:#64748b">📄 '+esc(x.name)+'</div>';
+  }).join('') || '<div style="padding:4px 6px;color:#64748b">첨부 없음</div>';
+  pop.style.display = 'block';
+  var top = Math.min(ev.clientY + 12, window.innerHeight - pop.offsetHeight - 12);
+  var left = Math.min(ev.clientX - 300, window.innerWidth - 356);
+  pop.style.top = Math.max(12, top) + 'px';
+  pop.style.left = Math.max(12, left) + 'px';
+}
+document.addEventListener('click', function() {
+  var pop = document.getElementById('attPop');
+  if (pop) pop.style.display = 'none';
+});
+
 /* ===== Repairs ===== */
 function renderRepairs() {
   if (!REPAIRS.length) {
@@ -895,6 +979,16 @@ function renderRepairs() {
     var mailCell = r.email_link
       ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none;display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.email_subject||'메일 열기')+'">📧 '+esc((r.email_subject||'').slice(0,30))+'</a>'
       : '<span class="muted" style="font-size:11px">—</span>';
+    var fold = findDriveFolder(r);
+    var foldCell = fold
+      ? '<a class="fold-link" href="'+esc(fold.url)+'" target="_blank" title="'+esc(fold.name)+'">📁 폴더</a>'
+      : (r.file_url
+          ? '<a class="fold-link ship" href="'+esc(r.file_url)+'" target="_blank" title="매칭 폴더 없음 — 선박 폴더 열기">📁 선박</a>'
+          : '');
+    var atts = repairAtts(r);
+    var attCell = atts.length
+      ? '<button class="att-badge" onclick="showAtts(\''+eid+'\',event)" title="첨부 목록">📄 '+atts.length+'</button>'
+      : '';
     return '<tr>'+
       '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
       '<td>'+esc(r.ship_code)+'</td>'+
@@ -904,17 +998,14 @@ function renderRepairs() {
       '<td>'+mailCell+'</td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
       '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
-      '<td style="white-space:nowrap">'+
-        (r.file_url
-          ? '<a href="'+esc(r.file_url)+'" target="_blank" style="text-decoration:none;border:1px solid #c7d2fe;border-radius:6px;padding:2px 6px;font-size:11px;color:#4f46e5">📄 파일</a>'
-          : '')+
+      '<td style="white-space:nowrap">'+foldCell+attCell+
         '<button onclick="editRepairFileUrl(\''+eid+'\')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8" title="Drive 링크 지정/변경">🔗</button>'+
       '</td>'+
       '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:55px">파일</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 🔗 → Drive 파일 연결</div>';
+    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:110px">파일</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 📁 → Drive 폴더 · 📄 → 첨부 목록 · 🔗 → 선박 폴더 링크 변경</div>';
 }
 
 /* Inline edit for repair fields */
