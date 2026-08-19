@@ -868,6 +868,9 @@ function editStatusMemo(el, code, field) {
    subject settles ties when one day holds several folders. */
 function normTitle(s) {
   return String(s==null?'':s).toUpperCase()
+    // Reply/forward markers and [KMTC SM][ETP] style tags are noise
+    .replace(/\b(RE|FW|FWD)\s*:/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
     .replace(/[^0-9A-Z가-힣]+/g, '');
 }
 function trigrams(s) {
@@ -878,26 +881,43 @@ function trigrams(s) {
 function titleOverlap(a, b) {
   if (!a || !b) return 0;
   if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return 1;
-  var ta = trigrams(a), tb = trigrams(b), hit = 0, n = 0;
-  Object.keys(ta).forEach(function(k) { n++; if (tb[k]) hit++; });
-  return n ? hit / n : 0;
+  var ta = trigrams(a), tb = trigrams(b);
+  var ka = Object.keys(ta), kb = Object.keys(tb);
+  if (!ka.length || !kb.length) return 0;
+  var hit = 0;
+  ka.forEach(function(k) { if (tb[k]) hit++; });
+  // Shorter side as denominator — folder titles are truncated
+  return hit / Math.min(ka.length, kb.length);
 }
 function dayGap(a, b) {
   if (!a || !b) return 999;
   return Math.abs((new Date(a) - new Date(b)) / 86400000);
 }
+/* A wrong folder is worse than none, so a date this close is not
+   enough on its own: the title has to agree, unless that day holds
+   exactly one folder for the ship. */
 function findDriveFolder(r) {
   var want = normTitle(r.symptom || r.email_subject);
-  var best = null, bestScore = -1;
-  DRIVE_FOLDERS.forEach(function(f) {
-    if (f.ship_code !== r.ship_code || f.system !== r.system) return;
-    var gap = dayGap(f.folder_date, r.date);
-    if (gap > 3) return;
-    var score = (100 - gap * 20) +
-                titleOverlap(want, normTitle(f.title)) * 60;
-    if (score > bestScore) { bestScore = score; best = f; }
+  var cand = DRIVE_FOLDERS.filter(function(f) {
+    return f.ship_code === r.ship_code && f.system === r.system
+           && dayGap(f.folder_date, r.date) <= 3;
   });
-  return best;
+  if (!cand.length) return null;
+
+  var sameDay = cand.filter(function(f) {
+    return f.folder_date === r.date;
+  });
+  var best = null, bestSim = -1;
+  cand.forEach(function(f) {
+    var sim = titleOverlap(want, normTitle(f.title));
+    if (f.folder_date === r.date) sim += 0.15;   // same day wins ties
+    if (sim > bestSim) { bestSim = sim; best = f; }
+  });
+
+  if (bestSim >= 0.35) return best;
+  // No title agreement — accept only the unambiguous same-day case
+  if (sameDay.length === 1) return sameDay[0];
+  return null;
 }
 
 /* ===== Repair attachments (Drive links kept on the row) ===== */

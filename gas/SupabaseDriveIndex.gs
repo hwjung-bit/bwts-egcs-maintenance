@@ -1,0 +1,151 @@
+/**
+ * SupabaseDriveIndex.gs
+ * 이 스크립트가 만드는 작업 폴더(YYYY-MM-DD 제목)를 Supabase
+ * drive_folders 테이블에 색인한다. GitHub Pages 대시보드의
+ * 수리이력 📁 버튼이 이 색인을 보고 폴더를 바로 연다.
+ *
+ * 이 스크립트는 사용자 계정 권한으로 돌므로 서비스 계정 공유가
+ * 필요 없다 (조직 정책상 외부 계정 초대가 막혀 있음).
+ *
+ * 사용법:
+ *   1. 아래 SERVICE_KEY 에 service_role 키를 붙여넣고 저장
+ *   2. setupAll 실행 (권한 승인 → 색인 → 매일 07시 트리거)
+ *   3. 실행 끝나면 SERVICE_KEY 를 다시 비우고 저장
+ *      (키는 스크립트 속성에 남아 트리거가 계속 사용)
+ */
+
+// ── 여기만 채우면 됨 ──────────────────────────────────
+var SERVICE_KEY = '';   // ← service_role 키 붙여넣기
+var SUPA_URL    = 'https://ivsjskywdtsnoxhnozcd.supabase.co';
+// ─────────────────────────────────────────────────────
+
+var SUPA_URL_KEY = 'SUPABASE_URL';
+var SUPA_KEY_KEY = 'SUPABASE_SERVICE_KEY';
+
+/** 폴더명 앞머리의 날짜. "2026-07-21 ..." / "2026.07.21 ..." 둘 다. */
+var FOLDER_DATE_RE = /^(\d{4})[-.](\d{2})[-.](\d{2})\s*(.*)$/;
+
+/**
+ * 한 번만 실행하면 되는 진입점.
+ * 키 저장 → 전체 색인 → 매일 07시 트리거 설치.
+ */
+function setupAll() {
+  var saved = saveSupabaseCreds_();
+  var n = indexDriveFolders();
+  var trg = installDriveIndexTrigger();
+  var msg = saved + ' / 색인 ' + n + '건 / 트리거: ' + trg;
+  Logger.log(msg);
+  return msg;
+}
+
+/** SERVICE_KEY 를 스크립트 속성에 저장. 이미 있으면 그대로 둔다. */
+function saveSupabaseCreds_() {
+  var p = PropertiesService.getScriptProperties();
+  var key = String(SERVICE_KEY || '').trim();
+
+  if (!key) {
+    if (p.getProperty(SUPA_KEY_KEY)) return '키 이미 저장됨';
+    throw new Error('SERVICE_KEY 를 채운 뒤 실행하세요.');
+  }
+  p.setProperties({
+    SUPABASE_URL: SUPA_URL,
+    SUPABASE_SERVICE_KEY: key,
+  });
+  return '키 저장';
+}
+
+function supaCfg_() {
+  var p = PropertiesService.getScriptProperties();
+  var url = p.getProperty(SUPA_URL_KEY) || SUPA_URL;
+  var key = p.getProperty(SUPA_KEY_KEY) ||
+            String(SERVICE_KEY || '').trim();
+  if (!url || !key) {
+    throw new Error('SERVICE_KEY 를 채우고 setupAll 을 먼저 실행하세요.');
+  }
+  return { url: url.replace(/\/+$/, ''), key: key };
+}
+
+/** drive_folders 에 upsert. 200건씩 끊어 보낸다. */
+function supaUpsertFolders_(rows) {
+  if (!rows.length) return 0;
+  var cfg = supaCfg_();
+  var sent = 0;
+  for (var i = 0; i < rows.length; i += 200) {
+    var chunk = rows.slice(i, i + 200);
+    var res = UrlFetchApp.fetch(
+      cfg.url + '/rest/v1/drive_folders?on_conflict=id', {
+        method: 'post',
+        contentType: 'application/json',
+        headers: {
+          apikey: cfg.key,
+          Authorization: 'Bearer ' + cfg.key,
+          Prefer: 'resolution=merge-duplicates,return=minimal',
+        },
+        payload: JSON.stringify(chunk),
+        muteHttpExceptions: true,
+      });
+    var code = res.getResponseCode();
+    if (code >= 300) {
+      throw new Error('Supabase ' + code + ': ' +
+                      res.getContentText().slice(0, 300));
+    }
+    sent += chunk.length;
+  }
+  return sent;
+}
+
+/** 한 선박 폴더 아래의 작업 폴더들을 행으로 만든다. */
+function indexShipFolder_(shipFolder, shipCode, system) {
+  var rows = [];
+  var it = shipFolder.getFolders();
+  while (it.hasNext()) {
+    var f = it.next();
+    var name = f.getName();
+    var m = FOLDER_DATE_RE.exec(name);
+    rows.push({
+      id: f.getId(),
+      ship_code: shipCode,
+      system: system,
+      folder_date: m ? (m[1] + '-' + m[2] + '-' + m[3]) : null,
+      title: m ? m[4].trim() : name,
+      name: name,
+      url: 'https://drive.google.com/drive/folders/' + f.getId(),
+      parent_id: shipFolder.getId(),
+    });
+  }
+  return rows;
+}
+
+/** 두 리포트 트리 전체를 색인한다. 트리거로 매일 도는 진입점. */
+function indexDriveFolders() {
+  var p = PropertiesService.getScriptProperties();
+  var roots = {
+    BWTS: p.getProperty(BWTS_ROOT_KEY) || BWTS_ROOT_FALLBACK,
+    EGCS: p.getProperty(EGCS_ROOT_KEY) || EGCS_ROOT_FALLBACK,
+  };
+
+  var rows = [];
+  Object.keys(roots).forEach(function (system) {
+    var root = DriveApp.getFolderById(roots[system]);
+    Object.keys(SHIP_FOLDER).forEach(function (code) {
+      var it = root.getFoldersByName(SHIP_FOLDER[code]);
+      if (!it.hasNext()) return;
+      rows = rows.concat(indexShipFolder_(it.next(), code, system));
+    });
+  });
+
+  var sent = supaUpsertFolders_(rows);
+  Logger.log('drive_folders upsert: ' + sent + '건');
+  return sent;
+}
+
+/** 매일 07시 자동 갱신. */
+function installDriveIndexTrigger() {
+  var exists = ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'indexDriveFolders';
+  });
+  if (exists) return '이미 설치됨';
+  ScriptApp.newTrigger('indexDriveFolders')
+    .timeBased().everyDays(1).atHour(7).create();
+  return '설치 완료 — 매일 07시';
+}
