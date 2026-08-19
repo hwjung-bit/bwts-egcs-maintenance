@@ -9,7 +9,10 @@ Drive Folder Indexer — Drive API → Supabase (drive_folders)
   공유드라이브 / ...        / 13 메이커 서비스   / 11. KSZ / 2026-06-20 ...
 
 GitHub Actions에서 실행. 환경변수:
-  DRIVE_TOKEN_JSON       — OAuth token JSON (refresh_token 포함,
+  DRIVE_SA_JSON          — 서비스 계정 키 JSON. 있으면 이걸 쓴다.
+                           SA 이메일이 리포트 트리에 뷰어로 공유돼
+                           있어야 한다
+  DRIVE_TOKEN_JSON       — (대안) OAuth token JSON (refresh_token,
                            drive.readonly 스코프). 없으면
                            GMAIL_TOKEN_JSON 사용
   GOOGLE_CLIENT_ID
@@ -23,6 +26,7 @@ GitHub Actions에서 실행. 환경변수:
 import json, os, re, sys, logging
 
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from supabase import create_client
@@ -59,10 +63,17 @@ DATE_RE = re.compile(r"^(\d{4})[-.](\d{2})[-.](\d{2})\s*(.*)$")
 
 
 def get_creds():
+    sa_json = os.environ.get("DRIVE_SA_JSON", "")
+    if sa_json:
+        return service_account.Credentials.from_service_account_info(
+            json.loads(sa_json),
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        )
+
     token_json = (os.environ.get("DRIVE_TOKEN_JSON", "")
                   or os.environ.get("GMAIL_TOKEN_JSON", ""))
     if not token_json:
-        log.error("DRIVE_TOKEN_JSON / GMAIL_TOKEN_JSON not set")
+        log.error("DRIVE_SA_JSON / DRIVE_TOKEN_JSON not set")
         sys.exit(1)
 
     token_data = json.loads(token_json)

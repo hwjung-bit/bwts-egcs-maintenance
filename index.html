@@ -91,6 +91,12 @@ tr.stale:hover{background:#fef3c7 !important}
 #attPop a{display:block;padding:4px 6px;color:#4f46e5;text-decoration:none;border-radius:4px;word-break:break-all}
 #attPop a:hover{background:#eef2ff}
 .att-badge{background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:2px 6px;font-size:11px;color:#4f46e5;cursor:pointer}
+#calEdit{display:none;position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font-size:12px;width:260px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+#calEdit label{display:block;margin-bottom:6px;color:#64748b}
+#calEdit input{display:block;width:100%;margin-top:2px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;outline:none}
+#calEdit input:focus{border-color:#3b82f6}
+#calEdit button{flex:1;padding:5px 0;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
+#calEdit button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
 .fold-link{text-decoration:none;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:6px;padding:2px 6px;font-size:11px;color:#15803d}
 .fold-link.ship{border-color:#e2e8f0;background:#f8fafc;color:#94a3b8}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
@@ -237,6 +243,7 @@ tr.stale:hover{background:#fef3c7 !important}
 
 <div id="previewFloat"></div>
 <div id="attPop"></div>
+<div id="calEdit"></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -1306,13 +1313,15 @@ function renderEgcsCal() {
       if (!d) return '<td style="text-align:center;font-size:12px;color:#cbd5e1">—</td>';
       var sn = d.serial ? '<div style="font-size:10px;color:#64748b;margin-top:2px">S/N '+esc(d.serial)+'</div>' : '';
       var mdl = d.model ? '<div style="font-size:10px;color:#64748b">'+esc(d.model)+'</div>' : '';
+      // Clicking a cell edits that calibration row
+      var ed = ' onclick="editEgcsCal(\''+esc(d.id)+'\',event)" title="클릭하여 수정"';
       if (!d.last_date) {
-        return '<td style="text-align:center;font-size:12px"><span style="color:#94a3b8">'+esc(d.note||'—')+'</span>'+mdl+sn+'</td>';
+        return '<td'+ed+' style="text-align:center;font-size:12px;cursor:pointer"><span style="color:#94a3b8">'+esc(d.note||'—')+'</span>'+mdl+sn+'</td>';
       }
       var sm = sensorModel(s,o.key,d.model);
       var cyc = sm ? SENSOR_CYCLE[sm] : null;
       if (!cyc) {
-        return '<td style="text-align:center;font-size:12px"><div style="font-weight:700">'+esc(d.last_date)+'</div>'+mdl+sn+'</td>';
+        return '<td'+ed+' style="text-align:center;font-size:12px;cursor:pointer"><div style="font-weight:700">'+esc(d.last_date)+'</div>'+mdl+sn+'</td>';
       }
       var calDue = null, calDays = null, calLv = 'unknown';
       if (cyc.cal != null) {
@@ -1327,14 +1336,58 @@ function renderEgcsCal() {
         '<div style="font-size:10px;font-weight:700;margin-top:2px" class="lv-'+replLv+'">신환 '+(replDays<=0?Math.abs(replDays)+'일 경과':'D-'+replDays)+'</div>' : '';
       var bgCls = cyc.cal!=null ? calLv : replLv;
       var calTxt = cyc.cal!=null ? '<div style="font-size:10px;opacity:.8">검 '+(calDays<=0?Math.abs(calDays)+'일 경과':'D-'+calDays)+'</div>' : '';
-      return '<td class="lv-'+bgCls+'" style="text-align:center;font-size:12px;padding:4px 6px">'+
+      return '<td class="lv-'+bgCls+'"'+ed+' style="text-align:center;font-size:12px;padding:4px 6px;cursor:pointer">'+
         '<div style="font-weight:700">'+esc(d.last_date)+'</div>'+calTxt+replTag+mdl+sn+'</td>';
     }).join('');
     body += '<tr><th style="text-align:left;background:#f8fafc;font-weight:700;font-size:12px">'+esc(o.sensor)+'</th>'+tds+'</tr>';
   });
   document.getElementById('egcsCalRoot').innerHTML =
     '<div style="margin-bottom:12px;color:#64748b;font-size:12px">TriOS: PAH·탁도 검4년·신환8년 / pH 2년 · GI: PAH 모델별 · 탁도 광원5년 · pH 1년</div>'+
-    '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">'+colg+'<thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>';
+    '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">'+colg+'<thead>'+thead+'</thead><tbody>'+body+'</tbody></table></div>'+
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정</div>';
+}
+
+/* ===== EGCS Cal — cell edit (Supabase calibrations) ===== */
+function editEgcsCal(id, ev) {
+  ev.stopPropagation();
+  var c = EGCS_CAL.find(function(x){return x.id===id;});
+  if (!c) return;
+  var pop = document.getElementById('calEdit');
+  pop.innerHTML =
+    '<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">'+
+      esc(c.ship_code)+' · '+esc(c.equip)+'</div>'+
+    '<label>검교정일<input id="ceDate" type="date" value="'+esc(c.last_date||'')+'"></label>'+
+    '<label>모델<input id="ceModel" value="'+esc(c.model||'')+'"></label>'+
+    '<label>S/N<input id="ceSerial" value="'+esc(c.serial||'')+'"></label>'+
+    '<label>비고<input id="ceNote" value="'+esc(c.note||'')+'"></label>'+
+    '<div style="display:flex;gap:6px;margin-top:10px">'+
+      '<button class="pri" onclick="saveEgcsCal(\''+esc(id)+'\')">저장</button>'+
+      '<button onclick="closeCalEdit()">취소</button></div>';
+  pop.style.display = 'block';
+  var top = Math.min(ev.clientY + 12, window.innerHeight - pop.offsetHeight - 12);
+  var left = Math.min(ev.clientX + 12, window.innerWidth - 276);
+  pop.style.top = Math.max(12, top) + 'px';
+  pop.style.left = Math.max(12, left) + 'px';
+  document.getElementById('ceDate').focus();
+}
+function closeCalEdit() {
+  document.getElementById('calEdit').style.display = 'none';
+}
+async function saveEgcsCal(id) {
+  var c = EGCS_CAL.find(function(x){return x.id===id;});
+  if (!c) return;
+  var patch = {
+    last_date: document.getElementById('ceDate').value || null,
+    model: document.getElementById('ceModel').value.trim(),
+    serial: document.getElementById('ceSerial').value.trim(),
+    note: document.getElementById('ceNote').value.trim(),
+  };
+  var res = await sb.from('calibrations').update(patch).eq('id', id);
+  if (res.error) { toast('저장 실패: '+res.error.message); return; }
+  Object.keys(patch).forEach(function(k) { c[k] = patch[k]; });
+  closeCalEdit();
+  toast(c.ship_code+' '+c.equip+' 저장');
+  renderEgcsCal();
 }
 
 /* ===== Ship Management ===== */
