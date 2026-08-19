@@ -401,9 +401,11 @@ def parse_message(gmail, msg_stub):
         ship = code if code in SHIP_MAP else ""
     keywords = find_keywords(combined)
     category = detect_category(combined)
+    # #all, not #inbox — an archived or relabelled thread 404s on
+    # #inbox but opens either way on #all
     link = (
         f"https://mail.google.com/mail/u/0/"
-        f"#inbox/{thread_id}")
+        f"#all/{thread_id}")
 
     # Attachments
     att_names = []
