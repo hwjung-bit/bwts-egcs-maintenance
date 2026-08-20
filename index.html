@@ -1110,11 +1110,33 @@ async function updateRepairField(id, field, val) {
   toast(field + ' 저장됨');
 }
 async function deleteRepair(id) {
-  if (!confirm('이 수리 기록을 삭제할까요?')) return;
+  var r = REPAIRS.find(function(x){return x.id===id;});
+  // Only the matched job folder — never the ship folder, which 21
+  // vessels share
+  var fold = r ? findDriveFolder(r) : null;
+  var msg = fold
+    ? '이 수리 기록과 Drive 폴더를 삭제할까요?\n\n'+fold.name+
+      '\n\n폴더는 휴지통으로 이동합니다 (복구 가능).'
+    : '이 수리 기록을 삭제할까요?';
+  if (!confirm(msg)) return;
+
+  if (fold) {
+    var t = await sb.from('folder_trash_requests').upsert({
+      folder_id: fold.id,
+      repair_id: id,
+      ship_code: r.ship_code,
+      system: r.system,
+      folder_name: fold.name,
+      status: 'pending',
+    }, {onConflict: 'folder_id', ignoreDuplicates: true});
+    if (t.error) toast('폴더 정리 요청 실패: '+t.error.message);
+  }
+  // Drop any create request still queued for this row
+  await sb.from('folder_requests').delete().eq('repair_id', id);
   await sb.from('repairs').delete().eq('id', id);
   REPAIRS = REPAIRS.filter(function(x){return x.id!==id;});
   renderRepairs();
-  toast('삭제됨');
+  toast(fold ? '삭제됨 — 폴더는 휴지통으로' : '삭제됨');
 }
 
 /* ===== BWTS Calibration ===== */

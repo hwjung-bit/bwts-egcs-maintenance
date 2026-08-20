@@ -245,8 +245,15 @@ function findIndexedFolder_(req) {
   return null;
 }
 
-/** 요청 큐를 처리한다. 트리거로 15분마다 도는 진입점. */
+/** 생성·삭제 큐를 모두 처리한다. 트리거로 15분마다 도는 진입점. */
 function processFolderRequests() {
+  var created = processCreateRequests_();
+  var trashed = processFolderTrash();
+  return { created: created, trashed: trashed };
+}
+
+/** 폴더 생성 요청 처리. */
+function processCreateRequests_() {
   var reqs = supaGet_('folder_requests?select=*&status=eq.pending' +
                       '&order=created_at.asc&limit=50');
   if (!reqs.length) return 0;
@@ -279,6 +286,63 @@ function processFolderRequests() {
   });
 
   Logger.log('folder_requests 처리: ' + done + '/' + reqs.length);
+  return done;
+}
+
+function supaDelete_(path) {
+  var cfg = supaCfg_();
+  var res = UrlFetchApp.fetch(cfg.url + '/rest/v1/' + path, {
+    method: 'delete',
+    headers: {
+      apikey: cfg.key,
+      Authorization: 'Bearer ' + cfg.key,
+      Prefer: 'return=minimal',
+    },
+    muteHttpExceptions: true,
+  });
+  if (res.getResponseCode() >= 300) {
+    throw new Error('Supabase DELETE ' + res.getResponseCode() + ': ' +
+                    res.getContentText().slice(0, 200));
+  }
+}
+
+/**
+ * 삭제된 수리이력의 작업폴더를 휴지통으로 보낸다.
+ * 휴지통이므로 Drive 에서 복구 가능하고, 색인 행만 함께 지운다.
+ * 선박 폴더는 프론트가 요청을 만들지 않지만, 여기서도 한 번 더 막는다.
+ */
+function processFolderTrash() {
+  var reqs = supaGet_('folder_trash_requests?select=*&status=eq.pending' +
+                      '&order=created_at.asc&limit=50');
+  if (!reqs.length) return 0;
+
+  var shipNames = {};
+  Object.keys(SHIP_FOLDER).forEach(function (c) {
+    shipNames[SHIP_FOLDER[c]] = 1;
+  });
+
+  var done = 0;
+  reqs.forEach(function (req) {
+    var patch = { processed_at: new Date().toISOString() };
+    try {
+      var f = DriveApp.getFolderById(req.folder_id);
+      if (shipNames[f.getName()]) {
+        throw new Error('선박 폴더는 삭제 대상이 아님: ' + f.getName());
+      }
+      f.setTrashed(true);
+      supaDelete_('drive_folders?id=eq.' +
+                  encodeURIComponent(req.folder_id));
+      patch.status = 'trashed';
+      done++;
+    } catch (e) {
+      patch.status = 'error';
+      patch.note = String(e.message).slice(0, 300);
+    }
+    supaPatch_('folder_trash_requests?folder_id=eq.' +
+               encodeURIComponent(req.folder_id), patch);
+  });
+
+  Logger.log('folder_trash 처리: ' + done + '/' + reqs.length);
   return done;
 }
 
