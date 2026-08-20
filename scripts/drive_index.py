@@ -87,7 +87,10 @@ def get_creds():
         client_secret=(token_data.get("client_secret")
                        or os.environ.get(
                            "GOOGLE_CLIENT_SECRET", "")),
-        scopes=SCOPES,
+        # Refresh with the scopes actually granted to this token —
+        # asking for more (e.g. drive.readonly on a gmail-only token)
+        # makes Google reject the refresh with invalid_scope.
+        scopes=(token_data.get("scopes") or SCOPES),
     )
     if creds.expired or not creds.valid:
         creds.refresh(Request())
