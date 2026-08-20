@@ -22,6 +22,7 @@ jobs:
 
       - name: Run Drive indexer
         env:
+          DRIVE_SA_JSON: ${{ secrets.DRIVE_SA_JSON }}
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
