@@ -97,6 +97,21 @@ tr.stale:hover{background:#fef3c7 !important}
 #calEdit input:focus{border-color:#3b82f6}
 #calEdit button{flex:1;padding:5px 0;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
 #calEdit button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+#repairAdd{display:none;position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.35);align-items:center;justify-content:center}
+#repairAdd.open{display:flex}
+#repairAdd .box{background:#fff;border-radius:12px;padding:16px 18px;width:460px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+#repairAdd h3{margin:0 0 12px;font-size:14px;color:#0f172a}
+#repairAdd label{display:block;margin-bottom:8px;color:#64748b;font-size:11px;font-weight:600}
+#repairAdd input,#repairAdd select,#repairAdd textarea{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
+#repairAdd input:focus,#repairAdd select:focus,#repairAdd textarea:focus{border-color:#3b82f6}
+#repairAdd textarea{min-height:56px;resize:vertical}
+#repairAdd .row{display:flex;gap:8px}
+#repairAdd .row>label{flex:1}
+#repairAdd .btns{display:flex;gap:8px;margin-top:10px}
+#repairAdd .btns button{flex:1;padding:7px 0;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
+#repairAdd .btns button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+.add-btn{padding:5px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700}
+.origin-badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;font-weight:600;white-space:nowrap}
 .fold-link{text-decoration:none;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:6px;padding:2px 6px;font-size:11px;color:#15803d}
 .fold-link.ship{border-color:#e2e8f0;background:#f8fafc;color:#94a3b8}
 .toast{position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2);z-index:100}
@@ -224,6 +239,7 @@ tr.stale:hover{background:#fef3c7 !important}
       <option>자재준비중</option>
       <option>방선예정</option><option>완료</option>
     </select>
+    <button class="add-btn" onclick="openRepairAdd()" title="메일 없이 카톡·전화 등으로 처리된 건 등록">➕ 직접 등록</button>
     <span class="count" id="repairCnt"></span>
   </div>
   <div class="wrap" id="repairsRoot"></div>
@@ -244,6 +260,27 @@ tr.stale:hover{background:#fef3c7 !important}
 <div id="previewFloat"></div>
 <div id="attPop"></div>
 <div id="calEdit"></div>
+<div id="repairAdd" onclick="if(event.target===this)closeRepairAdd()">
+  <div class="box">
+    <h3>🔧 수리이력 직접 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 카톡·전화 등 메일 없이 처리된 건</span></h3>
+    <div class="row">
+      <label>일자<input id="raDate" type="date"></label>
+      <label>선박<select id="raShip"></select></label>
+      <label>시스템<select id="raSys"><option>BWTS</option><option>EGCS</option></select></label>
+    </div>
+    <div class="row">
+      <label>접수 경로<select id="raOrigin"></select></label>
+      <label>단계<select id="raStage"></select></label>
+      <label>장비<input id="raEquip" placeholder="예: TRO 센서"></label>
+    </div>
+    <label>증상 / 요청 내용<textarea id="raSymptom" placeholder="카톡으로 받은 내용 요약"></textarea></label>
+    <label>조치<textarea id="raAction" placeholder="어떻게 클리어됐는지"></textarea></label>
+    <div class="btns">
+      <button onclick="closeRepairAdd()">취소</button>
+      <button class="pri" onclick="saveNewRepair()">등록</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -261,6 +298,9 @@ var TAB = 'mail';
 var FILTER = { sys: '', ship: '', status: '', q: '' };
 var STATUS_LIST = ['미확인','확인','수리준비중','자재준비중',
                    '방선예정','완료'];
+/* 접수 경로 — 메일로 안 들어온 건을 어디서 받았는지 */
+var ORIGIN_LIST = ['카톡','전화','구두','방선','기타'];
+var ORIGIN_ICON = {'카톡':'💬','전화':'☎','구두':'🗣','방선':'🚢','기타':'📝'};
 
 /* ===== Init ===== */
 function init() {
@@ -980,6 +1020,79 @@ document.addEventListener('click', function() {
 });
 
 /* ===== Repairs ===== */
+/* ===== Manual repair entry — 메일 없이 처리된 건 =====
+   카톡·전화로 정리된 추가 작업은 mail_log 에 흔적이 없다.
+   같은 repairs 테이블에 origin 만 다르게 넣어 한 곳에서 본다. */
+function openRepairAdd() {
+  var order = getShipOrder();
+  var byCode = {};
+  SHIPS.forEach(function(s){ byCode[s.code] = s; });
+  document.getElementById('raShip').innerHTML = order.map(function(c) {
+    var nm = byCode[c] && byCode[c].name ? ' — '+byCode[c].name : '';
+    return '<option value="'+esc(c)+'">'+esc(c+nm)+'</option>';
+  }).join('');
+  document.getElementById('raOrigin').innerHTML = ORIGIN_LIST.map(function(o) {
+    return '<option>'+o+'</option>';
+  }).join('');
+  document.getElementById('raStage').innerHTML = STATUS_LIST.map(function(st) {
+    return '<option'+(st==='완료'?' selected':'')+'>'+st+'</option>';
+  }).join('');
+  var d = new Date();
+  document.getElementById('raDate').value =
+    d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  // Carry whatever the list is already filtered to
+  if (REPAIR_FILTER.ship) document.getElementById('raShip').value = REPAIR_FILTER.ship;
+  if (REPAIR_FILTER.system) document.getElementById('raSys').value = REPAIR_FILTER.system;
+  ['raEquip','raSymptom','raAction'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('repairAdd').classList.add('open');
+  document.getElementById('raSymptom').focus();
+}
+function closeRepairAdd() {
+  document.getElementById('repairAdd').classList.remove('open');
+}
+async function saveNewRepair() {
+  if (!USER) { toast('로그인 후 등록할 수 있습니다'); return; }
+  var v = function(id){ return document.getElementById(id).value.trim(); };
+  var symptom = v('raSymptom');
+  if (!symptom) { toast('증상/요청 내용을 입력하세요'); return; }
+  var origin = v('raOrigin');
+  var newR = {
+    id: 'MN_' + Date.now(),
+    ship_code: v('raShip'),
+    system: v('raSys'),
+    date: v('raDate') || null,
+    equip: v('raEquip'),
+    stage: v('raStage'),
+    symptom: symptom,
+    action: v('raAction'),
+    parts: '',
+    cost: '',
+    attachments: '[]',
+    history: '[]',
+    email_subject: '',
+    email_link: '',
+    needs_review: false,
+    source_msg_id: '',
+    origin: origin,
+  };
+  var res = await sb.from('repairs').insert(newR).select();
+  if (res.error) {
+    var m = res.error.message || '';
+    toast(/origin/.test(m)
+      ? 'origin 컬럼 없음 — sql/012_repair_origin.sql 먼저 실행'
+      : '등록 실패: '+m);
+    return;
+  }
+  REPAIRS.unshift(res.data && res.data[0] ? res.data[0] : newR);
+  closeRepairAdd();
+  buildRepairShipFilter();
+  renderRepairs();
+  toast(newR.ship_code+' '+origin+' 건 등록됨');
+  await requestDriveFolder(newR);
+}
+
 function renderRepairs() {
   if (!REPAIRS.length) {
     document.getElementById('repairsRoot').innerHTML = '<div class="loading">수리이력 없음</div>';
@@ -1031,9 +1144,12 @@ function renderRepairs() {
       return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
     }).join('');
     var eid = esc(r.id);
+    var org = r.origin && r.origin !== '메일' ? r.origin : '';
     var mailCell = r.email_link
       ? '<a href="'+esc(r.email_link)+'" target="_blank" style="font-size:11px;text-decoration:none;display:block;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.email_subject||'메일 열기')+'">📧 '+esc((r.email_subject||'').slice(0,30))+'</a>'
-      : '<span class="muted" style="font-size:11px">—</span>';
+      : (org
+          ? '<span class="origin-badge" title="메일 없이 '+esc(org)+'(으)로 접수된 건">'+(ORIGIN_ICON[org]||'📝')+' '+esc(org)+'</span>'
+          : '<span class="muted" style="font-size:11px">—</span>');
     var fold = findDriveFolder(r);
     var shipUrl = fold ? '' : shipFolderUrl(r);
     var foldCell = fold
@@ -1061,7 +1177,7 @@ function renderRepairs() {
   }).join('');
   document.getElementById('repairsRoot').innerHTML =
     '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:110px">파일</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>'+
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 📁 → Drive 폴더 · 📄 → 첨부 목록 · 🔗 → 선박 폴더 링크 변경</div>';
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 💬 → 메일 없이 접수(카톡 등) · 📁 → Drive 폴더 · 📄 → 첨부 목록 · 🔗 → 선박 폴더 링크 변경</div>';
 }
 
 /* Inline edit for repair fields */
