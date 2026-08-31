@@ -7,6 +7,14 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from alarm_info import ALARM_INFO
 
+# Bump when parsing logic changes — run.py folds this into ANALYZER_VERSION so
+# every cached month is re-parsed instead of silently keeping old results.
+# 2026-09-01b: "<=7 columns => space-separated" guess replaced by a
+#   "date time <token> inside one cell" test (335 comma OpTime/EventLog files
+#   were being split on spaces → ops/alarms/chattering undercounted);
+#   space-separated header keeps START/END/RUNNING TIME as one token.
+PARSER_VERSION = "parser-2026-09-01b"
+
 
 # ─── Helpers ────────────────────────────────────────────────
 
@@ -173,7 +181,14 @@ def _fix_space_separated_rows(rows):
                 lambda m: "[" + m.group(1).replace(
                     ",", "|") + "]",
                 line)
-            parts = line.split()
+            # Header: keep two-word column names as one token so
+            # detect_columns can still see "START TIME" / "END TIME".
+            # Without this the space-split header had 12 tokens for 7
+            # fields and start/end times mapped to nothing.
+            if "OPERATION" in line.upper() and "TIME" in line.upper()                     and not re.search(r"\d{4}-\d{1,2}-\d{1,2}", line):
+                line = re.sub(r"(?i)(START|END|RUNNING)\s+TIME",
+                              lambda m: m.group(1) + "\x00TIME", line)
+            parts = [p.replace("\x00", " ") for p in line.split()]
             merged = []
             i_p = 0
             while i_p < len(parts):

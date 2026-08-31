@@ -10,9 +10,10 @@ import json
 from datetime import datetime, timezone
 
 from thresholds import VERSION as TH_VERSION
+from csv_parser import PARSER_VERSION
 
 INTEGRITY_VERSION = "integ-2026-09"
-ANALYZER_VERSION = f"th-{TH_VERSION}|{INTEGRITY_VERSION}"
+ANALYZER_VERSION = f"th-{TH_VERSION}|{INTEGRITY_VERSION}|{PARSER_VERSION}"
 
 _PAYLOAD_KEYS = (
     "grade", "grade_rule", "grade_reasons", "reception",
