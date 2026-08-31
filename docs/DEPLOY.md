@@ -182,7 +182,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
    크롬 콘솔에서 `import('/js/core/state.js')` 로 `S` 채우고 `router.switchTab()` — 모듈 경로에 `?v=` 붙이지 말 것).
 
 ### SQL (Supabase SQL Editor, 순서대로 1회)
-`017_ships_sort_hidden` → `018_bwts_log_analysis` → `019_bwts_reviews` → `020_env_views` → `021_env_readonly`.
+`012_repair_origin`(운영 DB 미적용이었음) → `017_ships_sort_hidden` → `018_bwts_log_analysis` → `019_bwts_reviews` → `020_env_views` → `021_env_readonly`.
+2026-09-01 이 순서로 Supabase SQL Editor 에서 실행 완료.
 013~016 재실행 금지 규칙은 그대로. 017~021 은 전부 재실행 가능.
 
 ### 파이프라인 (로컬 PC)

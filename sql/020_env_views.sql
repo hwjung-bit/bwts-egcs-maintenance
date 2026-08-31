@@ -8,7 +8,9 @@
 -- export_contract.py 가 app_thresholds / sensor_cycles 에 미러링한다(실행마다 sync).
 -- 이 파일을 처음 실행하면 아래 seed 값이 들어가고, 이후 sync 가 덮어쓴다.
 --
--- 재실행 가능. Run in Supabase SQL Editor. (018 → 019 → 020 → 021)
+-- 선행: sql/012_repair_origin.sql (repairs.origin) — 2026-09-01 운영 DB 에 미적용 상태로 확인돼
+-- v_repairs_open 이 42703 으로 실패했다. 012 는 재실행 가능하니 함께 돌릴 것.
+-- 재실행 가능. Run in Supabase SQL Editor. (012 → 017 → 018 → 019 → 020 → 021)
 
 -- ── 임계값 미러 ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS app_thresholds (
