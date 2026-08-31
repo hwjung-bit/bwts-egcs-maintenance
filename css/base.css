@@ -132,3 +132,23 @@ tr.stale:hover{background:#fef3c7 !important}
 .ver-banner:hover{background:#1e40af}
 #view{min-height:200px}
 .muted{color:#94a3b8}
+
+/* ===== BWTS 로그 매트릭스 ===== */
+.bl-matrix{width:100%;table-layout:fixed}
+.bl-matrix th,.bl-matrix td{padding:4px 4px;font-size:11px}
+.bl-cell{cursor:pointer;text-align:center;border:1px solid #fff;border-radius:6px;line-height:1.2;transition:transform .08s}
+.bl-cell:hover{transform:scale(1.04);z-index:2;position:relative}
+.bl-empty{background:#fafafa}
+.bl-g{font-weight:700;font-size:11px;white-space:nowrap}
+.bl-sub{font-size:9px;opacity:.75;white-space:nowrap;min-height:11px}
+.bl-mark{font-size:10px}
+.bl-detail{margin-top:14px;background:#fff;border-radius:10px;padding:14px 18px;box-shadow:0 1px 3px rgba(0,0,0,.06);border:1px solid #e2e8f0}
+.bl-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;font-size:14px}
+.bl-badge{padding:3px 10px;border-radius:8px;font-weight:700;font-size:12px}
+.bl-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:12px}
+.bl-sec{font-size:12px}
+.bl-sec h4{font-size:11px;color:#94a3b8;margin:0 0 6px;text-transform:uppercase;letter-spacing:.5px}
+.bl-sec ul{margin:0;padding-left:16px}
+.bl-review{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px}
+.bl-q{border-left:3px solid #cbd5e1;padding:4px 10px;margin:6px 0;font-size:12px}
+.bl-a{margin-top:4px;color:#1e40af}

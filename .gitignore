@@ -11,3 +11,5 @@ credentials*.json
 pipelines/bwts_log/cache/
 pipelines/bwts_log/out/
 .pytest_cache/
+_archive/cache_backup_*/
+_archive/*.log

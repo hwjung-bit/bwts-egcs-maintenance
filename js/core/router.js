@@ -15,6 +15,7 @@ export const TABS = [
   { id: 'mail',    label: '📧 메일대장' },
   { id: 'repairs', label: '🔧 수리이력' },
   { id: 'status',  label: '📊 현황' },
+  { id: 'bwtsLog', label: '🧪 BWTS 로그' },
   { id: 'bwtsCal', label: 'BWTS 검교정' },
   { id: 'egcsCal', label: 'EGCS 검교정' },
   { id: 'ships',   label: '🚢 선박관리' },
