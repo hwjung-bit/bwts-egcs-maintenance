@@ -35,13 +35,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS mail_log_thread_uniq
   WHERE coalesce(thread_id, '') <> '';
 
 -- ── 2. 외래키 ─────────────────────────────────────────────────────
--- 선박을 못 찾은 메일은 ship_code 에 빈 문자열이 들어가 있다 (2026-08-31
--- 기준 mail_log 402건 중 112건). FK 는 '' 를 NULL 로 보지 않으므로
--- ships.code 에 없다며 거부한다. "미상"은 NULL 이 맞는 표현이기도 하다.
--- 수집기도 이제 None 을 쓴다 (supabase_collector.py).
-UPDATE mail_log     SET ship_code = NULL WHERE ship_code = '';
-UPDATE repairs      SET ship_code = NULL WHERE ship_code = '';
-UPDATE calibrations SET ship_code = NULL WHERE ship_code = '';
+-- 선박을 못 찾은 건은 ship_code 에 빈 문자열이 들어가 있다 (2026-08-31 기준
+-- mail_log 403건 중 112건, repairs 273건 중 12건, calibrations 는 0건).
+-- FK 는 '' 를 NULL 로 보지 않으므로 ships.code 에 없다며 거부한다.
+-- "미상"은 NULL 이 맞는 표현이기도 하다. 수집기도 이제 None 을 쓴다.
+--
+-- mail_log.ship_code 는 처음부터 nullable 이었다. repairs 는 NOT NULL 이라
+-- 그 12건 때문에 막히므로 같은 표현이 가능하도록 맞춘다. FK 컬럼의 NULL 은
+-- "미배정"을 뜻하며, 잘못된 코드가 들어오는 것은 FK 가 계속 막는다.
+-- calibrations 는 해당 행이 없고 검교정은 항상 선박에 속하므로 NOT NULL 유지.
+ALTER TABLE repairs ALTER COLUMN ship_code DROP NOT NULL;
+
+UPDATE mail_log SET ship_code = NULL WHERE ship_code = '';
+UPDATE repairs  SET ship_code = NULL WHERE ship_code = '';
 
 -- 그래도 ships 에 없는 코드가 남아 있으면 FK 생성이 실패한다.
 -- 반쯤 적용되는 것보다 무엇이 문제인지 알리고 멈추는 게 낫다.
