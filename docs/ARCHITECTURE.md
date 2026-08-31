@@ -29,8 +29,10 @@
 - 임계값은 `js/shared/thresholds.js` `requireTH('섹션')` 으로만 읽는다. 숫자 하드코딩 금지.
 
 ## 배포
-- main 푸시 = 배포. **`version.json` 과 `index.html` 의 `?v=` 두 곳을 같은 값으로 올린다.**
-  다르면 앱이 "새 버전" 배너를 띄운다(Pages max-age=600 대응).
+- main 푸시 = 배포. **`version.json`, `index.html` 의 `?v=` 두 곳, `js/version.js` BUILD 를 같은 값으로 올린다.**
+  하위 모듈은 쿼리가 없어 Pages 가 10분 캐시한다 → app.js 가 자기 `?v` 와 `version.js` BUILD 를 비교해
+  다르면 모듈 전부 `fetch(cache:'reload')` 후 1회 자동 새로고침(sessionStorage 가드로 루프 방지).
+  `version.json` 은 열려 있는 탭에 "새 버전" 배너용.
 - 새 탭 추가 = `router.js` TABS 한 줄 + `js/tabs/` 파일 하나. 다른 파일 안 건드림.
 
 ## 파이프라인 `pipelines/bwts_log/`

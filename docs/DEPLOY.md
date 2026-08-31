@@ -175,7 +175,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 
 ### 프론트 배포
 1. 코드 수정 → `node --check js/**/*.js`
-2. `index.html` 의 `?v=YYYYMMDDx` **두 곳**(css, app.js)과 `version.json` 을 같은 값으로 올린다.
+2. `index.html` 의 `?v=YYYYMMDDx` **두 곳**(css, app.js), `version.json`, **`js/version.js` 의 BUILD** 를 같은 값으로 올린다.
+   (하위 모듈은 `?v=` 가 없어 10분 캐시된다 — app.js 가 BUILD 불일치를 보면 모듈을 `cache:'reload'` 로 재수신 후 1회 자동 새로고침.)
 3. `git push origin main` → 1~2분 후 Pages 반영. 기존 탭이 열려 있으면 상단 "새 버전" 배너가 뜬다.
 4. 로컬 사전 검증: `python -m http.server 8787` → `http://127.0.0.1:8787/#<탭>` (로그인 없이 UI 확인은
    크롬 콘솔에서 `import('/js/core/state.js')` 로 `S` 채우고 `router.switchTab()` — 모듈 경로에 `?v=` 붙이지 말 것).
