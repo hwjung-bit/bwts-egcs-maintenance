@@ -1,0 +1,38 @@
+name: Collect Heartbeat
+
+# 실패 알림이 못 잡는 경우를 잡는다: 잡이 아예 실행되지 않으면
+# 실패도 발생하지 않아 if:failure() 가 영원히 침묵한다.
+# scripts/heartbeat.py 헤더에 배경 설명.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 09:00 KST daily
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    concurrency:
+      group: heartbeat
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Check collect freshness
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAX_AGE_HOURS: '6'
+        run: python scripts/heartbeat.py

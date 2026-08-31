@@ -8,6 +8,12 @@ on:
 jobs:
   alert:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    concurrency:
+      group: weekly-cal-alert
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
 
@@ -16,7 +22,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install supabase
+        run: pip install -r scripts/requirements.txt
 
       - name: Send weekly calibration alert
         env:
@@ -25,3 +31,11 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python scripts/weekly_cal_alert.py
+      - name: Notify on failure
+        if: failure()
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          WF_NAME: ${{ github.workflow }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python scripts/notify_failure.py
