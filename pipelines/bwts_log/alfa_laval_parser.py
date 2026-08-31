@@ -54,9 +54,9 @@ def _read_xlsx_events(filepath):
 
     events = []
     for i, row in enumerate(ws.iter_rows(values_only=True)):
-        # Extract vessel info
-        if row[1] and str(row[1]).strip() == "Vessel / System name":
-            pass
+        # Sheets exported by other tools have short/empty rows — pad so the
+        # positional reads below never index past the tuple.
+        row = tuple(row) + (None,) * max(0, 7 - len(row))
         if i == 3 and row[1]:
             vessel_name = str(row[1]).strip()
         if i == 3 and row[3]:
@@ -326,7 +326,13 @@ def analyze_alfa_laval(folder_path, year=None, month=None):
     events, sources = [], []
     vessel_name = serial = None
     for f in sorted(folder.glob("*.xlsx")):
-        evs, vn, sn = _read_xlsx_events(f)
+        if f.name.startswith("~$"):
+            continue
+        try:
+            evs, vn, sn = _read_xlsx_events(f)
+        except Exception as e:      # a non-PureBallast workbook in the folder
+            print(f"  [alfa] {f.name}: 읽기 실패 ({e}) — 건너뜀")
+            continue
         if evs:
             events.extend(evs)
             sources.append(f.name)
