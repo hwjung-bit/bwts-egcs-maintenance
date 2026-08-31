@@ -14,7 +14,7 @@ function mount(root) {
 
 function refresh() {
   load().catch(e => {
-    $('homeRoot').innerHTML = `<div class="tab-error"><b>⚠ 종합 KPI 로드 실패</b>${/does not exist|relation/.test(e.message) ? 'sql/020_env_views.sql · 021 을 먼저 실행하세요.' : ''}<code>${esc(e.message)}</code></div>`;
+    $('homeRoot').innerHTML = `<div class="tab-error"><b>⚠ 종합 KPI 로드 실패</b>${/does not exist|relation|Could not find the table|schema cache/.test(e.message) ? 'sql/020_env_views.sql · 021 을 먼저 실행하세요.' : ''}<code>${esc(e.message)}</code></div>`;
   });
 }
 

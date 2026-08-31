@@ -59,7 +59,7 @@ async function loadYear() {
   const res = await sb.from('bwts_log_analysis').select(COLS)
     .gte('period', F.year + '-01').lte('period', F.year + '-12').order('period');
   if (res.error) throw new Error('bwts_log_analysis 조회 실패: ' + res.error.message +
-    (/does not exist|relation/.test(res.error.message) ? ' — sql/018_bwts_log_analysis.sql 을 먼저 실행' : ''));
+    (/does not exist|relation|Could not find the table|schema cache/.test(res.error.message) ? ' — sql/018_bwts_log_analysis.sql 을 먼저 실행' : ''));
   ROWS = res.data || [];
   loadedYear = F.year;
   if (!YEARS.length) {
