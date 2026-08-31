@@ -39,13 +39,10 @@ DEBALLAST_START = {"E20", "E230"}
 STOP_EVENTS = {"E190", "E310", "E450"}
 
 
-def parse_xlsx(filepath):
-    """
-    Parse PureBallast Tabular Export XLSX.
-    Returns dict with operations, alarms, events.
-    """
+def _read_xlsx_events(filepath):
+    """PureBallast Tabular Export XLSX → (events, vessel_name, serial)."""
     if not openpyxl:
-        return None
+        return [], None, None
 
     wb = openpyxl.load_workbook(filepath, read_only=True)
     ws = wb[wb.sheetnames[0]]
@@ -104,7 +101,14 @@ def parse_xlsx(filepath):
         })
 
     wb.close()
+    return events, vessel_name, serial
 
+
+def parse_xlsx(filepath):
+    """Parse one XLSX and analyze it (kept for callers/tests)."""
+    events, vessel_name, serial = _read_xlsx_events(filepath)
+    if not events and vessel_name is None:
+        return None
     return _analyze_events(events, vessel_name, serial)
 
 
@@ -288,54 +292,89 @@ def _analyze_events(events, vessel_name=None, serial=None):
     }
 
 
-def analyze_alfa_laval(folder_path):
-    """
-    Analyze Alfa Laval vessel folder.
-    Auto-detects XLSX or CSV format.
+# Periodic measurement events written once a minute while the system runs.
+# E640 = treated flow [m3/h]; when it is > 0 the plant was operating even if
+# the export window missed the E10/E210/E220 start event.
+FLOW_EVENT = "E640"
+# Housekeeping codes that appear in an idle month too
+HEARTBEAT_CODES = {"E104", "E190", "E320"}
+
+
+def _in_month(ev, year, month):
+    t = ev.get("time")
+    return year is None or (t and t.year == year and t.month == month)
+
+
+def analyze_alfa_laval(folder_path, year=None, month=None):
+    """Analyze an Alfa Laval vessel folder.
+
+    Reads EVERY source in the folder (all XLSX exports and all A_/E_/IE_
+    CSVs), merges them, drops duplicates and — when year/month are given —
+    keeps only that month's events. The old "first XLSX wins" rule lost
+    September 2025 for KDB, whose folder also held a multi-year CSV dump,
+    and a month-spanning CSV would have been counted for the wrong month.
+
+    Extra keys on the result:
+      event_count      events in the month (alarms excluded)
+      flow_rows        E640 rows with flow > 0 (operating evidence)
+      sources          files used
     """
     folder = Path(folder_path)
     if not folder.exists():
         return None
 
-    # Try XLSX first (Tabular Export)
-    xlsx_files = sorted(
-        folder.glob("PB-*_Tabular_Export_*.xlsx"),
-        key=lambda f: f.stat().st_mtime, reverse=True)
-    if not xlsx_files:
-        xlsx_files = sorted(
-            folder.glob("PureBallast_Tabular_Report_*.xlsx"),
-            key=lambda f: f.stat().st_mtime, reverse=True)
-    if not xlsx_files:
-        # Korean named xlsx
-        xlsx_files = sorted(
-            [f for f in folder.glob("*.xlsx")
-             if "BWTS" in f.name.upper() or "LOG" in f.name.upper()],
-            key=lambda f: f.stat().st_mtime, reverse=True)
-
-    if xlsx_files:
-        result = parse_xlsx(xlsx_files[0])
-        if result:
-            result["source"] = xlsx_files[0].name
-            return result
-
-    # Fallback: CSV (A_/E_/IE_)
-    all_events = []
-    for pattern in ["A_*.csv", "E_*.csv", "IE_*.csv"]:
-        for f in folder.glob(pattern):
+    events, sources = [], []
+    vessel_name = serial = None
+    for f in sorted(folder.glob("*.xlsx")):
+        evs, vn, sn = _read_xlsx_events(f)
+        if evs:
+            events.extend(evs)
+            sources.append(f.name)
+        vessel_name = vessel_name or vn
+        serial = serial or sn
+    for pattern in ("A_*.csv", "E_*.csv", "IE_*.csv"):
+        for f in sorted(folder.glob(pattern)):
             if pattern.startswith("A"):
-                alarms = parse_csv_alarm(f)
-                for a in alarms:
+                rows = parse_csv_alarm(f)
+                for a in rows:
                     a["code"] = f"A{a.get('alarm_number', '')}"
-                all_events.extend(alarms)
             else:
-                evts = parse_csv_event(f)
-                for e in evts:
+                rows = parse_csv_event(f)
+                for e in rows:
                     e["code"] = f"E{e.get('event_number', '')}"
-                all_events.extend(evts)
+            if rows:
+                events.extend(rows)
+                sources.append(f.name)
 
-    if all_events:
-        result = _analyze_events(all_events)
-        result["source"] = "CSV (A/E/IE)"
-        return result
+    if not events:
+        return None
 
-    return None
+    # de-duplicate (same event exported twice) and month-filter
+    seen, merged = set(), []
+    for ev in events:
+        key = (ev.get("time"), ev.get("code"), str(ev.get("data", ev.get("value", ""))))
+        if key in seen:
+            continue
+        seen.add(key)
+        if _in_month(ev, year, month):
+            merged.append(ev)
+
+    result = _analyze_events(merged, vessel_name, serial)
+    flow_rows = 0
+    for ev in merged:
+        if ev.get("code") == FLOW_EVENT:
+            try:
+                if float(str(ev.get("data", ev.get("value", 0)) or 0)) > 0:
+                    flow_rows += 1
+            except ValueError:
+                pass
+    result["flow_rows"] = flow_rows
+    result["event_count"] = sum(
+        1 for ev in merged if not ev.get("is_alarm") and ev.get("code") not in HEARTBEAT_CODES)
+    # E104 is logged every few days while the system is powered: several of
+    # them spread over the month prove the export covered the month.
+    hb_days = {ev["time"].date() for ev in merged if ev.get("code") == "E104" and ev.get("time")}
+    result["heartbeat_days"] = len(hb_days)
+    result["sources"] = sources
+    result["source"] = ", ".join(sources[:3]) + (" …" if len(sources) > 3 else "")
+    return result

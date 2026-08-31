@@ -13,7 +13,11 @@ from alarm_info import ALARM_INFO
 #   "date time <token> inside one cell" test (335 comma OpTime/EventLog files
 #   were being split on spaces → ops/alarms/chattering undercounted);
 #   space-separated header keeps START/END/RUNNING TIME as one token.
-PARSER_VERSION = "parser-2026-09-01b"
+# 2026-09-01c: vessel folder match code/name first (number prefix picked another
+#   ship in 2024 folders); Alfa Laval reads every export in the folder with a
+#   month filter, flow>0 rows = operating evidence, heartbeat rule; PDF-only
+#   months converted in place; header-only OpTime/DataLog = idle, not a miss.
+PARSER_VERSION = "parser-2026-09-01c"
 
 
 # ─── Helpers ────────────────────────────────────────────────

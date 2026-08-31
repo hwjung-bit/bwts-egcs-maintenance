@@ -27,10 +27,36 @@ def test_thresholds_loaded():
 def test_integrity_i1_regrades_idle_with_alarms():
     s = {"code": "KPS", "year": 2024, "month": 5, "grade": "데이터불량",
          "ballast_count": 0, "deballast_count": 0, "session_count": 0,
-         "alarm_count": 42, "trip_count": 0, "_has_datalog": True, "reception": "full"}
+         "alarm_count": 42, "trip_count": 0, "_has_datalog": True, "_datalog_rows": 900,
+         "reception": "full"}
     res = integrity.run_checks(s, history_grades=[])
     assert "I1" in res["hits"] and "I2" in res["hits"]
     assert res["regrade"] is True
+
+
+def test_integrity_idle_month_with_alarms_is_not_a_parse_miss():
+    """OpTime parsed with 0 rows + header-only DataLog = idle month, even with
+    comm-failure trips (KTJ 2026-02) — no I1/I2."""
+    s = {"code": "KTJ", "year": 2026, "month": 2, "grade": "미운전",
+         "ballast_count": 0, "deballast_count": 0, "session_count": 0,
+         "alarm_count": 21, "trip_count": 23, "_optime_rows": 0,
+         "_has_datalog": True, "_datalog_rows": 0, "reception": "full"}
+    res = integrity.run_checks(s, history_grades=[])
+    assert "I1" not in res["hits"] and "I2" not in res["hits"]
+
+
+def test_alfa_flow_rows_are_operating_evidence(tmp_path):
+    """KSL 2024-11: export window missed the start event but E640 flow>0 is
+    logged every minute — flow_rows must be > 0 with 0 counted operations."""
+    import shutil
+    from alfa_laval_parser import analyze_alfa_laval
+    shutil.copy(HERE / "fixtures" / "alfa_KSL_2024-11_E_flow_only.csv", tmp_path / "E_2024_11_27__21_10_02.csv")
+    r = analyze_alfa_laval(tmp_path, 2024, 11)
+    assert r is not None
+    assert r["ballast_count"] == 0 and r["deballast_count"] == 0
+    assert r["flow_rows"] > 0
+    # month filter: nothing from another month
+    assert analyze_alfa_laval(tmp_path, 2024, 10)["flow_rows"] == 0 or analyze_alfa_laval(tmp_path, 2024, 10) is None
 
 
 def test_integrity_never_touches_operating_grade():
@@ -56,6 +82,8 @@ def test_integrity_i6_history():
 #                                  and 72 operations parsed as 0 (2026-09-01)
 # KQD_2024-02_OPTIME_spacesep.csv true space-separated file (GAS-converted) — must
 #                                  still take the space path after the fix
+# alfa_KSL_2024-11_E_flow_only.csv Alfa Laval E_ export covering 2 days; flow rows
+#                                  without a start event (see test_alfa_flow_rows...)
 FIXTURES = sorted((HERE / "fixtures").glob("*.csv"))
 
 
@@ -64,6 +92,8 @@ def test_fixture_parses(path):
     """A fixture must parse to at least one row of its type."""
     from csv_parser import parse_optime_csv, parse_datalog_csv, parse_eventlog_csv
     name = path.name.upper()
+    if name.startswith("ALFA_"):
+        pytest.skip("Alfa Laval fixture — covered by test_alfa_flow_rows_are_operating_evidence")
     if "OPTIME" in name or "OPERATION" in name:
         r = parse_optime_csv(path)          # list of operation dicts
         assert isinstance(r, list) and len(r) > 0, f"{path.name}: OpTime 파싱 0행"

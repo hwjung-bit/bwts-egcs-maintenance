@@ -75,10 +75,16 @@ def run_checks(summary, history_grades=(), allow_side_effects=False):
     same vessel, oldest first (may be empty when unknown).
     """
     hits, detail = [], []
-    grade = summary.get("grade", "")
+    # A cached month may already carry the re-grade; judge on the rule grade
+    # so re-running keeps the hits instead of blanking them.
+    grade = summary.get("grade_rule") or summary.get("grade", "")
     if grade not in CANDIDATE_GRADES:
         return {"hits": hits, "detail": detail, "regrade": False}
 
+    # Alfa Laval (UV) months have no OpTime/DataLog/EventLog trio — the parser
+    # already grades an incomplete export as 데이터불량 with its own evidence
+    # (flow rows, event count). Only the history check applies to them.
+    is_alfa = "alfa_event_count" in summary
     ops = (summary.get("ballast_count") or 0) + (summary.get("deballast_count") or 0)
     sessions = summary.get("session_count") or 0
     alarms = (summary.get("alarm_count") or 0) + (summary.get("trip_count") or 0)
@@ -89,18 +95,21 @@ def run_checks(summary, history_grades=(), allow_side_effects=False):
         hits.append("I7")
         detail.append(f"I7 {reception}: CSV 변환/해제 안 됨 — 파이프라인 문제")
 
-    # I1 — alarms exist, nothing operational parsed
-    if alarms > 0 and sessions == 0 and ops == 0:
+    # I1 — alarms exist, nothing operational parsed, and there is NO OpTime
+    # evidence at all. A parsed OpTime table with zero rows (_optime_rows == 0)
+    # is positive evidence of an idle month — comm-failure trips or a drain
+    # tank alarm can fire while the plant is not ballasting.
+    if not is_alfa and alarms > 0 and sessions == 0 and ops == 0 and summary.get("_optime_rows") is None:
         hits.append("I1")
         detail.append(f"I1 알람/트립 {alarms}건 있는데 OpTime·DataLog 세션 0")
 
-    # I2 — DataLog present but no sessions
-    if summary.get("_has_datalog") and sessions == 0:
+    # I2 — DataLog present but no sessions (a header-only DataLog is not a miss)
+    if not is_alfa and summary.get("_has_datalog") and sessions == 0 and (summary.get("_datalog_rows") or 0) > 0:
         hits.append("I2")
         detail.append("I2 DataLog 있음(_has_datalog) 인데 세션 0 — 헤더/구분자 변형 의심")
 
     # File-level checks need the G: folder
-    folder, files = _files_for(summary, allow_side_effects)
+    folder, files = _files_for(summary, allow_side_effects) if not is_alfa else (None, {})
     if folder:
         min_bytes = INTEG["csv_min_bytes_for_content"]
         for key in ("optime", "datalog", "eventlog"):
@@ -121,9 +130,11 @@ def run_checks(summary, history_grades=(), allow_side_effects=False):
                 if head and not any(m in head for m in KNOWN_HEADER_MARKERS):
                     hits.append("I5")
                     detail.append(f"I5 {key} 헤더가 알려진 형식(A/B/KSZ) 아님 — 신규 형식")
-        # I4 — raw EventLog text says it operated
+        # I4 — raw EventLog text says it operated. Skipped when an OpTime table
+        # was parsed with zero rows: that is direct evidence of an idle month and
+        # the keyword grep (START|STOP) also matches "Restart"/"Start-up".
         ev = files.get("eventlog")
-        if ev and ops == 0:
+        if ev and ops == 0 and summary.get("_optime_rows") is None:
             txt = _head_text(ev)
             n = len(_EVENT_RE.findall(txt))
             if n > 0:
@@ -145,9 +156,11 @@ def apply(summary, history_grades=(), allow_side_effects=False):
     """Mutating form: sets summary["integrity"], keeps the rule grade in
     summary["grade_rule"], and re-grades to 판독실패 when warranted.
     Returns the (possibly new) grade."""
+    summary["grade_rule"] = summary.get("grade_rule") or summary.get("grade")
     res = run_checks(summary, history_grades, allow_side_effects)
     summary["integrity"] = res
-    summary["grade_rule"] = summary.get("grade_rule") or summary.get("grade")
+    if not res["regrade"] and summary.get("grade") == GRADE_UNREADABLE:
+        summary["grade"] = summary["grade_rule"]      # checks no longer fire → back to rule grade
     if res["regrade"]:
         summary["grade"] = GRADE_UNREADABLE
         summary["grade_reasons"] = [f"파서 판독 실패 의심 ({', '.join(res['hits'])})"] + res["detail"]

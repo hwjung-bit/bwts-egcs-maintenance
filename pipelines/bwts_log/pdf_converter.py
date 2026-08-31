@@ -63,6 +63,10 @@ def find_sections(pdf):
         elif "data" in name:
             toc["data"] = page
 
+    # A TOC page number outside the document (KCN 2025-05 gave 6147 for a
+    # 20-page PDF) means the regex caught a stray number — ignore the TOC.
+    if toc and not all(1 <= pg <= total for pg in toc.values()):
+        toc = {}
     if toc:
         # Convert page numbers from TOC
         if "event" in toc:
@@ -79,7 +83,7 @@ def find_sections(pdf):
     for i in range(min(total, 20)):
         text = pdf.pages[i].extract_text() or ""
         sec = detect_section(text)
-        if sec and sections[sec] is None:
+        if sec in sections and sections[sec] is None:
             sections[sec] = (i + 1, None)
 
     # Fill in end pages
@@ -303,7 +307,11 @@ def convert_pdf(pdf_path, output_dir, code, year, month,
                         h, r = parse_data_lines(lines)
                         fname = f"{prefix}_DATALOG.csv"
 
-                    if r:
+                    # An OpTime/DataLog section that exists but holds no
+                    # rows is real information (idle month): write the
+                    # header-only CSV so reception becomes "full" and the
+                    # month grades 미운전 instead of 판독실패.
+                    if r or sec_name in ("optime", "data"):
                         out = output_dir / fname
                         cnt = write_csv(out, h, r)
                         created[sec_name] = (out, cnt)
@@ -314,7 +322,7 @@ def convert_pdf(pdf_path, output_dir, code, year, month,
             elif is_data:
                 lines = extract_table_text(pdf, 1, total, 500)
                 h, r = parse_data_lines(lines)
-                if r:
+                if True:   # header-only is meaningful (idle month)
                     out = output_dir / \
                         f"{prefix}_DATALOG.csv"
                     cnt = write_csv(out, h, r)
@@ -332,7 +340,7 @@ def convert_pdf(pdf_path, output_dir, code, year, month,
             elif is_optime:
                 lines = extract_table_text(pdf, 1, total, 50)
                 h, r = parse_optime_lines(lines)
-                if r:
+                if True:   # header-only is meaningful (idle month)
                     out = output_dir / \
                         f"{prefix}_OPERATIONTIMELOG.csv"
                     cnt = write_csv(out, h, r)
@@ -349,6 +357,66 @@ def convert_pdf(pdf_path, output_dir, code, year, month,
         else:
             print(" (no data extracted)")
 
+    return created
+
+
+def _datalog_header_bad(path):
+    """True when a *_DATALOG.csv carries an OpTime header (bad GAS conversion,
+    KCN 2025-05): first header cell OPERATION and no DataLog column names."""
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="ignore") as f:
+            head = (f.readline() + f.readline()).upper()
+    except OSError:
+        return False
+    return head.startswith("OPERATION") and not any(
+        k in head for k in ("TRO", "REC", "FMU", "TSU", "INDEX", "ANU"))
+
+
+def ensure_csv_from_pdf(folder, code, year, month, verbose=False):
+    """Fill in missing OpTime/DataLog/EventLog CSVs from the PDFs in the
+    vessel folder. Called by fleet_summary before parsing so a month that
+    arrived as PDF only is judged on its content, not on the file type.
+    Returns a list of (section, path, rows) created. Never touches a CSV
+    that already exists, except a DataLog with an OpTime header, which is
+    renamed *.bad.csv and regenerated from the PDF."""
+    folder = Path(folder)
+    if not folder or not folder.exists():
+        return []
+    csvs = [f for f in folder.iterdir()
+            if f.suffix.upper() == ".CSV" and "null" not in f.name.lower()
+            and not f.name.lower().endswith(".bad.csv")]
+
+    def has(rx):
+        return any(re.search(rx, f.name, re.I) for f in csvs)
+
+    bad_dl = [f for f in csvs if re.search(r"DATALOG|DATAREPORT", f.name, re.I)
+              and _datalog_header_bad(f)]
+    for f in bad_dl:
+        f.rename(f.with_name(f.stem + ".bad.csv"))
+        if verbose:
+            print(f"  [{code}] {f.name}: OpTime header on a DataLog -> .bad.csv, regenerating")
+    need = {
+        "optime": not has(r"OPERATIONTIME|OPTIME"),
+        "data": bool(bad_dl) or not has(r"DATALOG|DATAREPORT"),
+        "event": not has(r"EVENTLOG"),
+    }
+    if not any(need.values()):
+        return []
+    pdfs = [f for f in folder.iterdir() if f.suffix.upper() == ".PDF"
+            and "BWRB" not in f.name.upper() and "스쯔" not in f.name]
+    if not pdfs:
+        return []
+    # TotalLog / Report PDFs first -- they carry every section
+    pdfs.sort(key=lambda f: 0 if re.search(r"TOTAL|REPORT", f.name, re.I) else 1)
+    created = []
+    for pdf in pdfs:
+        made = convert_pdf(pdf, folder, code, year, month, verbose=verbose)
+        for sec, (path, cnt) in made.items():
+            if need.get(sec):
+                created.append((sec, path, cnt))
+                need[sec] = False
+        if not any(need.values()):
+            break
     return created
 
 

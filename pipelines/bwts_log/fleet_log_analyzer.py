@@ -655,6 +655,7 @@ def analyze_datalog_deep(datalog_path, eventlog_path=None):
 
     # Parse and split into sessions
     dl_rows = _parse_datalog_rows(datalog_path)
+    result["row_count"] = len(dl_rows)     # 0 = header-only file (idle month, not a parse failure)
     sessions = split_sessions(dl_rows)
 
     # Determine TRO sensor presence from ALL rows (not per-session)

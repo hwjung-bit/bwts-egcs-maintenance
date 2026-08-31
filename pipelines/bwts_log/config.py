@@ -88,20 +88,22 @@ def get_vessel_folder(year: int, month: int,
     if not month_dir:
         return None
 
-    # Search by code, number, or full name
-    for d in month_dir.iterdir():
-        if not d.is_dir():
-            continue
+    # Folder numbering changed between years ("13. KHM" in 2024-03 vs
+    # "13 KDB" today), so a number-prefix match can pick another ship's
+    # folder — KDB 2024-03 was being parsed from KHM's data. Match code and
+    # full name across every folder first; fall back to the number only
+    # when nothing else matched.
+    dirs = [d for d in month_dir.iterdir() if d.is_dir()]
+    code_re = re.compile(r"(?<![A-Z])" + re.escape(code) + r"(?![A-Z])")
+    for d in dirs:
+        if code_re.search(d.name.upper()):
+            return d
+    for d in dirs:
+        if v["name"].upper() in d.name.upper():
+            return d
+    for d in dirs:
         name_upper = d.name.upper()
-        # Match by code: "01 KPS (수신)"
-        if code in name_upper:
-            return d
-        # Match by number prefix: "01." or "01 "
-        if name_upper.startswith(v["number"] + ".") or \
-                name_upper.startswith(v["number"] + " "):
-            return d
-        # Match by full name: "02 KMTC ULSAN (수신)"
-        if v["name"].upper() in name_upper:
+        if name_upper.startswith(v["number"] + ".") or                 name_upper.startswith(v["number"] + " "):
             return d
     return None
 

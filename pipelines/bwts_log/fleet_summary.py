@@ -15,6 +15,12 @@ from csv_parser import combine_csv_results
 from analysis import validate_and_normalize
 from fleet_log_analyzer import analyze_datalog_deep
 from thresholds import BL
+from pdf_converter import ensure_csv_from_pdf
+
+# Alfa Laval: fewer non-housekeeping events than this in a month means the
+# export did not cover the month (see analyze_alfa_laval)
+ALFA_MIN_EVENTS = BL.get("alfa_min_events_per_month", 5)
+ALFA_MIN_HEARTBEAT_DAYS = BL.get("alfa_min_heartbeat_days", 3)
 
 
 def _json_serial(obj):
@@ -97,7 +103,8 @@ def compute_grade(summary):
     if b_count == 0 and d_count == 0:
         # Check if DataLog CSV exists but parsing failed
         sess = summary.get("session_count", 0)
-        if summary.get("_has_datalog") and sess == 0:
+        if summary.get("_has_datalog") and sess == 0 \
+                and (summary.get("_datalog_rows") or 0) > 0:
             return "데이터불량", ["DataLog 파싱 실패"]
         return "미운전", ["당월 운전 기록 없음"]
 
@@ -185,7 +192,7 @@ def compute_vessel_summary(code, year, month, verbose=False):
 
         # Try Alfa Laval parser
         from alfa_laval_parser import analyze_alfa_laval
-        al = analyze_alfa_laval(folder)
+        al = analyze_alfa_laval(folder, year, month)
 
         if not al:
             has_any = any(
@@ -198,12 +205,14 @@ def compute_vessel_summary(code, year, month, verbose=False):
                 summary["grade_reasons"] = [
                     f"{type_label} — 폴더만 존재"]
             else:
-                summary["reception"] = "full"
+                only_pdf = all(f.suffix.upper() in (".PDF",) for f in folder.iterdir() if f.is_file())
+                summary["reception"] = "pdf_only" if only_pdf else "full"
                 summary["reception_detail"] = (
-                    f"{type_label} — 파싱 실패")
+                    f"{type_label} — " + ("PDF만 수신" if only_pdf else "파싱 실패"))
                 summary["grade"] = "데이터불량"
                 summary["grade_reasons"] = [
-                    f"{type_label} — 형식 미지원"]
+                    f"{type_label} — " + ("PDF 리포트만 수신 (알파라발 PDF 미지원) — Tabular Export(xlsx) 재요청"
+                                          if only_pdf else "형식 미지원")]
             if verbose:
                 print(f"[{code}] -> {summary['grade']} "
                       f"({type_label})")
@@ -219,13 +228,35 @@ def compute_vessel_summary(code, year, month, verbose=False):
         summary["alarm_count"] = al["alarm_count"]
         summary["no_tro_sensor"] = True  # UV type
 
+        summary["alfa_flow_rows"] = al.get("flow_rows", 0)
+        summary["alfa_event_count"] = al.get("event_count", 0)
+
         # Grade
         issues = al.get("issues", [])
         if al["ballast_count"] == 0 \
                 and al["deballast_count"] == 0:
-            summary["grade"] = "미운전"
-            summary["grade_reasons"] = [
-                f"{type_label} — 운전 기록 없음"]
+            if al.get("flow_rows", 0) > 0:
+                # The plant ran (flow > 0 logged every minute) but the export
+                # window missed the start event -- the log is incomplete,
+                # the ship did not idle. KSL 2024-11: export covered 2 days.
+                summary["grade"] = "데이터불량"
+                summary["grade_reasons"] = [
+                    f"{type_label} — 이벤트 로그 범위 부족: 유량>0 기록 "
+                    f"{al['flow_rows']}행(운전 흔적) 있는데 시작 이벤트 없음. 월 전체 export 재요청"]
+            elif al.get("event_count", 0) < ALFA_MIN_EVENTS                     and al.get("heartbeat_days", 0) < ALFA_MIN_HEARTBEAT_DAYS:
+                # A handful of events AND no heartbeat spread over the month:
+                # the export did not cover the month (KSL 2024-11 style).
+                # With E104 heartbeats on several days the system was powered
+                # and simply idle -- that is a real 미운전.
+                summary["grade"] = "데이터불량"
+                summary["grade_reasons"] = [
+                    f"{type_label} — 월간 이벤트 {al.get('event_count', 0)}건, 하트비트 "
+                    f"{al.get('heartbeat_days', 0)}일: export 범위 부족 의심 (전체 기간 Tabular Export 재요청)"]
+            else:
+                summary["grade"] = "미운전"
+                summary["grade_reasons"] = [
+                    f"{type_label} — 운전 기록 없음 (이벤트 {al.get('event_count', 0)}건, "
+                    f"하트비트 {al.get('heartbeat_days', 0)}일 확인)"]
         elif issues:
             summary["grade"] = "점검필요"
             summary["grade_reasons"] = [
@@ -243,6 +274,15 @@ def compute_vessel_summary(code, year, month, verbose=False):
 
     # 1. Check reception (Techcross only from here)
     folder = get_vessel_folder(year, month, code)
+    # PDF-only months (or a DataLog with a wrong header) -> regenerate CSVs
+    # from the PDFs in place so the month is judged on content
+    if folder:
+        try:
+            made = ensure_csv_from_pdf(folder, code, year, month, verbose=verbose)
+            if made:
+                summary["pdf_converted"] = [f"{sec}:{cnt}" for sec, _, cnt in made]
+        except Exception as e:          # conversion is best-effort
+            summary["pdf_convert_error"] = str(e)
     csv_files = get_csv_files(folder) if folder else {
         "optime": None, "datalog": None, "eventlog": None,
         "_null_files": [], "_pdf_only": [], "_issues": [],
@@ -282,6 +322,8 @@ def compute_vessel_summary(code, year, month, verbose=False):
 
     summary["ballast_count"] = b_stat.get("count", 0)
     summary["deballast_count"] = d_stat.get("count", 0)
+    # OpTime evidence: None = no OpTime file; 0 = file parsed, no operations
+    summary["_optime_rows"] = len(ops) if csv_files.get("optime") else None
     summary["ballast_volume"] = b_stat.get("total_volume", 0.0)
     summary["deballast_volume"] = d_stat.get("total_volume", 0.0)
     summary["ballast_runtime"] = b_stat.get("total_runtime", 0.0)
@@ -330,6 +372,7 @@ def compute_vessel_summary(code, year, month, verbose=False):
             summary["alarm_count"] += 1
 
     summary["session_count"] = len(deep.get("sessions", []))
+    summary["_datalog_rows"] = deep.get("row_count")
     summary["session_summaries"] = deep.get(
         "session_summaries", [])
     summary["recovery_pattern"] = deep.get(
