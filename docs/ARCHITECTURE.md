@@ -44,6 +44,15 @@
 - `export_contract.py` 는 thresholds.json → `app_thresholds`/`sensor_cycles` 미러 후 계약 뷰를 JSON 으로 내보냄.
 - 레거시: `fleet_dashboard.py`(바탕화면 HTML), `analysis.py`/`csv_parser.py` 안의 5~10ppm 리터럴은
   bwts_analyzer 경로용 — fleet 판정에는 안 쓰임. 지울 때 같이 지운다.
+- **G드라이브 부수효과(의도된 것):** `pdf_converter.ensure_csv_from_pdf` 가 선박 폴더 안에 CSV 를 만든다 —
+  PDF만 온 달은 `<CODE>_<Y>_<M>_OPERATIONTIMELOG/DATALOG/EVENTLOG.csv`(빈 표면 헤더만), OpTime 헤더가 붙은
+  잘못된 DataLog 는 `*.bad.csv` 로 이름 바꾸고 PDF 에서 재생성. 원본 PDF 는 건드리지 않음.
+- **선박 폴더 매칭 순서:** 코드(단어 경계) → 선명 → 번호 접두. 연도별 번호 체계가 달라 번호를 먼저 보면 남의 배를 집는다.
+- **알파라발(KMB/KDB/KSL):** 폴더 안 xlsx·A_/E_/IE_ csv 전부 병합 + 해당 월 필터. 운전 0건이어도
+  E640(유량>0) 행이 있으면 "범위 부족(운전 흔적)" 데이터불량, 이벤트 <5건이고 E104 하트비트 <3일이면
+  "범위 부족 의심" 데이터불량, 그 외 미운전. PDF 리포트만 오면 데이터불량(PDF 미지원).
+- **integrity 예외:** OpTime 표가 0행으로 파싱됐으면(`_optime_rows == 0`) I1·I4 안 걸림(진짜 미운전 증거).
+  헤더만 있는 DataLog(`_datalog_rows == 0`)는 파싱 실패가 아니라 미운전. 알파라발은 I6/I7 만.
 
 ## 검토 루프
 웹 `bwtsLog` 탭 「재검토 요청」 → `bwts_reviews` + `review_status='requested'` →
