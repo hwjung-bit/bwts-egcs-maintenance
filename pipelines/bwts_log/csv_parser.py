@@ -17,7 +17,10 @@ from alarm_info import ALARM_INFO
 #   ship in 2024 folders); Alfa Laval reads every export in the folder with a
 #   month filter, flow>0 rows = operating evidence, heartbeat rule; PDF-only
 #   months converted in place; header-only OpTime/DataLog = idle, not a miss.
-PARSER_VERSION = "parser-2026-09-01c"
+# 2026-09-01d: PDF TOC page offset verified against page text (OpTime rows were
+#   lost), multi-section PDF treated as TotalLog regardless of file name,
+#   quarantined *.bad.csv / _oldbug_*.bak never read as input.
+PARSER_VERSION = "parser-2026-09-01d"
 
 
 # ─── Helpers ────────────────────────────────────────────────

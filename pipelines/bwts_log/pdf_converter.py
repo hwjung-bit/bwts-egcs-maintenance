@@ -68,6 +68,15 @@ def find_sections(pdf):
     if toc and not all(1 <= pg <= total for pg in toc.values()):
         toc = {}
     if toc:
+        # TOC numbers are often off by one (cover not counted). Nudge each
+        # start to the nearest page whose text really is that section.
+        def _fix(name, pg):
+            for cand in (pg, pg + 1, pg - 1, pg + 2):
+                if 1 <= cand <= total and detect_section(
+                        pdf.pages[cand - 1].extract_text() or "") == name:
+                    return cand
+            return pg
+        toc = {k: _fix(k, v) for k, v in toc.items()}
         # Convert page numbers from TOC
         if "event" in toc:
             end = toc.get("optime", toc.get("data", total))
@@ -271,10 +280,13 @@ def convert_pdf(pdf_path, output_dir, code, year, month,
 
             sections = find_sections(pdf)
 
-            # Determine PDF type from filename
+            # Determine PDF type from filename — but a PDF whose pages hold
+            # two or more sections is a full report whatever it is called
+            # ("[KQD] BWTS LOG DATA (2025-MAR).pdf" is a TotalLog, not a DataLog)
             name_upper = pdf_path.name.upper()
+            found = sum(1 for v in sections.values() if v and v[0] is not None)
             is_total = "TOTAL" in name_upper or \
-                "REPORT" in name_upper
+                "REPORT" in name_upper or found >= 2
             is_data = "DATA" in name_upper
             is_event = "EVENT" in name_upper
             is_optime = "OPERATION" in name_upper or \

@@ -175,6 +175,10 @@ def get_csv_files(folder: Path,
     for f in folder.iterdir():
         if f.suffix.upper() != ".CSV":
             continue
+        # quarantined by ensure_csv_from_pdf (wrong header) or renamed
+        # old-bug output (_oldbug_*.bak) — never treat as input
+        if f.name.lower().endswith(".bad.csv") or f.name.startswith("_oldbug_"):
+            continue
         upper = f.name.upper()
 
         # Handle null-named files by checking content
