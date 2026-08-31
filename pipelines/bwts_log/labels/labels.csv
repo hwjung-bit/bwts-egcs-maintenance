@@ -1,1 +1,9 @@
 date,ship_code,period,grade_rule,grade_auto,final_grade,source,note
+2026-08-31,KNB,2025-01,미운전,판독실패,미운전,claude,"TotalLog PDF OpTime 표 0행(헤더만 변환), DataLog 0행, 알람 5건은 운전 무관. 직전 6개월 운전 이력 때문에 I6 플래그 — 진짜 미운전."
+2026-08-31,KQD,2025-03,미운전,판독실패,미운전,claude,"폴더명 ""KQD 사용기록없음""(본선 메모). PDF 4쪽: OpTime 표 0행, DataLog 0행, EventLog 20행. 진짜 미운전."
+2026-08-31,KSL,2025-05,미운전,판독실패,미운전,claude,"알파라발 Tabular Export 17행: 운전 코드(E10/E210/E220) 없음, 하우스키핑 이벤트 4건, E104 하트비트 3일 → export가 달을 덮음. 진짜 미운전."
+2026-08-31,KMB,2025-12,미운전,판독실패,미운전,claude,"알파라발 E/IE 파일 12월 이벤트 26건 중 운전 코드 없음, E640 유량>0 행 0. 진짜 미운전 (BWRB PDF 대조는 미실시)."
+2026-08-31,KTJ,2026-01,미운전,판독실패,미운전,claude,"OpTime PDF 표 0행, DataLog 0행. 통신 트립(CODE701/703)은 운전 무관. 진짜 미운전."
+2026-08-31,KNB,2026-01,미운전,판독실패,미운전,claude,"OPERATIONTIMELOG 헤더만, DATALOG 헤더만, zip 안엔 같은 PDF 2개. 진짜 미운전."
+2026-08-31,KNB,2026-02,미운전,판독실패,미운전,claude,"OpTime 표 0행(PDF 변환), DataLog 0행, 알람 3건 운전 무관. 진짜 미운전."
+2026-08-31,KCN,2026-03,미운전,판독실패,데이터불량,claude,"EventLog만 수신(CSV 1.5MB·PDF 7.8MB, 운전 키워드 다수) — OpTime·DataLog 미수신. 운전은 했으나 판정 불가. 본선에 Operation Time/Data Log 재전송 요청."
