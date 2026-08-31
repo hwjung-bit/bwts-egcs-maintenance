@@ -6,3 +6,8 @@ sa_*.json
 credentials*.json
 .env
 .env.*
+
+# BWTS log analysis pipeline
+pipelines/bwts_log/cache/
+pipelines/bwts_log/out/
+.pytest_cache/

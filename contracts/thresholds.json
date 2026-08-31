@@ -1,0 +1,55 @@
+{
+  "_doc": "판정 임계값의 단일 출처. 프론트(js/shared/thresholds.js), 알림(scripts/weekly_cal_alert.py), 분석(pipelines/bwts_log)이 전부 이 파일을 읽는다. 값을 바꾸면 세 곳이 동시에 바뀐다.",
+  "version": "2026-09-01",
+
+  "bwts_calibration": {
+    "interval_months": 12,
+    "soon_days": 60,
+    "_doc": "BWTS TRO 센서 검교정. days<=0 만료, <=soon_days 임박"
+  },
+
+  "egcs_calibration": {
+    "soon_days": 30,
+    "sensor_cycle_months": {
+      "enviroFlu": {"cal": 48, "repl": 96},
+      "TTurb":     {"cal": 48, "repl": 96},
+      "TpH-D":     {"cal": 24, "repl": 24},
+      "G6110":     {"cal": 24, "repl": 48},
+      "G6111":     {"cal": 36, "repl": 36},
+      "G6120":     {"cal": null, "repl": 60},
+      "G6130":     {"cal": 12, "repl": 12}
+    },
+    "_doc": "WMS 센서 모델별 검교정(cal)/신환(repl) 주기. WMS 매뉴얼 2026.06.18. cal null = 검교정 없음(신환만)"
+  },
+
+  "bwts_log": {
+    "tro_ballast_min_ppm": 5.0,
+    "tro_ballast_max_ppm": 10.0,
+    "tro_ballast_relaxed_max_ppm": 12.0,
+    "tro_ballast_relaxed_ratio": 0.5,
+    "tro_ballast_relaxed_min_rows": 10,
+    "tro_deballast_max_ppm": 0.1,
+    "tro_deballast_month_avg_max_ppm": 0.2,
+    "tro_appear_threshold_ppm": 0.1,
+    "warmup_rows": 5,
+    "session_gap_minutes": 10,
+    "trip_check_needed": 3,
+    "chatter_interval_sec": 30,
+    "chatter_min_burst_events": 6,
+    "recovery_split_day": 15,
+    "_doc": "fleet_summary.compute_grade / fleet_log_analyzer 의 상수. 로컬버전 CLAUDE.md 의 TRO 판정 기준과 동일"
+  },
+
+  "integrity": {
+    "csv_min_bytes_for_content": 20480,
+    "history_months": 6,
+    "history_min_operating_months": 5,
+    "eventlog_grep_pattern": "BALLAST|DEBALLAST|START|STOP",
+    "_doc": "판독실패(검토필요) 판정. I3 파일크기, I4 원문 grep, I6 이력 대비"
+  },
+
+  "mail": {
+    "stale_days": 3,
+    "load_limit": 2000
+  }
+}

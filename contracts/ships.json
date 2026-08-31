@@ -1,0 +1,26 @@
+{
+  "_doc": "21척 선박 마스터의 단일 출처. Supabase ships 테이블이 운영 정본이고, 이 파일은 파이프라인·수집기가 DB 없이도 코드↔선명↔폴더번호를 알 수 있게 하는 사본이다. number = G드라이브 BWTS LOG DATA 선박 폴더 접두 번호. bwts = techcross | alfa_laval | erma_first. log_format = A(TRO_B1/D1) | B(TSU1_BP1/BP3 공용센서) | KSZ(TSU1+TSU2) | AL | EF",
+  "ships": [
+    {"number": "01", "code": "KPS", "name": "KMTC PUSAN",       "bwts": "techcross",  "log_format": "A"},
+    {"number": "02", "code": "KUS", "name": "KMTC ULSAN",       "bwts": "techcross",  "log_format": "A"},
+    {"number": "03", "code": "KKL", "name": "KMTC KEELUNG",     "bwts": "techcross",  "log_format": "B"},
+    {"number": "04", "code": "KSG", "name": "KMTC SINGAPORE",   "bwts": "techcross",  "log_format": "B"},
+    {"number": "05", "code": "KJT", "name": "KMTC JAKARTA",     "bwts": "techcross",  "log_format": "A"},
+    {"number": "06", "code": "KSH", "name": "KMTC SHANGHAI",    "bwts": "techcross",  "log_format": "B"},
+    {"number": "07", "code": "KQD", "name": "KMTC QINGDAO",     "bwts": "techcross",  "log_format": "B"},
+    {"number": "08", "code": "KTJ", "name": "KMTC TIANJIN",     "bwts": "techcross",  "log_format": "B"},
+    {"number": "09", "code": "KHM", "name": "KMTC HOCHIMINH",   "bwts": "techcross",  "log_format": "B"},
+    {"number": "10", "code": "KNB", "name": "KMTC NINGBO",      "bwts": "techcross",  "log_format": "B"},
+    {"number": "11", "code": "KSZ", "name": "KMTC SHENZHEN",    "bwts": "techcross",  "log_format": "KSZ"},
+    {"number": "12", "code": "KMB", "name": "KMTC MUMBAI",      "bwts": "alfa_laval", "log_format": "AL"},
+    {"number": "13", "code": "KDB", "name": "KMTC DUBAI",       "bwts": "alfa_laval", "log_format": "AL"},
+    {"number": "14", "code": "KCN", "name": "KMTC CHENNAI",     "bwts": "techcross",  "log_format": "A"},
+    {"number": "15", "code": "KJA", "name": "KMTC JEBELALI",    "bwts": "techcross",  "log_format": "A"},
+    {"number": "16", "code": "KNH", "name": "KMTC NHAVASHEVA",  "bwts": "techcross",  "log_format": "A"},
+    {"number": "17", "code": "KMN", "name": "KMTC MANILA",      "bwts": "techcross",  "log_format": "A"},
+    {"number": "18", "code": "KMU", "name": "KMTC MUNDRA",      "bwts": "techcross",  "log_format": "A"},
+    {"number": "19", "code": "KCB", "name": "KMTC COLOMBO",     "bwts": "techcross",  "log_format": "A"},
+    {"number": "20", "code": "KSL", "name": "KMTC SEOUL",       "bwts": "alfa_laval", "log_format": "AL"},
+    {"number": "21", "code": "KDE", "name": "KMTC DELHI",       "bwts": "erma_first", "log_format": "EF"}
+  ]
+}
