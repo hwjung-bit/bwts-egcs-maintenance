@@ -82,7 +82,8 @@ def main():
     print(f"BWTS log pipeline  {sy}-{sm:02d} ~ {ey}-{em:02d}  ({len(VESSELS)}척)  {ANALYZER_VERSION}")
     matrix = build_fleet_matrix(sy, sm, ey, em, verbose=args.verbose)
     rows = [s for key in sorted(matrix) for s in matrix[key]]
-    before = Counter(s["grade"] for s in rows)
+    # cached months already carry the integrity re-grade; report the rule grade
+    before = Counter(s.get("grade_rule") or s["grade"] for s in rows)
 
     regraded = 0
     if not args.no_integrity:
