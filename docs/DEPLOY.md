@@ -75,6 +75,15 @@ curl -s "https://ivsjskywdtsnoxhnozcd.supabase.co/rest/v1/mail_log?select=id&lim
   지운다 → **폴더 요청 영구 유실**
 - 014 없이 올리면 `status='cancelled'` UPDATE 가 정책 부재로 조용히 0행
 
+**Pages 반영 후에도 브라우저가 옛 index.html 을 계속 쓴다.** 확인할 때는
+`?v=<날짜>` 를 붙이거나 하드 리로드할 것. 이걸 몰라서 "고쳤는데 여전히 안 된다"로
+한참 헤맸다. 서버 반영 여부는 아래로 확인:
+
+```bash
+curl -s "https://hwjung-bit.github.io/bwts-egcs-maintenance/index.html" \
+  | grep -c "input.blur()"
+```
+
 배포 후 로그인해서 확인:
 
 - 각 탭이 정상 로드되는지 (실패 시 이제 실패 토스트가 뜬다)
