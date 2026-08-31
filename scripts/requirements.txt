@@ -1,3 +1,10 @@
-google-api-python-client
-google-auth
-supabase
+# 2026-08-31 성공한 실행에서 확인된 버전으로 고정.
+# 버전을 열어두면 메이저 업 때 조용히 깨지는데, 하필 weekly-cal-alert 가
+# 알림 담당이라 깨진 사실 자체가 통보되지 않는다.
+# ~= 는 패치 업데이트만 허용한다 (2.31.0 → 2.31.x).
+google-api-python-client~=2.199.0
+google-auth~=2.57.0
+supabase~=2.31.0
+
+# make_token.py 전용 (로컬에서만 실행, CI 에서는 불필요)
+# google-auth-oauthlib

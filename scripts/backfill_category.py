@@ -47,7 +47,8 @@ def backfill():
         ).or_(
             "body_preview.is.null,"
             "body_preview.eq."
-        ).range(offset, offset + batch - 1).execute()
+        ).order("id").range(
+            offset, offset + batch - 1).execute()
         rows.extend(resp.data)
         if len(resp.data) < batch:
             break
@@ -86,8 +87,11 @@ def backfill():
         # Also re-detect ship from body if missing
         patch = {
             "body_preview": body_preview,
-            "category": category,
         }
+        # An empty auto-detection must not wipe a hand-classified
+        # category.
+        if category:
+            patch["category"] = category
 
         try:
             sb.table("mail_log").update(
@@ -105,6 +109,13 @@ def backfill():
 
     log.info("=== Backfill done: %d updated, %d failed "
              "out of %d ===", updated, failed, len(rows))
+
+    # A dead Gmail token used to look like a clean run — anything
+    # over a fifth failing is a broken run, not stray deletions.
+    if failed > len(rows) * 0.2:
+        log.error("실패율 %.0f%% (%d/%d) — 실패로 종료",
+                  failed * 100.0 / len(rows), failed, len(rows))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ GitHub Actions에서 실행. 환경변수:
 
 import json, os, re, sys, logging
 
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from google.auth.transport.requests import Request
@@ -92,9 +93,18 @@ def get_creds():
         # makes Google reject the refresh with invalid_scope.
         scopes=(token_data.get("scopes") or SCOPES),
     )
-    if creds.expired or not creds.valid:
+    # The stored token may carry no expiry, which makes creds.valid
+    # report True forever — refresh unconditionally instead.
+    try:
         creds.refresh(Request())
         log.info("Token refreshed")
+    except RefreshError as e:
+        log.error("TOKEN EXPIRED — DRIVE_TOKEN_JSON/GMAIL_TOKEN_JSON "
+                  "재발급 필요 (scripts/make_token.py): %s", e)
+        sys.exit(1)
+    except Exception as e:
+        log.error("Token refresh failed: %s", e)
+        sys.exit(1)
     return creds
 
 
@@ -155,9 +165,16 @@ def index_drive(dry_run=False):
             if not code:
                 log.info("Skip (no ship code): %s", sf["name"])
                 continue
-            scanned_ships.append((code, system))
 
             children = list_child_folders(svc, sf["id"])
+            # Only a listing that actually returned something proves
+            # the ship was scanned — an empty one (permissions, a
+            # transient error) would delete that ship's whole index.
+            if not children:
+                log.warning("Empty listing, skipping stale cleanup: "
+                            "%s %s", code, system)
+            else:
+                scanned_ships.append((code, system))
             for c in children:
                 fdate, title = parse_folder(c["name"])
                 rows.append({

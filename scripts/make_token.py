@@ -16,6 +16,10 @@ Drive 폴더 색인(drive_index.py)은 drive.readonly 스코프가 필요하다.
 출력 JSON은 collector / indexer가 모두 읽는 형식이다.
 """
 
+# ⚠ 이 스크립트는 refresh_token과 client_secret을 stdout으로
+#   그대로 출력한다. 로컬 PC에서만 실행할 것 — CI(GitHub Actions
+#   포함)에서는 절대 실행하지 말 것 (로그에 자격증명이 남는다).
+
 import json, sys
 
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -42,6 +46,12 @@ def main():
         "client_secret": creds.client_secret,
         "scopes": list(creds.scopes or SCOPES),
     }
+    # creds.expiry is naive UTC — emit ISO-8601 with a Z suffix so
+    # Credentials can parse it back. Without this the collector sees
+    # creds.valid == True forever and never refreshes.
+    if creds.expiry:
+        out["expiry"] = (creds.expiry.replace(microsecond=0)
+                         .isoformat() + "Z")
     print()
     print(json.dumps(out, ensure_ascii=False))
 

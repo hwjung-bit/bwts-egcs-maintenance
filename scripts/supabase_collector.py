@@ -10,8 +10,9 @@ GitHub Actions에서 실행. 환경변수:
 """
 
 import base64, json, os, re, sys, logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 # ── Config ─────────────────────────────────────
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 SCAN_DAYS = 90
+KST = timezone(timedelta(hours=9))
 
 DOMAIN_SYSTEM = {
     "techcross.com": "BWTS",
@@ -325,9 +327,18 @@ def get_gmail_creds():
                        or client_secret),
         scopes=SCOPES,
     )
-    if creds.expired or not creds.valid:
+    # The stored token may carry no expiry, which makes creds.valid
+    # report True forever — refresh unconditionally instead.
+    try:
         creds.refresh(Request())
         log.info("Token refreshed")
+    except RefreshError as e:
+        log.error("TOKEN EXPIRED — GMAIL_TOKEN_JSON 재발급 필요 "
+                  "(scripts/make_token.py): %s", e)
+        sys.exit(1)
+    except Exception as e:
+        log.error("Token refresh failed: %s", e)
+        sys.exit(1)
     return creds
 
 
@@ -344,7 +355,14 @@ def build_query():
     return f"({sender_q}) after:{after} -from:ekmtc.com"
 
 
-def fetch_messages(gmail, query, max_results=500):
+# 90일 롤링 윈도우라 캡 도달은 "사건"이 아니라 물량 조건이다. 500 은 실제
+# 물량(2026-08 기준 약 400건)에 너무 가까워서, 넘는 순간부터 2시간마다
+# 영구 오탐 알림이 나간다. 어떤 정상 물량으로도 닿지 않는 값으로 올려서
+# 캡 도달이 실제로 "쿼리가 깨졌다"는 신호가 되게 한다.
+FETCH_MAX = 5000
+
+
+def fetch_messages(gmail, query, max_results=FETCH_MAX):
     messages = []
     resp = gmail.users().messages().list(
         userId="me", q=query,
@@ -382,7 +400,9 @@ def parse_message(gmail, msg_stub):
     date_fmt = ""
     try:
         ts = int(msg.get("internalDate", 0)) / 1000
-        date_fmt = datetime.fromtimestamp(ts).strftime(
+        # Runner clock is UTC — date the mail in KST, not the
+        # runner's local day.
+        date_fmt = datetime.fromtimestamp(ts, KST).strftime(
             "%Y-%m-%d")
     except Exception:
         pass
@@ -421,7 +441,9 @@ def parse_message(gmail, msg_stub):
         "date": date_fmt,
         "system": system,
         "source": source,
-        "ship_code": ship,
+        # 선박 미상은 빈 문자열이 아니라 NULL 이다. '' 는 ships.code 에
+        # 없는 값이라 015 의 외래키가 거부한다.
+        "ship_code": ship or None,
         "ship_name": SHIP_MAP.get(ship, ""),
         "keyword": keywords,
         "category": category,
@@ -435,6 +457,7 @@ def parse_message(gmail, msg_stub):
         "reply_count": 0,
         "last_reply": None,
         "thread_body": [{
+            "i": msg_id,
             "d": date_fmt,
             "f": from_addr,
             "p": body_preview,
@@ -455,16 +478,26 @@ def collect():
 
     sb = create_client(supa_url, supa_key)
 
-    # Get existing IDs from Supabase
-    existing = sb.table("mail_log").select(
-        "id,thread_id").execute()
+    # Get existing IDs from Supabase — page through, PostgREST caps
+    # a single read at 1000 rows and a truncated read would make
+    # existing rows look new (the upsert then wipes note/status).
     saved_ids = set()
     thread_map = {}  # thread_id → first row id
-    for row in existing.data:
-        saved_ids.add(row["id"])
-        tid = row.get("thread_id", "")
-        if tid and tid not in thread_map:
-            thread_map[tid] = row["id"]
+    page_size = 1000
+    offset = 0
+    while True:
+        existing = sb.table("mail_log").select(
+            "id,thread_id").order("id").range(
+                offset, offset + page_size - 1).execute()
+        page = existing.data or []
+        for row in page:
+            saved_ids.add(row["id"])
+            tid = row.get("thread_id", "")
+            if tid and tid not in thread_map:
+                thread_map[tid] = row["id"]
+        if len(page) < page_size:
+            break
+        offset += page_size
 
     log.info("Existing: %d mails, %d threads",
              len(saved_ids), len(thread_map))
@@ -476,6 +509,17 @@ def collect():
     log.info("Query: %s", query[:80])
     msg_stubs = fetch_messages(gmail, query)
     log.info("Found: %d messages", len(msg_stubs))
+
+    if not msg_stubs:
+        log.error("0 messages matched — query broken or Gmail "
+                  "access lost")
+        sys.exit(1)
+
+    failures = 0
+    if len(msg_stubs) >= FETCH_MAX:
+        log.warning("Hit the %d-message cap — older mail was "
+                    "silently dropped", FETCH_MAX)
+        failures += 1
 
     new_rows = []
     reply_updates = []
@@ -520,14 +564,23 @@ def collect():
         saved_ids.add(msg_id)
 
     # Insert new rows
+    inserted = 0
     if new_rows:
         batch_size = 500
         for i in range(0, len(new_rows), batch_size):
             batch = new_rows[i:i + batch_size]
-            sb.table("mail_log").upsert(batch).execute()
-        log.info("Inserted %d new mails", len(new_rows))
+            try:
+                sb.table("mail_log").upsert(batch).execute()
+                inserted += len(batch)
+            except Exception as e:
+                log.error("Insert batch %d-%d failed: %s",
+                          i, i + len(batch), e)
+                failures += 1
+        log.info("Inserted %d/%d new mails",
+                 inserted, len(new_rows))
 
     # Fold replies into the thread's row
+    replies_applied = 0
     for u in reply_updates:
         p = u["parsed"]
         try:
@@ -539,17 +592,31 @@ def collect():
             body = d.get("thread_body") or []
 
             entry = {
+                "i": p["id"],
                 "d": p["date"],
                 "f": p["sender"],
                 "p": p["body_preview"],
             }
-            if entry not in body:
+            # thread_body is the only persisted record of which
+            # replies were already folded in — skip the ones that
+            # are already there instead of counting them again.
+            seen_ids = {x.get("i") for x in body if x.get("i")}
+            if p["id"] in seen_ids:
+                continue
+            # Rows written before this key existed carry no "i" —
+            # fall back to the content triple for those.
+            seen_content = {(x.get("d"), x.get("f"), x.get("p"))
+                            for x in body}
+            if (entry["d"], entry["f"],
+                    entry["p"]) not in seen_content:
                 body.append(entry)
             body.sort(key=lambda x: x.get("d") or "",
                       reverse=True)
 
             patch = {
-                "reply_count": int(d.get("reply_count") or 0) + 1,
+                # Derived, not incremented — a re-run cannot inflate
+                # it. The first entry is the original mail.
+                "reply_count": max(len(body) - 1, 0),
                 "last_reply": max(p["date"], cur_date),
                 "thread_body": body,
             }
@@ -570,19 +637,40 @@ def collect():
 
             sb.table("mail_log").update(
                 patch).eq("id", u["orig_id"]).execute()
+            replies_applied += 1
         except Exception as e:
-            log.warning("Reply update failed: %s", e)
+            log.error("Reply update failed (%s): %s",
+                      u["orig_id"], e)
+            failures += 1
 
-    log.info("=== Done: new %d, replies %d ===",
-             len(new_rows), len(reply_updates))
+    log.info("=== Done: new %d/%d, replies %d/%d, failures %d ===",
+             inserted, len(new_rows),
+             replies_applied, len(reply_updates), failures)
+
+    # 하트비트: 성공한 실행 시각을 남긴다.
+    # "새 메일 0건"은 밤·주말에 정상이라 신선도 신호로 못 쓴다. 대신
+    # "수집기가 끝까지 돌았는가"를 기록해, 워크플로가 아예 안 돈 경우
+    # (스케줄 60일 자동 비활성화 등)를 heartbeat.py 가 잡을 수 있게 한다.
+    if not failures:
+        try:
+            sb.table("config").upsert({
+                "key": "last_collect_ok",
+                "value": datetime.now(timezone.utc).isoformat(),
+            }).execute()
+        except Exception as e:
+            log.warning("Heartbeat write failed: %s", e)
 
     return {
-        "new": len(new_rows),
-        "replies": len(reply_updates),
+        "new": inserted,
+        "replies": replies_applied,
         "total": len(saved_ids),
+        "failures": failures,
     }
 
 
 if __name__ == "__main__":
     result = collect()
     print(json.dumps(result, ensure_ascii=False, indent=2))
+    if result["failures"]:
+        log.error("%d failure(s) during collect", result["failures"])
+        sys.exit(1)

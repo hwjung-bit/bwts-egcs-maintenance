@@ -12,11 +12,12 @@ BWTS/EGCS 검교정 만료·임박 항목을 집계하여 HTML 메일 발송.
   ALERT_TO            — 수신자 이메일 (기본: GMAIL_USER)
 """
 
+import calendar
 import logging
 import os
 import smtplib
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from email.mime.text import MIMEText
 
 from supabase import create_client
@@ -47,6 +48,8 @@ SENSOR_CYCLE = {
 }
 EGCS_SOON_DAYS = 30
 
+KST = timezone(timedelta(hours=9))
+
 
 def get_supabase():
     url = os.environ.get("SUPABASE_URL", "")
@@ -62,7 +65,9 @@ def add_months(d, months):
     month = d.month - 1 + months
     year = d.year + month // 12
     month = month % 12 + 1
-    day = min(d.day, 28)
+    # Clamp to the target month's real last day — truncating to 28
+    # would move a 29th–31st due date up to 3 days early.
+    day = min(d.day, calendar.monthrange(year, month)[1])
     return date(year, month, day)
 
 
@@ -128,6 +133,7 @@ def collect_bwts_alerts(calibrations, today):
 def collect_egcs_alerts(calibrations, ships_map, today):
     """EGCS: 검교정/신환 만료(<=0일) + 임박(<=30일)"""
     alerts = []
+    skipped = 0
     for c in calibrations:
         if not c.get("last_date"):
             continue
@@ -138,6 +144,16 @@ def collect_egcs_alerts(calibrations, ships_map, today):
             c.get("model")
         )
         if not sm or sm not in SENSOR_CYCLE:
+            # Blank or re-spelled ships.wms drops the whole ship
+            # from the report — say so instead of going quiet.
+            skipped += 1
+            log.warning(
+                "센서 주기 판별 실패 — 건너뜀: %s / %s "
+                "(ships.wms=%r, model=%r)",
+                c["ship_code"], equip,
+                (ships_map.get(c["ship_code"]) or {}).get("wms"),
+                c.get("model"),
+            )
             continue
         cyc = SENSOR_CYCLE[sm]
 
@@ -183,7 +199,7 @@ def collect_egcs_alerts(calibrations, ships_map, today):
             })
     # Sort by ship, then WMS, then days (for rowspan grouping)
     alerts.sort(key=lambda a: (a["ship"], a.get("wms", ""), a["days"]))
-    return alerts
+    return alerts, skipped
 
 
 def status_text(days):
@@ -204,7 +220,7 @@ def row_bg(level):
     return "#fffbeb"
 
 
-def build_html(bwts_alerts, egcs_alerts):
+def build_html(bwts_alerts, egcs_alerts, egcs_skipped=0):
     """GAS 메일과 동일한 포맷의 HTML 생성."""
     bwts_exp = sum(1 for a in bwts_alerts if a["level"] == "expired")
     bwts_soon = sum(1 for a in bwts_alerts if a["level"] == "soon")
@@ -312,6 +328,13 @@ width:100%">
 <th style="{th}">만료일</th><th style="{th}">상태</th>
 </tr></thead><tbody>{egcs_rows}</tbody></table></div>"""
 
+    skip_html = ""
+    if egcs_skipped:
+        skip_html = f"""
+<p style="color:#b45309;font-size:12px;margin:0 0 12px">\
+⚠ EGCS {egcs_skipped}건은 센서 주기를 판별하지 못해 제외됐습니다 \
+(ships.wms 값 누락 또는 표기 변경). ships 테이블을 확인하세요.</p>"""
+
     html = f"""\
 <div style="font-family:Malgun Gothic,sans-serif;\
 font-size:13px;color:#1f2426">
@@ -321,6 +344,7 @@ font-size:13px;color:#1f2426">
 총 <b>{total}건</b> (만료 {total_exp} · 임박 {total_soon}). \
 기준: BWTS 2개월 이내 · EGCS 30일 이내. \
 주기 출처: WMS 센서 매뉴얼(2026.06.18).</p>
+{skip_html}
 {bwts_html}
 {egcs_html}
 <p style="color:#94a3b8;font-size:11.5px;margin-top:10px;\
@@ -341,30 +365,55 @@ def send_email(to, subject, html_body):
     msg["From"] = GMAIL_USER
     msg["To"] = to
     msg["Subject"] = subject
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as srv:
-        srv.login(GMAIL_USER, GMAIL_APP_PW)
-        srv.send_message(msg)
+    # A hung SMTP socket used to stall the job forever — bound it
+    # and give the send one retry.
+    for attempt in (1, 2):
+        try:
+            with smtplib.SMTP_SSL(
+                "smtp.gmail.com", 465, timeout=30
+            ) as srv:
+                srv.login(GMAIL_USER, GMAIL_APP_PW)
+                srv.send_message(msg)
+            break
+        except Exception as e:
+            if attempt == 2:
+                log.error("SMTP send failed: %s", e)
+                sys.exit(1)
+            log.warning("SMTP send failed (retrying): %s", e)
     log.info("Email sent via SMTP to %s", to)
 
 
+def fetch_all(sb, table, eq=None):
+    """Page through a table — a single read caps at 1000 rows."""
+    rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        # ORDER BY 없는 range 는 페이지 경계에서 행이 중복·누락될 수 있다.
+        q = sb.table(table).select("*").order("id")
+        if eq:
+            q = q.eq(eq[0], eq[1])
+        res = q.range(offset, offset + page_size - 1).execute()
+        page = res.data or []
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return rows
+
+
 def main():
-    today = date.today()
+    # Runner clock is UTC — the Monday 08:00 KST run would otherwise
+    # compute against Sunday.
+    today = datetime.now(KST).date()
     log.info("Weekly calibration alert — %s", today)
 
     sb = get_supabase()
 
     # Fetch data
-    bwts_res = sb.table("calibrations").select("*").eq(
-        "system", "BWTS"
-    ).execute()
-    egcs_res = sb.table("calibrations").select("*").eq(
-        "system", "EGCS"
-    ).execute()
-    ships_res = sb.table("ships").select("*").execute()
-
-    bwts_cal = bwts_res.data or []
-    egcs_cal = egcs_res.data or []
-    ships = ships_res.data or []
+    bwts_cal = fetch_all(sb, "calibrations", ("system", "BWTS"))
+    egcs_cal = fetch_all(sb, "calibrations", ("system", "EGCS"))
+    ships = fetch_all(sb, "ships")
     ships_map = {s["code"]: s for s in ships}
 
     log.info(
@@ -372,9 +421,16 @@ def main():
         len(bwts_cal), len(egcs_cal), len(ships),
     )
 
+    # An empty read means an expired key / RLS / table error, not
+    # "nothing due" — fail loudly instead of reporting success.
+    if not bwts_cal and not egcs_cal:
+        log.error("calibrations 조회 결과 0건 — 키 만료·RLS·테이블 "
+                  "오류 의심")
+        sys.exit(1)
+
     # Collect alerts
     bwts_alerts = collect_bwts_alerts(bwts_cal, today)
-    egcs_alerts = collect_egcs_alerts(
+    egcs_alerts, egcs_skipped = collect_egcs_alerts(
         egcs_cal, ships_map, today
     )
 
@@ -389,7 +445,7 @@ def main():
     )
 
     html, total, bwts_cnt, egcs_cnt = build_html(
-        bwts_alerts, egcs_alerts
+        bwts_alerts, egcs_alerts, egcs_skipped
     )
     subject = (
         f"[검교정] 주간 만료·임박 {total}건 "
