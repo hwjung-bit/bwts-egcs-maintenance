@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="Supabase 쓰기 생략")
     ap.add_argument("--no-integrity", action="store_true", help="판독실패 검사 생략")
     ap.add_argument("--html", action="store_true", help="레거시 HTML 도 생성 (out/)")
+    ap.add_argument("--no-export", action="store_true", help="공무팀 계약 JSON 내보내기 생략")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -116,6 +117,15 @@ def main():
         return 0
     n = publish(rows, verbose=args.verbose)
     print(f"\nSupabase bwts_log_analysis upsert {n}건 완료")
+    if not args.no_export:
+        try:
+            import export_contract
+            sb = export_contract.get_client()
+            export_contract.sync_thresholds(sb)
+            out = export_contract.export(sb, verbose=args.verbose)
+            print(f"공무팀 계약 JSON → {out}")
+        except Exception as e:   # export is secondary — never fail the publish
+            print(f"[경고] 계약 JSON 내보내기 실패: {e}")
     return 0
 
 

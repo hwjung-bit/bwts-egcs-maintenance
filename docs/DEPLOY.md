@@ -166,3 +166,29 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 
 `scripts/make_token.py` 는 refresh token 과 client secret 을 stdout 으로
 출력한다. CI 에서 실행하지 말 것.
+
+---
+
+## V3 (2026-09-01) — 모듈 구조 이후
+
+구조 설명은 `docs/ARCHITECTURE.md`. 여기는 배포 절차만.
+
+### 프론트 배포
+1. 코드 수정 → `node --check js/**/*.js`
+2. `index.html` 의 `?v=YYYYMMDDx` **두 곳**(css, app.js)과 `version.json` 을 같은 값으로 올린다.
+3. `git push origin main` → 1~2분 후 Pages 반영. 기존 탭이 열려 있으면 상단 "새 버전" 배너가 뜬다.
+4. 로컬 사전 검증: `python -m http.server 8787` → `http://127.0.0.1:8787/#<탭>` (로그인 없이 UI 확인은
+   크롬 콘솔에서 `import('/js/core/state.js')` 로 `S` 채우고 `router.switchTab()` — 모듈 경로에 `?v=` 붙이지 말 것).
+
+### SQL (Supabase SQL Editor, 순서대로 1회)
+`017_ships_sort_hidden` → `018_bwts_log_analysis` → `019_bwts_reviews` → `020_env_views` → `021_env_readonly`.
+013~016 재실행 금지 규칙은 그대로. 017~021 은 전부 재실행 가능.
+
+### 파이프라인 (로컬 PC)
+- 사용자 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service_role, anon 아님).
+- 월간: `pipelines\bwts_log\BWTS_monthly_update.bat` (= `python run.py -v`). 백필: 인자 `2024-2026`.
+- 결과 확인: 웹 🧪 BWTS 로그 탭, 🏠 종합 탭. 계약 JSON: `G:\...\공무팀 AI\AI 대쉬보드 (공무팀)\환경\data\`.
+- 재검토: Claude Code 에서 `/bwts-review`.
+
+### 이원우님(공무팀 Dash)에게 전달할 것
+`contracts/env_summary.schema.md` 한 장. Dash 는 G드라이브 JSON 만 읽으면 된다.

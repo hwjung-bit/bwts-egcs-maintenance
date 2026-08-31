@@ -12,6 +12,7 @@ import { S } from './state.js';
 
 // Tab bar order. Adding a tab = one line here + one file in js/tabs/.
 export const TABS = [
+  { id: 'home',    label: '🏠 종합' },
   { id: 'mail',    label: '📧 메일대장' },
   { id: 'repairs', label: '🔧 수리이력' },
   { id: 'status',  label: '📊 현황' },
@@ -35,7 +36,7 @@ export function initRouter(version) {
   });
   document.addEventListener('data:loaded', () => refresh());
   const first = (location.hash || '').replace('#', '');
-  switchTab(TABS.some(t => t.id === first) ? first : 'mail');
+  switchTab(TABS.some(t => t.id === first) ? first : 'home');
 }
 
 async function loadModule(id) {

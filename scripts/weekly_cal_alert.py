@@ -32,21 +32,17 @@ GMAIL_USER = os.environ.get("GMAIL_USER", "hwjung@ekmtc.com")
 GMAIL_APP_PW = os.environ.get("GMAIL_APP_PASSWORD", "")
 ALERT_TO = os.environ.get("ALERT_TO", "") or GMAIL_USER
 
-# BWTS: 12개월 주기, 만료=0일 이내, 임박=60일 이내
-BWTS_INTERVAL = 12
-BWTS_SOON_DAYS = 60
-
-# EGCS sensor cycle (months) — from WMS manual 2026.06.18
-SENSOR_CYCLE = {
-    "enviroFlu": {"cal": 48, "repl": 96},
-    "TTurb":     {"cal": 48, "repl": 96},
-    "TpH-D":    {"cal": 24, "repl": 24},
-    "G6110":    {"cal": 24, "repl": 48},
-    "G6111":    {"cal": 36, "repl": 36},
-    "G6120":    {"cal": None, "repl": 60},
-    "G6130":    {"cal": 12, "repl": 12},
-}
-EGCS_SOON_DAYS = 30
+# Thresholds — single source contracts/thresholds.json (shared with the web
+# app and pipelines/bwts_log). Hardcoding them here again is how the screen
+# and this alert drifted apart before.
+import json
+from pathlib import Path
+_TH = json.load(open(Path(__file__).resolve().parents[1] / "contracts" / "thresholds.json",
+                     encoding="utf-8"))
+BWTS_INTERVAL = _TH["bwts_calibration"]["interval_months"]
+BWTS_SOON_DAYS = _TH["bwts_calibration"]["soon_days"]
+SENSOR_CYCLE = _TH["egcs_calibration"]["sensor_cycle_months"]   # {model: {cal, repl}}
+EGCS_SOON_DAYS = _TH["egcs_calibration"]["soon_days"]
 
 KST = timezone(timedelta(hours=9))
 
