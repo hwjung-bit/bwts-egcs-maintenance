@@ -295,27 +295,22 @@ var USER = null;
 var MAIL = [], REPAIRS = [], BWTS_CAL = [], EGCS_CAL = [], SHIPS = [];
 var DRIVE_FOLDERS = [];
 var TAB = 'mail';
-var FILTER = { sys: '', ship: '', status: '', q: '' };
+/* mail_log 는 최근 건만 읽는다 — 정확히 이 수만큼 오면 잘린 목록이다 */
+var MAIL_LIMIT = 2000;
 var STATUS_LIST = ['미확인','확인','수리준비중','자재준비중',
                    '방선예정','완료'];
+/* 단계 카드 색 — 키는 STATUS_LIST 에서만 만들어 목록과 어긋나지 않게 한다 */
+var STATUS_COLOR = (function() {
+  var byName = {'미확인':'amber','확인':'blue','완료':'teal'};
+  var out = {};
+  STATUS_LIST.forEach(function(s) { out[s] = byName[s] || ''; });
+  return out;
+})();
 /* 접수 경로 — 메일로 안 들어온 건을 어디서 받았는지 */
 var ORIGIN_LIST = ['카톡','전화','구두','방선','기타'];
 var ORIGIN_ICON = {'카톡':'💬','전화':'☎','구두':'🗣','방선':'🚢','기타':'📝'};
 
 /* ===== Init ===== */
-function init() {
-  sb = supabase.createClient(SUPA_URL, SUPA_ANON);
-  sb.auth.getSession().then(function(res) {
-    if (res.data.session) onLogin(res.data.session);
-    else document.getElementById('tbody').innerHTML =
-      '<tr><td colspan="12" class="loading">로그인 후 데이터를 볼 수 있습니다</td></tr>';
-  });
-  sb.auth.onAuthStateChange(function(event, session) {
-    if (event === 'SIGNED_IN' && session) onLogin(session);
-    if (event === 'SIGNED_OUT') onLogout();
-  });
-}
-
 function login() {
   sb.auth.signInWithOAuth({
     provider: 'google',
@@ -337,37 +332,44 @@ function onLogin(session) {
   document.getElementById('collectBtn').style.display = '';
   loadData();
 }
-function onLogout() {
-  USER = null;
-  document.getElementById('userInfo').style.display = 'none';
-  document.getElementById('loginBtn').style.display = '';
-  document.getElementById('logoutBtn').style.display = 'none';
-  MAIL = []; renderMail();
-}
-
 /* ===== Data Loading ===== */
+/* 비로그인 상태. RLS 는 인증된 @ekmtc.com 만 읽게 하는데, 권한 없는 읽기는
+   에러가 아니라 HTTP 200 + 빈 배열로 돌아온다. 그대로 조회하면 아무것도 없는
+   화면에 "데이터 로드 완료 (0건)" 토스트만 떠서 장애로 보이지 않는다. */
+function showLoginRequired() {
+  document.getElementById('userInfo').textContent = '로그인이 필요합니다';
+  document.getElementById('userInfo').style.display = '';
+  document.getElementById('tbody').innerHTML =
+    '<tr><td colspan="12" class="loading">로그인이 필요합니다 — 우측 상단 [Google 로그인]</td></tr>';
+}
 async function loadData() {
+  if (!USER || USER.email==='guest') {
+    showLoginRequired(); toast('로그인 필요'); return;
+  }
   document.getElementById('tbody').innerHTML =
     '<tr><td colspan="12" class="loading"><span class="spin"></span> 로딩...</td></tr>';
   try {
     var [m, r, bc, ec, s, df] = await Promise.all([
-      sb.from('mail_log').select('*').order('date', {ascending:false}).limit(2000),
+      sb.from('mail_log').select('*').order('date', {ascending:false}).limit(MAIL_LIMIT),
       sb.from('repairs').select('*').order('date', {ascending:false}),
       sb.from('calibrations').select('*').eq('system','BWTS'),
       sb.from('calibrations').select('*').eq('system','EGCS'),
       sb.from('ships').select('*'),
       sb.from('drive_folders').select('*'),
     ]);
-    MAIL = m.data || [];
-    REPAIRS = r.data || [];
-    BWTS_CAL = bc.data || [];
-    EGCS_CAL = ec.data || [];
-    SHIPS = s.data || [];
-    DRIVE_FOLDERS = df.data || [];
+    // 실패한 쿼리는 빈 배열로 덮지 않고 이전 값을 그대로 둔다
+    var failed = [];
+    if (m.error) failed.push('메일대장'); else MAIL = m.data || [];
+    if (r.error) failed.push('수리이력'); else REPAIRS = r.data || [];
+    if (bc.error) failed.push('BWTS 검교정'); else BWTS_CAL = bc.data || [];
+    if (ec.error) failed.push('EGCS 검교정'); else EGCS_CAL = ec.data || [];
+    if (s.error) failed.push('선박'); else SHIPS = s.data || [];
+    if (df.error) failed.push('Drive 폴더'); else DRIVE_FOLDERS = df.data || [];
     buildShipFilter();
     buildRepairShipFilter();
     renderCurrent();
-    toast('데이터 로드 완료 (' + MAIL.length + '건)');
+    if (failed.length) toast('로드 실패: ' + failed.join(', '));
+    else toast('데이터 로드 완료 (' + MAIL.length + '건)');
   } catch(e) {
     toast('로드 실패: ' + e.message);
   }
@@ -443,8 +445,8 @@ function fixStickyHeaders() {
 
 /* ===== Helpers ===== */
 function esc(s) {
-  return String(s==null?'':s).replace(/[&<>"]/g, function(c) {
-    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  return String(s==null?'':s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
   });
 }
 function toast(msg) {
@@ -459,24 +461,26 @@ function fmtDate(d) {
   var x = new Date(d); if (isNaN(x)) return '—';
   return x.getFullYear()+'-'+pad(x.getMonth()+1)+'-'+pad(x.getDate());
 }
-
-/* ===== Ship Chips ===== */
-function buildShipChips() {
-  var counts = {};
-  MAIL.forEach(function(m) {
-    if (m.ship_code) counts[m.ship_code] = (counts[m.ship_code]||0)+1;
-  });
-  var sorted = Object.keys(counts).sort(function(a,b) {
-    return counts[b]-counts[a];
-  });
-  var el = document.getElementById('shipChips');
-  el.innerHTML = '<span style="font-size:11px;color:#64748b;margin-right:8px">선박:</span>' +
-    '<span class="chip'+(FILTER.ship?'':' active')+'" onclick="filterShip(\'\')">전체</span>' +
-    sorted.map(function(c) {
-      return '<span class="chip'+(FILTER.ship===c?' active':'')+
-        '" onclick="filterShip(\''+c+'\')">'+c+' <b>'+counts[c]+'</b></span>';
-    }).join('');
+/* 남은 일수 — 양쪽을 자정으로 맞춰 온전한 하루 단위로 센다.
+   시각까지 빼면 만료 전날 오후에 이미 0 이 되어 하루 일찍 만료로 보인다. */
+function daysUntil(due) {
+  if (!due) return null;
+  var a = new Date(); a.setHours(0,0,0,0);
+  var b = new Date(due); b.setHours(0,0,0,0);
+  return Math.round((b - a) / 86400000);
 }
+/* 모든 쓰기가 지나가는 한 곳.
+   supabase-js 는 실패해도 throw 하지 않고 {error} 를 resolve 하므로
+   try/catch 로는 잡히지 않는다. 결과를 여기서 한 번만 확인한다. */
+async function dbSave(q, okMsg) {
+  if (!USER || USER.email==='guest') { toast('로그인 필요'); return false; }
+  var res = await q;
+  if (res.error) { toast('저장 실패: ' + res.error.message); return false; }
+  if (okMsg) toast(okMsg);
+  return true;
+}
+
+/* ===== Ship Filter ===== */
 function buildShipFilter() {
   var ships = {};
   MAIL.forEach(function(m) { if (m.ship_code) ships[m.ship_code]=1; });
@@ -489,20 +493,13 @@ function buildShipFilter() {
   sel.innerHTML = '<option value="">전체 선박</option>' +
     sorted.map(function(c) { return '<option>'+c+'</option>'; }).join('');
 }
-function filterShip(code) {
-  FILTER.ship = code;
-  document.getElementById('fShip').value = code;
-  buildShipChips();
-  renderMail();
-}
-
 /* ===== Mail Render ===== */
 function renderMail() {
   var f = {
     year: document.getElementById('fYear').value,
     sys: document.getElementById('fSys').value,
     src: document.getElementById('fSrc').value,
-    ship: document.getElementById('fShip').value || FILTER.ship,
+    ship: document.getElementById('fShip').value,
     status: document.getElementById('fStatus').value,
     cat: document.getElementById('fCat').value,
     q: document.getElementById('search').value.toLowerCase()
@@ -537,7 +534,8 @@ function renderMail() {
     var isRepairCandidate = (m.category === '수리요청');
     // Subject with preview tooltip
     var subjText = esc((m.subject||'').slice(0,55))+(m.subject&&m.subject.length>55?'…':'');
-    var subjWrap = m.mail_link
+    // 링크는 http(s) 일 때만 — 데이터에서 온 값이라 javascript: 등은 거른다
+    var subjWrap = /^https?:/.test(m.mail_link||'')
       ? '<a href="'+esc(m.mail_link)+'" target="_blank" title="'+esc(m.subject)+'">'+subjText+'</a>'
       : subjText;
     // Hover text: whole thread when it has more than one mail
@@ -598,6 +596,7 @@ function renderMail() {
     return (now - new Date(m.date+'T00:00:00')) / 86400000 >= STALE_DAYS;
   }).length;
   var cntText = filtered.length + ' / ' + MAIL.length + '건';
+  if (MAIL.length >= MAIL_LIMIT) cntText += ' (최근 '+MAIL_LIMIT+'건만 로드)';
   if (staleCnt > 0) cntText += ' · ⚠️ 미확인 '+staleCnt+'건 (3일+)';
   document.getElementById('cnt').textContent = cntText;
 }
@@ -630,19 +629,17 @@ function hidePreview() {
 async function updateStatus(id, newStatus) {
   var item = MAIL.find(function(m){return m.id===id;});
   if (item) item.status = newStatus;
-  try {
-    await sb.from('mail_log').update({status: newStatus}).eq('id', id);
-    toast(newStatus + ' 저장됨');
-  } catch(e) { toast('저장 실패'); }
+  await dbSave(sb.from('mail_log').update({status: newStatus}).eq('id', id),
+               newStatus + ' 저장됨');
 }
 
 /* ===== Delete Mail ===== */
 async function deleteMail(id) {
   if (!confirm('이 메일을 삭제할까요?')) return;
-  await sb.from('mail_log').delete().eq('id', id);
+  var ok = await dbSave(sb.from('mail_log').delete().eq('id', id), '삭제됨');
+  if (!ok) return;
   MAIL = MAIL.filter(function(x){return x.id!==id;});
   renderMail();
-  toast('삭제됨');
 }
 
 /* ===== Build repair ship filter dropdown ===== */
@@ -669,9 +666,10 @@ async function mailToRepair(mailId) {
   var repairId = 'ML_' + mailId;
   if (REPAIRS.some(function(r){return r.id===repairId;})) {
     // Already in repairs — just delete from mail
-    await sb.from('mail_log').delete().eq('id', mailId);
+    var okDup = await dbSave(sb.from('mail_log').delete().eq('id', mailId),
+                             '이미 수리이력에 있음 — 메일 제거');
+    if (!okDup) return;
     MAIL = MAIL.filter(function(x){return x.id!==mailId;});
-    toast('이미 수리이력에 있음 — 메일 제거');
     renderMail();
     return;
   }
@@ -698,18 +696,16 @@ async function mailToRepair(mailId) {
     needs_review: false,
     source_msg_id: mailId,
   };
-  try {
-    await sb.from('repairs').upsert(newR).select();
-    if (!REPAIRS.some(function(r){return r.id===repairId;})) REPAIRS.unshift(newR);
-    await requestDriveFolder(newR);
-  } catch(e) { toast('수리이력 추가 실패: '+e.message); }
-  // Always remove from mail_log
-  try {
-    await sb.from('mail_log').delete().eq('id', mailId);
-    MAIL = MAIL.filter(function(x){return x.id!==mailId;});
-    renderMail();
-    toast(esc(m.ship_code)+' 수리이력 추가 + 메일 제거');
-  } catch(e2) { toast('메일 제거 실패: '+e2.message); }
+  var ok = await dbSave(sb.from('repairs').upsert(newR).select());
+  if (!ok) return;
+  if (!REPAIRS.some(function(r){return r.id===repairId;})) REPAIRS.unshift(newR);
+  await requestDriveFolder(newR);
+  // 수리이력이 실제로 저장된 뒤에만 메일을 지운다
+  var okDel = await dbSave(sb.from('mail_log').delete().eq('id', mailId),
+                           m.ship_code+' 수리이력 추가 + 메일 제거');
+  if (!okDel) return;
+  MAIL = MAIL.filter(function(x){return x.id!==mailId;});
+  renderMail();
 }
 
 /* ===== Drive folder request =====
@@ -717,7 +713,20 @@ async function mailToRepair(mailId) {
    making it here. Skipped when the index already has a match, and
    repair_id is the primary key, so a row can only queue once. */
 async function requestDriveFolder(r) {
-  if (!r.ship_code || findDriveFolder(r)) return;
+  if (!r.ship_code) return;
+  /* 색인에 이미 있는 폴더면 큐에 넣을 필요는 없다. 다만 그 id 를 이 건에
+     남겨 둬야 한다 — 안 남기면 knownFolderId 가 찾을 곳이 없어, 수리이력을
+     지워도 Drive 폴더는 그대로 남는다. */
+  var hit = findDriveFolder(r);
+  if (hit) {
+    if (hit.id && !r.file_url) {
+      var url = 'https://drive.google.com/drive/folders/' + hit.id;
+      var saved = await dbSave(
+        sb.from('repairs').update({file_url: url}).eq('id', r.id));
+      if (saved) r.file_url = url;
+    }
+    return;
+  }
   var res = await sb.from('folder_requests').upsert({
     repair_id: r.id,
     ship_code: r.ship_code,
@@ -725,6 +734,7 @@ async function requestDriveFolder(r) {
     req_date: r.date || null,
     title: r.symptom || r.email_subject || '',
     status: 'pending',
+    msg_id: r.source_msg_id || null,
   }, {onConflict: 'repair_id', ignoreDuplicates: true});
   if (res.error) toast('폴더 요청 실패: '+res.error.message);
 }
@@ -736,38 +746,6 @@ function goRepairs(shipCode) {
   switchTab('repairs');
   setTimeout(function() { renderRepairs(); }, 50);
   return;
-}
-// Legacy compatibility
-function goRepairsOld(shipCode) {
-  switchTab('repairs');
-  setTimeout(function() {
-    var filtered = REPAIRS.filter(function(r){return r.ship_code===shipCode;});
-    if (!filtered.length) {
-      document.getElementById('repairsRoot').innerHTML =
-        '<div class="loading">'+esc(shipCode)+' 수리이력 없음</div>'+
-        '<div style="text-align:center;margin-top:12px"><button class="refresh-btn" onclick="renderRepairs()">전체 수리이력 보기</button></div>';
-      return;
-    }
-    var rows = filtered.map(function(r) {
-      var stOpts = STATUS_LIST.map(function(s) {
-        return '<option value="'+s+'"'+(r.stage===s?' selected':'')+'>'+s+'</option>';
-      }).join('');
-      var eid = esc(r.id);
-      return '<tr>'+
-        '<td style="white-space:nowrap">'+esc(r.date||'—')+'</td>'+
-        '<td>'+esc(r.ship_code)+'</td>'+
-        '<td><span class="pill pill-'+((r.system||'').toLowerCase()==='bwts'?'bwts':'egcs')+'">'+esc(r.system)+'</span></td>'+
-        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'equip\',this)" title="클릭하여 수정">'+esc(r.equip||'—')+'</td>'+
-        '<td style="padding:4px 6px"><select class="status-select st-'+esc(r.stage)+'" style="padding:3px 18px 3px 6px" onchange="updateRepairField(\''+eid+'\',\'stage\',this.value)">'+stOpts+'</select></td>'+
-        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'symptom\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.symptom||'—')+'</td>'+
-        '<td class="edit-cell" onclick="editRepairField(\''+eid+'\',\'action\',this)" style="max-width:320px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">'+esc(r.action||'—')+'</td>'+
-        '<td style="text-align:center"><button onclick="deleteRepair(\''+eid+'\')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>';
-    }).join('');
-    document.getElementById('repairsRoot').innerHTML =
-      '<div style="margin-bottom:12px"><b>'+esc(shipCode)+'</b> 수리이력 <span style="color:#64748b">('+filtered.length+'건)</span> '+
-      '<button class="refresh-btn" onclick="renderRepairs()" style="margin-left:8px">전체 보기</button></div>'+
-      '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th>증상</th><th>조치</th><th style="width:30px"></th></tr></thead><tbody>'+rows+'</tbody></table>';
-  }, 100);
 }
 
 /* ===== Note Edit ===== */
@@ -788,8 +766,7 @@ function editNote(el, id) {
     el.textContent = val;
     el.style.display = '';
     input.remove();
-    sb.from('mail_log').update({note: val}).eq('id', id)
-      .then(function() { toast('메모 저장됨'); });
+    dbSave(sb.from('mail_log').update({note: val}).eq('id', id), '메모 저장됨');
   }
   input.onblur = save;
   input.onkeydown = function(e) { if (e.key==='Enter') save(); if (e.key==='Escape') { el.style.display=''; input.remove(); } };
@@ -812,8 +789,10 @@ function stCell(code, field, val, memo, disabled) {
   var opts = STATUS_OPTS.map(function(s) {
     return '<option value="'+s+'"'+(val===s?' selected':'')+'>'+s+'</option>';
   }).join('');
+  // 메모 컬럼은 bwts_status → bwts_memo 처럼 _status 를 뗀 이름이다
+  var memoField = field.replace('_status','') + '_memo';
   var memoHtml = '<span class="note-text" onclick="editStatusMemo(this,\''+
-    esc(code)+'\',\''+field+'_memo\')" style="font-size:10px;color:#64748b;cursor:pointer;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">'+
+    esc(code)+'\',\''+memoField+'\')" style="font-size:10px;color:#64748b;cursor:pointer;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">'+
     esc(memo||'')+'</span>';
   return '<td style="padding:2px 4px;'+stColor(val)+';overflow:hidden">'+
     '<div style="display:flex;align-items:center;gap:2px">'+
@@ -910,8 +889,7 @@ function editStatusMemo(el, code, field) {
     el.style.display = '';
     inp.remove();
     var patch = {}; patch[field] = v;
-    sb.from('ships').update(patch).eq('code', code);
-    toast('메모 저장');
+    dbSave(sb.from('ships').update(patch).eq('code', code), '메모 저장');
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
@@ -1134,8 +1112,7 @@ function renderRepairs() {
   document.getElementById('repairStats').innerHTML =
     card('전체',st.total,'','')+card('BWTS',st.BWTS,'blue','')+card('EGCS',st.EGCS,'green','')+
     STATUS_LIST.map(function(s) {
-      var colors = {'미확인':'amber','진행중':'purple','수리견적중':'rose','발주':'','자재준비중':'','수리준비중':'','방선대기':'','확인':'blue','완료':'teal'};
-      return card(s, st[s]||0, colors[s]||'', s);
+      return card(s, st[s]||0, STATUS_COLOR[s], s);
     }).join('');
   document.getElementById('repairCnt').textContent = filtered.length+' / '+REPAIRS.length+'건';
 
@@ -1213,46 +1190,59 @@ function editRepairFileUrl(id) {
   val = val.trim();
   r.file_url = val || null;
   var patch = {file_url: val || null};
-  sb.from('repairs').update(patch).eq('id', id)
-    .then(function(res) {
-      if (res.error) toast('저장 실패: '+res.error.message);
-      else { toast(r.ship_code + (val ? ' 파일 링크 저장' : ' 파일 링크 삭제')); renderRepairs(); }
-    });
+  dbSave(sb.from('repairs').update(patch).eq('id', id),
+         r.ship_code + (val ? ' 파일 링크 저장' : ' 파일 링크 삭제'))
+    .then(function(ok) { if (ok) renderRepairs(); });
 }
 
 async function updateRepairField(id, field, val) {
   var patch = {}; patch[field] = val;
-  await sb.from('repairs').update(patch).eq('id', id);
-  toast(field + ' 저장됨');
+  await dbSave(sb.from('repairs').update(patch).eq('id', id), field + ' 저장됨');
+}
+/* 확실히 이 건의 것이라고 말할 수 있는 폴더 id 만 돌려준다.
+   findDriveFolder 는 날짜·제목 근사매칭이라 폴더가 없는 건에 대해
+   남의 폴더를 집어줄 수 있다 — 휴지통 경로에는 쓰지 않는다. */
+async function knownFolderId(r) {
+  var m = /\/folders\/([A-Za-z0-9_-]+)/.exec(r.file_url || '');
+  if (m) return m[1];
+  var q = await sb.from('folder_requests')
+    .select('folder_id').eq('repair_id', r.id).maybeSingle();
+  if (q.error || !q.data) return null;
+  return q.data.folder_id || null;
 }
 async function deleteRepair(id) {
   var r = REPAIRS.find(function(x){return x.id===id;});
-  // Only the matched job folder — never the ship folder, which 21
-  // vessels share
-  var fold = r ? findDriveFolder(r) : null;
-  var msg = fold
-    ? '이 수리 기록과 Drive 폴더를 삭제할까요?\n\n'+fold.name+
+  if (!r) return;
+  // Only this row's own job folder — never the ship folder, which 21
+  // vessels share, and never a near match belonging to another repair
+  var foldId = await knownFolderId(r);
+  var fold = foldId
+    ? DRIVE_FOLDERS.find(function(f){return f.id===foldId;}) : null;
+  var msg = foldId
+    ? '이 수리 기록과 Drive 폴더를 삭제할까요?\n\n'+(fold?fold.name:foldId)+
       '\n\n폴더는 휴지통으로 이동합니다 (복구 가능).'
     : '이 수리 기록을 삭제할까요?';
   if (!confirm(msg)) return;
 
-  if (fold) {
-    var t = await sb.from('folder_trash_requests').upsert({
-      folder_id: fold.id,
+  if (foldId) {
+    await dbSave(sb.from('folder_trash_requests').upsert({
+      folder_id: foldId,
       repair_id: id,
       ship_code: r.ship_code,
       system: r.system,
-      folder_name: fold.name,
+      folder_name: fold ? fold.name : '',
       status: 'pending',
-    }, {onConflict: 'folder_id', ignoreDuplicates: true});
-    if (t.error) toast('폴더 정리 요청 실패: '+t.error.message);
+    }, {onConflict: 'folder_id', ignoreDuplicates: true}));
   }
-  // Drop any create request still queued for this row
-  await sb.from('folder_requests').delete().eq('repair_id', id);
-  await sb.from('repairs').delete().eq('id', id);
+  // 아직 큐에 남은 생성 요청은 지우지 않고 취소로 표시한다 —
+  // GAS 가 이미 폴더를 만들고 있으면 행을 지워도 폴더만 남는다
+  await dbSave(sb.from('folder_requests')
+    .update({status: 'cancelled'}).eq('repair_id', id));
+  var ok = await dbSave(sb.from('repairs').delete().eq('id', id),
+                        foldId ? '삭제됨 — 폴더는 휴지통으로' : '삭제됨');
+  if (!ok) return;
   REPAIRS = REPAIRS.filter(function(x){return x.id!==id;});
   renderRepairs();
-  toast(fold ? '삭제됨 — 폴더는 휴지통으로' : '삭제됨');
 }
 
 /* ===== BWTS Calibration ===== */
@@ -1262,19 +1252,21 @@ function toggleBwtsSort(key) {
   else { BWTS_SORT.key = key; BWTS_SORT.dir = 1; }
   renderBwtsCal();
 }
+/* 검교정 주기 1년 — 만료일은 정렬과 표시가 같은 값을 쓰도록 여기서만 센다 */
+function bwtsDue(c) {
+  if (!c.last_date) return null;
+  var due = new Date(c.last_date+'T00:00:00');
+  due.setMonth(due.getMonth()+12);
+  return due;
+}
 function renderBwtsCal() {
-  var DAY = 86400000;
   var order = getShipOrder();
   // Pre-compute sort values
   var enriched = BWTS_CAL.slice().map(function(c) {
     var s = SHIPS.find(function(x){return x.code===c.ship_code;});
     var maker = s?(s.bwts_maker||''):'';
-    var due = null, days = 9999;
-    if (c.last_date) {
-      due = new Date(c.last_date+'T00:00:00');
-      due.setMonth(due.getMonth()+12);
-      days = Math.round((due-new Date())/DAY);
-    }
+    var due = bwtsDue(c);
+    var days = due ? daysUntil(due) : 9999;
     return {c:c, maker:maker, days:days, shipIdx: order.indexOf(c.ship_code)};
   });
   var sk = BWTS_SORT.key, sd = BWTS_SORT.dir;
@@ -1292,11 +1284,9 @@ function renderBwtsCal() {
   var sorted = enriched.map(function(e){return e.c;});
   var expCnt=0, soonCnt=0, okCnt=0;
   var rows = sorted.map(function(c) {
-    var due = null, days = null, lv = 'unknown', label = '미상';
-    if (c.last_date) {
-      due = new Date(c.last_date+'T00:00:00');
-      due.setMonth(due.getMonth()+12);
-      days = Math.round((due-new Date())/DAY);
+    var due = bwtsDue(c), days = null, lv = 'unknown', label = '미상';
+    if (due) {
+      days = daysUntil(due);
       lv = days<=0?'expired':(days<=60?'soon':'ok');
       label = days<=0?'만료':(days<=60?'임박':'정상');
       if (lv==='expired') expCnt++;
@@ -1321,7 +1311,7 @@ function renderBwtsCal() {
         (days!=null?'<span style="color:#64748b;font-size:11px">'+(days<=0?Math.abs(days)+'일 경과':'D-'+days)+'</span>':'')+
       '</td>'+
       '<td style="white-space:nowrap">'+
-        (c.cert_url
+        (/^https?:/.test(c.cert_url||'')
           ? '<a href="'+esc(c.cert_url)+'" target="_blank" '+
               'style="text-decoration:none;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:11px;color:#4f46e5;cursor:pointer">'+
               '📄 CERT</a>'
@@ -1374,11 +1364,9 @@ function editBwtsCalDate(id, el) {
     el.textContent = v || '—';
     el.style.fontWeight = '600';
     var patch = {last_date: v || null};
-    sb.from('calibrations').update(patch).eq('id', c.id)
-      .then(function(res) {
-        if (res.error) toast('저장 실패: '+res.error.message);
-        else { toast(c.ship_code+' 검교정일 저장'); renderBwtsCal(); }
-      });
+    dbSave(sb.from('calibrations').update(patch).eq('id', c.id),
+           c.ship_code+' 검교정일 저장')
+      .then(function(ok) { if (ok) renderBwtsCal(); });
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
@@ -1403,8 +1391,7 @@ function editBwtsCalNote(id, el) {
     var v = inp.value.trim();
     c.note = v;
     el.textContent = v;
-    sb.from('calibrations').update({note: v}).eq('id', c.id)
-      .then(function() { toast('비고 저장'); });
+    dbSave(sb.from('calibrations').update({note: v}).eq('id', c.id), '비고 저장');
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
@@ -1422,11 +1409,9 @@ function editBwtsCalCertUrl(id, btn) {
   if (val === null) return;
   val = val.trim();
   c.cert_url = val || null;
-  sb.from('calibrations').update({cert_url: val || null}).eq('id', c.id)
-    .then(function(res) {
-      if (res.error) toast('저장 실패: '+res.error.message);
-      else { toast(c.ship_code + (val ? ' CERT 링크 저장' : ' CERT 링크 삭제')); renderBwtsCal(); }
-    });
+  dbSave(sb.from('calibrations').update({cert_url: val || null}).eq('id', c.id),
+         c.ship_code + (val ? ' CERT 링크 저장' : ' CERT 링크 삭제'))
+    .then(function(ok) { if (ok) renderBwtsCal(); });
 }
 
 
@@ -1436,7 +1421,6 @@ function renderEgcsCal() {
     document.getElementById('egcsCalRoot').innerHTML = '<div class="loading">EGCS 검교정 없음</div>';
     return;
   }
-  var DAY = 86400000;
   // Build ship/equip map
   var shipSet = {}, equipSet = {}, map = {};
   EGCS_CAL.forEach(function(c) {
@@ -1513,11 +1497,11 @@ function renderEgcsCal() {
       var calDue = null, calDays = null, calLv = 'unknown';
       if (cyc.cal != null) {
         calDue = new Date(d.last_date+'T00:00:00'); calDue.setMonth(calDue.getMonth()+cyc.cal);
-        calDays = Math.round((calDue-new Date())/DAY);
+        calDays = daysUntil(calDue);
         calLv = calDays<=0?'expired':(calDays<=30?'soon':'ok');
       }
       var replDue = new Date(d.last_date+'T00:00:00'); replDue.setMonth(replDue.getMonth()+cyc.repl);
-      var replDays = Math.round((replDue-new Date())/DAY);
+      var replDays = daysUntil(replDue);
       var replLv = replDays<=0?'expired':(replDays<=30?'soon':'ok');
       var replTag = (replLv==='expired'||replLv==='soon') ?
         '<div style="font-size:10px;font-weight:700;margin-top:2px" class="lv-'+replLv+'">신환 '+(replDays<=0?Math.abs(replDays)+'일 경과':'D-'+replDays)+'</div>' : '';
@@ -1563,17 +1547,26 @@ function closeCalEdit() {
 async function saveEgcsCal(id) {
   var c = EGCS_CAL.find(function(x){return x.id===id;});
   if (!c) return;
-  var patch = {
+  var vals = {
     last_date: document.getElementById('ceDate').value || null,
     model: document.getElementById('ceModel').value.trim(),
     serial: document.getElementById('ceSerial').value.trim(),
     note: document.getElementById('ceNote').value.trim(),
   };
-  var res = await sb.from('calibrations').update(patch).eq('id', id);
-  if (res.error) { toast('저장 실패: '+res.error.message); return; }
+  // 실제로 바뀐 칸만 보낸다 — 폼을 연 시점의 값을 통째로 쓰면
+  // 그 사이 남이 고친 칸을 되돌려 버린다
+  var patch = {};
+  Object.keys(vals).forEach(function(k) {
+    var cur = c[k]==null ? '' : String(c[k]);
+    var nv  = vals[k]==null ? '' : String(vals[k]);
+    if (cur !== nv) patch[k] = vals[k];
+  });
+  if (!Object.keys(patch).length) { closeCalEdit(); return; }
+  var ok = await dbSave(sb.from('calibrations').update(patch).eq('id', id),
+                        c.ship_code+' '+c.equip+' 저장');
+  if (!ok) return;
   Object.keys(patch).forEach(function(k) { c[k] = patch[k]; });
   closeCalEdit();
-  toast(c.ship_code+' '+c.equip+' 저장');
   renderEgcsCal();
 }
 
@@ -1610,7 +1603,7 @@ function renderShips() {
     var c = esc(s.code);
     return '<tr>' +
       '<td style="text-align:center;color:#94a3b8;font-size:11px">'+(idx+1)+'</td>' +
-      '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'code\',this)"><b>'+c+'</b></td>' +
+      '<td title="코드는 기본키 — mail_log·repairs·calibrations 가 참조하므로 수정 불가"><b>'+c+'</b></td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'name\',this)">'+esc(s.name||'')+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'teu\',this)">'+esc(s.teu||'')+'</td>' +
       '<td class="edit-cell" onclick="editShipField(\''+c+'\',\'bwts_maker\',this)">'+esc(s.bwts_maker||'')+'</td>' +
@@ -1713,25 +1706,15 @@ function editShipField(code, field, el) {
   inp.focus();
   function save() {
     var v = inp.value.trim();
-    if (field === 'code') {
-      // Code change — need to update PK
-      var oldCode = code;
-      if (v && v !== oldCode) {
-        s.code = v;
-        sb.from('ships').update({code: v}).eq('code', oldCode)
-          .then(function(){ toast(oldCode+' → '+v); renderShips(); });
-      } else { el.innerHTML = '<b>'+esc(cur)+'</b>'; }
-      return;
-    }
     s[field] = v;
     el.textContent = v || '';
-    sb.from('ships').update(Object.fromEntries([[field, v]])).eq('code', code)
-      .then(function() { toast(code + ' 저장됨'); });
+    dbSave(sb.from('ships').update(Object.fromEntries([[field, v]])).eq('code', code),
+           code + ' 저장됨');
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
     if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.textContent = cur; if(field==='code') el.innerHTML='<b>'+esc(cur)+'</b>'; }
+    if (e.key==='Escape') { el.textContent = cur; }
   };
 }
 
@@ -1739,9 +1722,10 @@ async function toggleShipHidden(code) {
   var s = SHIPS.find(function(x){return x.code===code;});
   if (!s) return;
   var newVal = !s.hidden;
+  var ok = await dbSave(sb.from('ships').update({hidden: newVal}).eq('code', code),
+                        code + (newVal ? ' 숨김' : ' 복원'));
+  if (!ok) return;
   s.hidden = newVal;
-  await sb.from('ships').update({hidden: newVal}).eq('code', code);
-  toast(code + (newVal ? ' 숨김' : ' 복원'));
   renderShips();
 }
 
@@ -1758,26 +1742,20 @@ async function addShip() {
     code: code, name: name.trim(), teu: '', bwts_maker: '',
     egcs_maker: '', wms: '', cems: '', hidden: false, sort_order: maxOrder+1
   };
-  try {
-    await sb.from('ships').insert(newShip).select();
-    SHIPS.push(newShip);
-    toast(code + ' 추가됨');
-    renderShips();
-  } catch(e) { toast('추가 실패: ' + e.message); }
+  var ok = await dbSave(sb.from('ships').insert(newShip).select(), code + ' 추가됨');
+  if (!ok) return;
+  SHIPS.push(newShip);
+  renderShips();
 }
 
 /* ===== Start ===== */
-// Init — try loading data directly (RLS allows read for all)
+// Init — 데이터 조회는 로그인 후에만 (RLS: 인증된 @ekmtc.com 만 read)
 sb = supabase.createClient(SUPA_URL, SUPA_ANON);
 sb.auth.getSession().then(function(res) {
   if (res.data.session) onLogin(res.data.session);
-  else {
-    // No login — try loading data anyway (anon read allowed by RLS)
-    USER = {email: 'guest'};
-    document.getElementById('userInfo').textContent = '비로그인 (읽기전용)';
-    document.getElementById('userInfo').style.display = '';
-    loadData();
-  }
+  // 세션이 없으면 조회하지 않는다 — anon 은 읽을 수 없고, 거부가 빈 배열로
+  // 오기 때문에 조회하면 빈 화면을 정상처럼 보여주게 된다
+  else showLoginRequired();
 });
 sb.auth.onAuthStateChange(function(event, session) {
   if (event === 'SIGNED_IN' && session) onLogin(session);
