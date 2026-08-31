@@ -9,6 +9,12 @@
 //     destroy?()           optional cleanup }
 import { $, esc } from './dom.js';
 import { S } from './state.js';
+import { BUILD } from '../version.js';
+
+// Re-exported so app.js can tell whether the *cached* router matches the
+// shell it was served with (version.js alone is useless for that: a file the
+// browser has never seen is always fresh).
+export const ROUTER_BUILD = BUILD;
 
 // Tab bar order. Adding a tab = one line here + one file in js/tabs/.
 export const TABS = [

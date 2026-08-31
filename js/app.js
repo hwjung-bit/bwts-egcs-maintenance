@@ -11,7 +11,7 @@ import { BUILD, FILES } from './version.js';
 import { $, toast } from './core/dom.js';
 import { loadThresholds } from './shared/thresholds.js';
 import { initAuth } from './core/auth.js';
-import { initRouter } from './core/router.js';
+import { initRouter, ROUTER_BUILD } from './core/router.js';
 
 const V = new URL(import.meta.url).searchParams.get('v') || 'dev';
 window.APP_VERSION = V;
@@ -25,12 +25,14 @@ function fatal(msg, e) {
 /* Fresh shell, stale modules → refresh the HTTP cache for every module and
    reload. Guarded by sessionStorage so a broken deploy cannot loop. */
 async function healModuleCache() {
-  if (V === 'dev' || BUILD === V) return false;
+  // ROUTER_BUILD is undefined when the cached router.js predates this check.
+  const stale = BUILD !== V || ROUTER_BUILD !== V;
+  if (V === 'dev' || !stale) return false;
   let last = null;
   try { last = sessionStorage.getItem(RELOAD_KEY); } catch (e) { /* ignore */ }
   if (last === V) {
     console.warn(`[app] module BUILD ${BUILD} ≠ shell ${V} after reload — giving up, showing banner`);
-    showBanner(`모듈 캐시가 오래됐습니다 (모듈 ${BUILD} / 셸 ${V}) — Ctrl+Shift+R 로 강력 새로고침`);
+    showBanner(`모듈 캐시가 오래됐습니다 (version ${BUILD} / router ${ROUTER_BUILD || '구버전'} / 셸 ${V}) — Ctrl+Shift+R 로 강력 새로고침`);
     return false;
   }
   $('view').innerHTML = '<div class="loading"><span class="spin"></span> 새 버전 적용 중 (모듈 캐시 갱신)...</div>';

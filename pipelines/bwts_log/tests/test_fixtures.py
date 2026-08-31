@@ -51,6 +51,11 @@ def test_integrity_i6_history():
 
 
 # ── parser fixtures (append one per fix) ─────────────────────────────
+# KPS_2024-05_OPTIME.csv          comma CSV, GPS quoted → exactly 7 columns; the old
+#                                  "≤7 cols ⇒ space-separated" guess split it on spaces
+#                                  and 72 operations parsed as 0 (2026-09-01)
+# KQD_2024-02_OPTIME_spacesep.csv true space-separated file (GAS-converted) — must
+#                                  still take the space path after the fix
 FIXTURES = sorted((HERE / "fixtures").glob("*.csv"))
 
 
@@ -60,8 +65,9 @@ def test_fixture_parses(path):
     from csv_parser import parse_optime_csv, parse_datalog_csv, parse_eventlog_csv
     name = path.name.upper()
     if "OPTIME" in name or "OPERATION" in name:
-        r = parse_optime_csv(path)
-        assert r and (r.get("operations") or r.get("rows")), f"{path.name}: OpTime 파싱 0행"
+        r = parse_optime_csv(path)          # list of operation dicts
+        assert isinstance(r, list) and len(r) > 0, f"{path.name}: OpTime 파싱 0행"
+        assert r[0].get("operation_mode") and r[0].get("start_time"), f"{path.name}: 컬럼 매핑 실패"
     elif "DATALOG" in name or "DATAREPORT" in name:
         r = parse_datalog_csv(path)
         assert r, f"{path.name}: DataLog 파싱 실패"

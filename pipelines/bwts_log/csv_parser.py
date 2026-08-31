@@ -143,6 +143,20 @@ def _fix_space_separated_rows(rows):
     sample = [len(r) for r in rows[:3]]
     if not all(c <= 7 for c in sample):
         return rows
+    # Column count alone is not enough: a well-formed OpTime CSV whose GPS
+    # cell is quoted has exactly 7 columns too (KPS 2024-05..10 were split
+    # on spaces here and parsed to zero operations). A space-separated file
+    # shows "date time <more tokens>" inside one cell; a comma CSV never does.
+    _dt_run = re.compile(
+        r"\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{1,2}(?::\d{1,2})?\s+\S")
+    def _looks_space_separated(r):
+        for c in r:
+            c2 = re.sub(r"\[[^\]]*\]", "", str(c))
+            if _dt_run.search(c2):
+                return True
+        return False
+    if not any(_looks_space_separated(r) for r in rows[1:6]):
+        return rows
 
     fixed = []
     for r in rows:
