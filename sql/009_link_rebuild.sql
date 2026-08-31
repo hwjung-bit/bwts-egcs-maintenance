@@ -12,6 +12,12 @@
 --
 -- Run once in Supabase SQL Editor, after 008.
 
+-- ── 0. file_url 컬럼 보장 ──────────────────────────────
+-- 4단계가 repairs.file_url 을 쓰는데 001~008 어디에도 생성 구문이 없다.
+-- 운영 DB 에는 어쩌다 존재하지만 클린 DB 에서는 여기서 죽는다.
+ALTER TABLE repairs
+  ADD COLUMN IF NOT EXISTS file_url TEXT DEFAULT '';
+
 -- ── 1. mail_log: #inbox → #all ─────────────────────────
 UPDATE mail_log
    SET mail_link = 'https://mail.google.com/mail/u/0/#all/'

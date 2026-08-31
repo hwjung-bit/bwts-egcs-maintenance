@@ -6,6 +6,20 @@ ALTER TABLE mail_log ADD COLUMN IF NOT EXISTS source TEXT;
 CREATE INDEX IF NOT EXISTS mail_log_source_idx
   ON mail_log (source);
 
+-- 아래 두 UPDATE 는 WHERE 없이 전 행을 재분류한다. 최초 1회에는 그게 의도지만,
+-- 이미 분류된 DB 에서 실수로 다시 돌리면 사람이 수기로 고친 분류가 전부
+-- 날아간다. 이미 채워져 있으면 멈춘다.
+DO $$
+DECLARE classified int;
+BEGIN
+  SELECT count(*) INTO classified FROM mail_log WHERE source IS NOT NULL;
+  IF classified > 0 THEN
+    RAISE EXCEPTION
+      'source 가 이미 % 건 채워져 있다. 005 는 최초 1회용이다. '
+      '정말 전체 재분류가 필요하면 이 DO 블록을 지우고 실행할 것.', classified;
+  END IF;
+END $$;
+
 -- ── 1. source: by sender address ──────────────────────
 UPDATE mail_log SET source = CASE
   WHEN sender ~* 'kmtc[a-z]{2,3}@sea-one\.com'

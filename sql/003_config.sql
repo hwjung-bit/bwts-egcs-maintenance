@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS config (
 -- RLS: only authenticated @ekmtc.com users can read
 ALTER TABLE config ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS config_read ON config;
 CREATE POLICY config_read ON config FOR SELECT
   TO authenticated
   USING (

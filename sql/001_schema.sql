@@ -2,7 +2,7 @@
 -- Run this in Supabase SQL Editor
 
 -- 1. Ships master (21 vessels)
-CREATE TABLE ships (
+CREATE TABLE IF NOT EXISTS ships (
   code        TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
   teu         TEXT DEFAULT '',
@@ -14,7 +14,7 @@ CREATE TABLE ships (
 );
 
 -- 2. Mail log (1,434 records)
-CREATE TABLE mail_log (
+CREATE TABLE IF NOT EXISTS mail_log (
   id          TEXT PRIMARY KEY,
   thread_id   TEXT NOT NULL,
   date        DATE NOT NULL,
@@ -35,14 +35,14 @@ CREATE TABLE mail_log (
   updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_mail_log_thread ON mail_log(thread_id);
-CREATE INDEX idx_mail_log_ship   ON mail_log(ship_code);
-CREATE INDEX idx_mail_log_system ON mail_log(system);
-CREATE INDEX idx_mail_log_date   ON mail_log(date DESC);
-CREATE INDEX idx_mail_log_status ON mail_log(status);
+CREATE INDEX IF NOT EXISTS idx_mail_log_thread ON mail_log(thread_id);
+CREATE INDEX IF NOT EXISTS idx_mail_log_ship   ON mail_log(ship_code);
+CREATE INDEX IF NOT EXISTS idx_mail_log_system ON mail_log(system);
+CREATE INDEX IF NOT EXISTS idx_mail_log_date   ON mail_log(date DESC);
+CREATE INDEX IF NOT EXISTS idx_mail_log_status ON mail_log(status);
 
 -- 3. Repairs (242 records)
-CREATE TABLE repairs (
+CREATE TABLE IF NOT EXISTS repairs (
   id            TEXT PRIMARY KEY,
   ship_code     TEXT NOT NULL,
   system        TEXT NOT NULL,
@@ -63,12 +63,12 @@ CREATE TABLE repairs (
   updated_at    TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_repairs_ship   ON repairs(ship_code);
-CREATE INDEX idx_repairs_system ON repairs(system);
-CREATE INDEX idx_repairs_stage  ON repairs(stage);
+CREATE INDEX IF NOT EXISTS idx_repairs_ship   ON repairs(ship_code);
+CREATE INDEX IF NOT EXISTS idx_repairs_system ON repairs(system);
+CREATE INDEX IF NOT EXISTS idx_repairs_stage  ON repairs(stage);
 
 -- 4. Calibrations (81 records: 21 BWTS + 60 EGCS)
-CREATE TABLE calibrations (
+CREATE TABLE IF NOT EXISTS calibrations (
   id              TEXT PRIMARY KEY,
   ship_code       TEXT NOT NULL,
   system          TEXT NOT NULL,
@@ -82,8 +82,8 @@ CREATE TABLE calibrations (
   updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX idx_cal_ship   ON calibrations(ship_code);
-CREATE INDEX idx_cal_system ON calibrations(system);
+CREATE INDEX IF NOT EXISTS idx_cal_ship   ON calibrations(ship_code);
+CREATE INDEX IF NOT EXISTS idx_cal_system ON calibrations(system);
 
 -- 5. Auto-update updated_at on row change
 CREATE OR REPLACE FUNCTION update_updated_at()
@@ -94,14 +94,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trg_mail_log_updated ON mail_log;
 CREATE TRIGGER trg_mail_log_updated
   BEFORE UPDATE ON mail_log
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_repairs_updated ON repairs;
 CREATE TRIGGER trg_repairs_updated
   BEFORE UPDATE ON repairs
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+DROP TRIGGER IF EXISTS trg_calibrations_updated ON calibrations;
 CREATE TRIGGER trg_calibrations_updated
   BEFORE UPDATE ON calibrations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();

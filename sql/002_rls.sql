@@ -8,39 +8,48 @@ ALTER TABLE repairs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calibrations ENABLE ROW LEVEL SECURITY;
 
 -- Read: anyone authenticated can read
+DROP POLICY IF EXISTS "read_ships" ON ships;
 CREATE POLICY "read_ships" ON ships
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "read_mail_log" ON mail_log;
 CREATE POLICY "read_mail_log" ON mail_log
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "read_repairs" ON repairs;
 CREATE POLICY "read_repairs" ON repairs
   FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "read_calibrations" ON calibrations;
 CREATE POLICY "read_calibrations" ON calibrations
   FOR SELECT USING (true);
 
 -- Write: only ekmtc.com users
+DROP POLICY IF EXISTS "update_mail_log" ON mail_log;
 CREATE POLICY "update_mail_log" ON mail_log
   FOR UPDATE USING (
     auth.jwt() ->> 'email' LIKE '%@ekmtc.com'
   );
 
+DROP POLICY IF EXISTS "insert_mail_log" ON mail_log;
 CREATE POLICY "insert_mail_log" ON mail_log
   FOR INSERT WITH CHECK (
     auth.jwt() ->> 'email' LIKE '%@ekmtc.com'
   );
 
+DROP POLICY IF EXISTS "update_repairs" ON repairs;
 CREATE POLICY "update_repairs" ON repairs
   FOR UPDATE USING (
     auth.jwt() ->> 'email' LIKE '%@ekmtc.com'
   );
 
+DROP POLICY IF EXISTS "insert_repairs" ON repairs;
 CREATE POLICY "insert_repairs" ON repairs
   FOR INSERT WITH CHECK (
     auth.jwt() ->> 'email' LIKE '%@ekmtc.com'
   );
 
+DROP POLICY IF EXISTS "update_calibrations" ON calibrations;
 CREATE POLICY "update_calibrations" ON calibrations
   FOR UPDATE USING (
     auth.jwt() ->> 'email' LIKE '%@ekmtc.com'
