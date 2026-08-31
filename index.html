@@ -769,7 +769,14 @@ function editNote(el, id) {
     dbSave(sb.from('mail_log').update({note: val}).eq('id', id), '메모 저장됨');
   }
   input.onblur = save;
-  input.onkeydown = function(e) { if (e.key==='Enter') save(); if (e.key==='Escape') { el.style.display=''; input.remove(); } };
+  // Enter saves through blur so save() runs once. Calling it directly
+  // meant the remove() inside it fired blur, re-entered save(), and threw
+  // on the second remove() before either call reached the database.
+  // Escape has to drop the handler first or cancelling would save.
+  input.onkeydown = function(e) {
+    if (e.key==='Enter') input.blur();
+    if (e.key==='Escape') { input.onblur = null; el.style.display=''; input.remove(); }
+  };
 }
 
 /* ===== Status Overview ===== */
@@ -893,8 +900,8 @@ function editStatusMemo(el, code, field) {
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
-    if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.style.display=''; inp.remove(); }
+    if (e.key==='Enter') inp.blur();
+    if (e.key==='Escape') { inp.onblur = null; el.style.display=''; inp.remove(); }
   };
 }
 
@@ -1170,7 +1177,7 @@ function editRepairField(id, field, el) {
     function save() { var v=ta.value.trim(); r[field]=v; el.textContent=v||'—';
       updateRepairField(id,field,v); }
     ta.onblur = save;
-    ta.onkeydown = function(e) { if (e.key==='Escape'){el.textContent=cur||'—';} };
+    ta.onkeydown = function(e) { if (e.key==='Escape'){ta.onblur=null; el.textContent=cur||'—';} };
   } else {
     var inp = document.createElement('input');
     inp.value = cur; inp.style.cssText = 'width:100%;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
@@ -1178,7 +1185,7 @@ function editRepairField(id, field, el) {
     function save2() { var v=inp.value.trim(); r[field]=v; el.textContent=v||'—';
       updateRepairField(id,field,v); }
     inp.onblur = save2;
-    inp.onkeydown = function(e) { if (e.key==='Enter') save2(); if (e.key==='Escape') el.textContent=cur||'—'; };
+    inp.onkeydown = function(e) { if (e.key==='Enter') inp.blur(); if (e.key==='Escape') { inp.onblur=null; el.textContent=cur||'—'; } };
   }
 }
 function editRepairFileUrl(id) {
@@ -1370,8 +1377,8 @@ function editBwtsCalDate(id, el) {
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
-    if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.textContent = c.last_date||'—'; }
+    if (e.key==='Enter') inp.blur();
+    if (e.key==='Escape') { inp.onblur = null; el.textContent = c.last_date||'—'; }
   };
 }
 
@@ -1395,8 +1402,8 @@ function editBwtsCalNote(id, el) {
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
-    if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.textContent = cur; }
+    if (e.key==='Enter') inp.blur();
+    if (e.key==='Escape') { inp.onblur = null; el.textContent = cur; }
   };
 }
 
@@ -1713,8 +1720,8 @@ function editShipField(code, field, el) {
   }
   inp.onblur = save;
   inp.onkeydown = function(e) {
-    if (e.key==='Enter') save();
-    if (e.key==='Escape') { el.textContent = cur; }
+    if (e.key==='Enter') inp.blur();
+    if (e.key==='Escape') { inp.onblur = null; el.textContent = cur; }
   };
 }
 
