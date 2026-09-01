@@ -217,3 +217,23 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 - 웹 업로드: 수리이력 ⬆ → Storage `repair_uploads` → `upload_requests` → GAS 5분 트리거가 Drive 로 이동.
   멈춘 건 확인: `select * from upload_requests where status in ('pending','error') order by created_at;`
   Storage 에 남은 객체 = 아직 안 옮겨진 것 (정상은 이동 후 삭제).
+
+## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
+
+- 증상: `autoCollectGmail`(bwts_general 쿼리)이 본선 월간 BWTS LOG/BWRB 송부 메일까지 수리이력으로 잡아
+  `14. SERVICE REPORT/NN. CODE/yyyy-mm-dd BWTS LOG …/` 에 로그 PDF·CSV를 저장하고 있었음 (2025-08~2026-08, 220폴더).
+- 조치: `gmailQueries_` 공통 제외에 `-subject:("BWTS LOG" OR "LOG DATA" OR "DATA LOG" OR BWRB OR BWTS_LOG_DATA OR "LOG FILE")`,
+  `gmailRegisterMessage_` 진입부에 `isBwtsLogMail_()` 가드(언더바 표준제목 `[KPS]_BWTS_LOG_DATA_(2026.07)`은 Gmail 검색이 못 거름 → 코드에서 차단, GMDONE=LOG 표시).
+  수동 지정(`opts.shipCode`) 시는 예외.
+- 기존 SERVICE REPORT 안 LOG 폴더는 `4. BWTS LOG DATA`로 이관 후 `14. SERVICE REPORT/_LOG류 이관완료/`로 이동.
+- `gas/Code.js` = 라이브 사본(추적용). 배포는 `clasp pull` 폴더에서 `clasp push -f`.
+
+## 2026-09-01 구버전 종료
+
+- Firebase `bwts-dashboard.web.app` → `firebase hosting:disable` (404). 재개하려면 폴더에서 다시 deploy.
+- 옛 GAS 웹앱 트리거 `autoCollectGmail`(Gmail→구 시트) · `exportSnapshot`(시트→_dashboard/env_snapshot.json) 삭제.
+  남은 트리거는 `processFolderRequests`(5분) · `indexDriveFolders`(매일) 만. 프로젝트 "BWTS_EGCS_관리대장_v2" 는 트리거 0.
+- 공무팀 Dash 가 읽는 `환경기술파트/_dashboard/env_snapshot.json` (+ `025 SCRUBBER 업무/13 메이커 서비스/_dashboard/`)은
+  이제 `export_contract.py` 가 Supabase 기준으로 같은 모양으로 씀. **작업 스케줄러 "BWTS_EGCS_ExportContract"** (매일 07:30,
+  `pipelines\bwts_log\export_contract_daily.bat`) 로 갱신. 로그 `pipelines\bwts_log\out\export_contract_daily.log`.
+- 옛 로컬 폴더는 `D:\CLAUDE CODE\_보관(완료)\BWTS_EGCS_구버전_20260901\`.
