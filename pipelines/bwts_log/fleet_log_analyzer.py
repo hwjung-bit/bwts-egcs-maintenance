@@ -174,6 +174,14 @@ def _parse_datalog_rows(filepath):
             "pump2": safe_float(get(row, idx_pump2)),
         })
 
+    # Format-B exports (TSU1_BP* ships) list the newest row first. Every step
+    # below — session gaps, durations, the warm-up window that skips the first
+    # rows after TRO appears — assumes time runs forward; on a reversed file
+    # the "warm-up" cut removed the END of a ballast and kept the ramp-up, so
+    # the stable TRO average came out low (KQD 2026-07: 3.5 ppm → false
+    # "주입 TRO 범위 이탈"). Sort once here; rows without a timestamp go last.
+    from datetime import datetime as _dt
+    parsed.sort(key=lambda r: r["time"] or _dt.max)
     return parsed
 
 
@@ -682,6 +690,13 @@ def analyze_datalog_deep(datalog_path, eventlog_path=None):
 
     for s in sessions:
         tro = analyze_tro_session(s, has_tro_sensor)
+        # Format B shares one TRO sensor between the ballast and discharge
+        # lines, so a DEBALLAST reading is residual, not discharge TRO. The
+        # month-level judgment already skips it; the session row must too or
+        # the table shows "D-TRO 초과" for every Format-B discharge.
+        if tro and is_format_b and s["mode"] != "BALLAST":
+            tro["in_range"] = None
+            tro["issue"] = None
         s["tro_analysis"] = tro
 
         sensor = analyze_sensor_correlation(s)

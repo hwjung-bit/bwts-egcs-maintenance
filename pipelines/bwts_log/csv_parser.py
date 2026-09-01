@@ -20,7 +20,9 @@ from alarm_info import ALARM_INFO
 # 2026-09-01d: PDF TOC page offset verified against page text (OpTime rows were
 #   lost), multi-section PDF treated as TotalLog regardless of file name,
 #   quarantined *.bad.csv / _oldbug_*.bak never read as input.
-PARSER_VERSION = "parser-2026-09-01d"
+# 2026-09-01e: DataLog rows sorted by time before session analysis —
+#   Format-B files are exported newest-first (35 of 100 months in 2026).
+PARSER_VERSION = "parser-2026-09-01e"
 
 
 # ─── Helpers ────────────────────────────────────────────────

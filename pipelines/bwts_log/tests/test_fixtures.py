@@ -76,6 +76,19 @@ def test_integrity_i6_history():
     assert integrity.check_history(s, ["미수신", "미운전", "운전양호"]) is False
 
 
+def test_descending_datalog_is_sorted_before_sessions():
+    """Format-B exports are newest-first. Sorted, the session runs forward:
+    positive duration, and the warm-up cut removes the ramp-up rows (0→2 ppm),
+    not the end of the ballast."""
+    import fleet_log_analyzer as fla
+    rows = fla._parse_datalog_rows(HERE / "fixtures" / "KQD_2026-07_DATALOG_desc_head.csv")
+    assert rows[0]["time"] < rows[-1]["time"]
+    sess = fla.split_sessions(rows)
+    assert len(sess) == 1 and sess[0]["duration_min"] == 12.0
+    tro = fla.analyze_tro_session(sess[0], True)
+    assert tro["stable_min"] >= 3.5, tro      # ramp-up (0.2..2.0) excluded
+
+
 # ── parser fixtures (append one per fix) ─────────────────────────────
 # KPS_2024-05_OPTIME.csv          comma CSV, GPS quoted → exactly 7 columns; the old
 #                                  "≤7 cols ⇒ space-separated" guess split it on spaces
