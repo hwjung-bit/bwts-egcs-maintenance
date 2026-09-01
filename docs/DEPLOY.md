@@ -194,3 +194,14 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 
 ### 이원우님(공무팀 Dash)에게 전달할 것
 `contracts/env_summary.schema.md` 한 장. Dash 는 G드라이브 JSON 만 읽으면 된다.
+
+## 2026-09-01 자격증명 회전 기록
+
+- `DRIVE_TOKEN_JSON` 8/20 발급분이 9/1 `invalid_grant` 로 만료 → `make_token.py` 로 재발급해
+  `GMAIL_TOKEN_JSON`·`DRIVE_TOKEN_JSON` 양쪽 갱신 (gmail.readonly + drive.readonly).
+- `GMAIL_APP_PASSWORD` 8/10 분이 8/31 부터 535 BadCredentials → 새 앱 비밀번호("BWTS EGCS DASHBOARD")로 교체.
+  하트비트·주간 알림·실패 알림 전부 이 비번을 쓴다 — 이게 죽으면 **실패가 조용해진다**. 주간 알림 메일이
+  월요일에 안 오면 이것부터 의심.
+- `weekly_cal_alert.fetch_all` 이 `ships` 를 `id` 로 페이징해 42703 — `code` 로 수정 (8/23 이후 매주 실패했던 원인).
+- **토큰이 12일 만에 만료된 점**: OAuth 동의 화면이 "테스트" 상태면 refresh token 이 7일마다 죽는다.
+  GCP Console → OAuth consent screen → Publishing status 를 "In production" 으로 바꾸면 만료 없음. 미확인.
