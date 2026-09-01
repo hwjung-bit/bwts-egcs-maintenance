@@ -1,12 +1,13 @@
 // 🔧 수리이력 — repairs table, stage cards, manual entry, Drive folder links.
 import { S } from '../core/state.js';
+import { matchQuery } from '../shared/search.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, todayStr, freezeCell } from '../core/dom.js';
 import { STATUS_LIST, STATUS_COLOR, ORIGIN_LIST, ORIGIN_ICON, YEARS } from '../shared/constants.js';
 import { getShipOrder, shipByCode, shipOptions } from '../shared/ships.js';
 import { findDriveFolder, shipFolderUrl, requestDriveFolder, knownFolderId, repairAtts } from '../shared/drive.js';
 
-const F = { year: '', ship: '', system: '', stage: '', hideDone: true };
+const F = { year: '', ship: '', system: '', stage: '', hideDone: true, q: '' };
 try { const v = localStorage.getItem('repairs.hideDone'); if (v !== null) F.hideDone = v === '1'; } catch (e) { /* ignore */ }
 
 function opts(list, cur) {
@@ -52,6 +53,7 @@ function mount(root) {
     <select id="rfSys"><option value="">전체 시스템</option>${opts(['BWTS', 'EGCS'], F.system)}</select>
     <select id="rfShip"><option value="">전체 선박</option></select>
     <select id="rfStage"><option value="">전체 단계</option>${opts(STATUS_LIST, F.stage)}</select>
+    <input type="text" id="rfSearch" placeholder="🔍 검색 — 띄어쓰기로 겹치기 (예: KMU CEMS)" title="선박·장비·증상·조치·메일제목·부품·단계·날짜 전부 검색. 검색 중엔 완료 건도 보임" value="${esc(F.q)}">
     <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rfHideDone"${F.hideDone ? ' checked' : ''}> 완료 숨기기</label>
     <button class="add-btn" id="raOpen" title="메일 없이 카톡·전화 등으로 처리된 건 등록">➕ 직접 등록</button>
     <button class="add-btn" id="fileSaveOpen" style="background:#059669;border-color:#059669" title="파일 + 한 줄 정보 → Drive 작업폴더 자동 생성·저장">📥 파일 저장</button>
@@ -60,6 +62,7 @@ function mount(root) {
   <div class="wrap" id="repairsRoot"></div>`;
   const bind = (id, key) => { $(id).onchange = e => { F[key] = e.target.value; renderRows(); }; };
   bind('rfYear', 'year'); bind('rfSys', 'system'); bind('rfShip', 'ship'); bind('rfStage', 'stage');
+  $('rfSearch').oninput = e => { F.q = e.target.value; renderRows(); };
   $('raOpen').onclick = openRepairAdd;
   $('fileSaveOpen').onclick = () => openUpload(null);
   $('rfHideDone').onchange = e => {
@@ -92,8 +95,10 @@ function renderRows() {
     if (F.ship && r.ship_code !== F.ship) return false;
     if (F.system && r.system !== F.system) return false;
     if (F.stage && r.stage !== F.stage) return false;
-    // 완료 숨기기 — 단계 필터로 '완료'를 직접 고른 경우는 보여준다
-    if (F.hideDone && !F.stage && r.stage === '완료') return false;
+    // 완료 숨기기 — 단계 필터로 '완료'를 직접 고르거나 검색 중이면 보여준다
+    if (F.hideDone && !F.stage && !F.q && r.stage === '완료') return false;
+    if (F.q && !matchQuery(F.q, r.date, r.ship_code, r.system, r.equip, r.stage, r.origin,
+      r.symptom, r.email_subject, r.action, r.parts)) return false;
     return true;
   });
   // 완료만 아래, 나머지는 날짜 최신순
@@ -116,7 +121,7 @@ function renderRows() {
   $('repairStats').innerHTML =
     card('전체', st.total, '', '') + card('BWTS', st.BWTS, 'blue', '') + card('EGCS', st.EGCS, 'green', '') +
     STATUS_LIST.map(s => card(s, st[s] || 0, STATUS_COLOR[s], s)).join('');
-  const hidden = F.hideDone && !F.stage ? REPAIRS.filter(r => r.stage === '완료').length : 0;
+  const hidden = F.hideDone && !F.stage && !F.q ? REPAIRS.filter(r => r.stage === '완료').length : 0;
   $('repairCnt').textContent = filtered.length + ' / ' + REPAIRS.length + '건' + (hidden ? ` (완료 ${hidden}건 숨김)` : '');
 
   if (!REPAIRS.length) {

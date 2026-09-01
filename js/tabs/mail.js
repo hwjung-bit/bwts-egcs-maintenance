@@ -1,5 +1,6 @@
 // 📧 메일대장 — mail_log list with filters, inline note, status, mail→repair.
 import { S, loadData } from '../core/state.js';
+import { matchQuery } from '../shared/search.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, inlineEdit } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
@@ -38,7 +39,7 @@ function mount(root) {
     <select id="fShip"><option value="">전체 선박</option></select>
     <select id="fStatus"><option value="">전체 상태</option>${opts(STATUS_LIST, F.status)}</select>
     <select id="fCat"><option value="">전체 분류</option>${opts(MAIL_CATEGORIES, F.cat)}</select>
-    <input type="text" id="search" placeholder="🔍 제목, 선박, 발신자..." value="${esc(F.q)}">
+    <input type="text" id="search" placeholder="🔍 검색 — 띄어쓰기로 겹치기 (예: KMU 검교정)" title="제목·선박·분류·키워드·발신자·상태·비고·날짜 전부 검색. 여러 단어는 모두 포함된 것만" value="${esc(F.q)}">
     <button class="refresh-btn" id="mailReload">🔄 새로고침</button>
     <span class="count" id="cnt"></span>
   </div>
@@ -74,11 +75,8 @@ function renderRows() {
     if (F.ship && m.ship_code !== F.ship) return false;
     if (F.status && m.status !== F.status) return false;
     if (F.cat && m.category !== F.cat) return false;
-    if (q) {
-      const txt = ((m.subject || '') + (m.ship_code || '') + (m.sender || '') + (m.keyword || '') +
-        (m.note || '') + (m.category || '') + (m.body_preview || '')).toLowerCase();
-      if (txt.indexOf(q) < 0) return false;
-    }
+    if (q && !matchQuery(q, m.date, m.system, m.source, m.ship_code, m.category, m.keyword,
+      m.subject, m.sender, m.status, m.note, m.body_preview)) return false;
     return true;
   });
   const now = new Date();
