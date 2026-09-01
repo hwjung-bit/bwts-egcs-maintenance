@@ -89,19 +89,19 @@ tr.stale:hover{background:#fef3c7 !important}
 #calEdit input:focus{border-color:#3b82f6}
 #calEdit button{flex:1;padding:5px 0;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
 #calEdit button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
-#repairAdd{display:none;position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.35);align-items:center;justify-content:center}
-#repairAdd.open{display:flex}
-#repairAdd .box{background:#fff;border-radius:12px;padding:16px 18px;width:460px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
-#repairAdd h3{margin:0 0 12px;font-size:14px;color:#0f172a}
-#repairAdd label{display:block;margin-bottom:8px;color:#64748b;font-size:11px;font-weight:600}
-#repairAdd input,#repairAdd select,#repairAdd textarea{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
+#repairAdd,#repairUpload{display:none;position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.35);align-items:center;justify-content:center}
+#repairAdd.open,#repairUpload.open{display:flex}
+#repairAdd .box,#repairUpload .box{background:#fff;border-radius:12px;padding:16px 18px;width:460px;max-height:86vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+#repairAdd h3,#repairUpload h3{margin:0 0 12px;font-size:14px;color:#0f172a}
+#repairAdd label,#repairUpload label{display:block;margin-bottom:8px;color:#64748b;font-size:11px;font-weight:600}
+#repairAdd input,#repairAdd select,#repairAdd textarea,#repairUpload input,#repairUpload textarea{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
 #repairAdd input:focus,#repairAdd select:focus,#repairAdd textarea:focus{border-color:#3b82f6}
-#repairAdd textarea{min-height:56px;resize:vertical}
+#repairAdd textarea,#repairUpload textarea{min-height:56px;resize:vertical}
 #repairAdd .row{display:flex;gap:8px}
 #repairAdd .row>label{flex:1}
-#repairAdd .btns{display:flex;gap:8px;margin-top:10px}
-#repairAdd .btns button{flex:1;padding:7px 0;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
-#repairAdd .btns button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+#repairAdd .btns,#repairUpload .btns{display:flex;gap:8px;margin-top:10px}
+#repairAdd .btns button,#repairUpload .btns button{flex:1;padding:7px 0;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
+#repairAdd .btns button.pri,#repairUpload .btns button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
 .add-btn{padding:5px 12px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700}
 .origin-badge{display:inline-block;font-size:11px;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;font-weight:600;white-space:nowrap}
 .fold-link{text-decoration:none;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:6px;padding:2px 6px;font-size:11px;color:#15803d}
@@ -152,3 +152,6 @@ tr.stale:hover{background:#fef3c7 !important}
 .bl-review{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px}
 .bl-q{border-left:3px solid #cbd5e1;padding:4px 10px;margin:6px 0;font-size:12px}
 .bl-a{margin-top:4px;color:#1e40af}
+
+.up-badge{display:inline-block;font-size:10px;padding:1px 5px;border-radius:6px;background:#fef3c7;color:#92400e;margin-left:2px}
+.up-list{font-size:11px;color:#64748b;margin:4px 0 8px;max-height:90px;overflow:auto}

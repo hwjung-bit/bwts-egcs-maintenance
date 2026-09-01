@@ -1,0 +1,19 @@
+{
+  "_doc": "수리이력 폴더 자동첨부 필터 (gas/SupabaseDriveIndex.gs saveRequestAttachments_ 가 읽음). 메일 스레드 첨부 중 '유지'만 Drive 에 저장. 이미 저장된 파일은 건드리지 않음. 규칙 순서: 1) drop_name_patterns 에 걸리면 제외 2) keep_name_patterns 에 걸리면 유지 3) 확장자가 keep_extensions 면 유지(이미지는 min_image_bytes 이상일 때만) 4) 나머지 제외. 패턴은 대소문자 무시 정규식.",
+  "version": "2026-09-01",
+  "drop_name_patterns": [
+    "EVENTLOG", "DATALOG", "DATAREPORT", "OPERATIONTIME", "TOTALLOG", "LOG\\s*DATA",
+    "BWRB", "BALLAST\\s*WATER\\s*RECORD",
+    "^image\\d*\\.", "^outlook-", "^Outlook", "^att\\d*\\.", "logo", "signature", "banner",
+    "\\.ics$", "\\.p7s$", "\\.vcf$", "\\.htm$", "\\.html$", "\\.eml$", "\\.msg$", "^winmail\\.dat$"
+  ],
+  "keep_name_patterns": [
+    "SERVICE\\s*REPORT", "\\bSR\\b", "서비스\\s*리포트", "보고서", "REPORT",
+    "견적", "QUOT", "QTN", "INVOICE", "인보이스", "PROFORMA",
+    "CERT", "성적서", "증서", "CALIBRATION", "검교정",
+    "MANUAL", "매뉴얼", "DRAWING", "도면", "SPEC", "사양"
+  ],
+  "keep_extensions": ["pdf", "xlsx", "xls", "docx", "doc", "pptx", "zip", "jpg", "jpeg", "png"],
+  "min_image_bytes": 200000,
+  "max_files_per_folder": 20
+}

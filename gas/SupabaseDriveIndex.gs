@@ -468,7 +468,13 @@ function processFolderRequests() {
     } catch (e) {
       Logger.log('삭제 큐 실패: ' + e.message);
     }
-    return { created: created, trashed: trashed };
+    var uploaded = 0;
+    try {
+      uploaded = processUploadRequests_();
+    } catch (e) {
+      Logger.log('업로드 큐 실패: ' + e.message);
+    }
+    return { created: created, trashed: trashed, uploaded: uploaded };
   } finally {
     lock.releaseLock();
   }
@@ -557,9 +563,22 @@ function saveRequestAttachments_(req, folderId) {
 
     var folder = DriveApp.getFolderById(folderId);
     var urlByName = {};
+    var rules = attachRules_();
+    var skipped = [];
     atts.forEach(function (att) {
       var name = att.getName() || 'file';
       if (urlByName[name]) return;   // 스레드 내 같은 이름 중복
+      // 필요한 것만 — 스레드 전체를 돌면 답장마다 재첨부된 견적·서명
+      // 이미지·LOG DATA PDF 까지 폴더에 쌓인다 (2026-09-01 이전 동작).
+      // 규칙은 contracts/attachment_rules.json. 이미 저장된 파일은 그대로.
+      if (!keepAttachment_(name, att.getSize(), rules)) {
+        skipped.push(name);
+        return;
+      }
+      if (Object.keys(urlByName).length >= (rules.max_files_per_folder || 20)) {
+        skipped.push(name);
+        return;
+      }
       var existing = folder.getFilesByName(name);
       var file = existing.hasNext()
         ? existing.next()
@@ -597,7 +616,8 @@ function saveRequestAttachments_(req, folderId) {
     supaPatch_('repairs?id=eq.' + encodeURIComponent(req.repair_id),
                { attachments: JSON.stringify(merged) });
     Logger.log('첨부 저장: ' + req.repair_id + ' ' +
-               Object.keys(urlByName).length + '건');
+               Object.keys(urlByName).length + '건, 제외 ' + skipped.length +
+               (skipped.length ? ' (' + skipped.slice(0, 5).join(', ') + ')' : ''));
   } catch (e) {
     Logger.log('첨부 저장 실패 (' + req.repair_id + '): ' + e.message);
   }
@@ -688,4 +708,159 @@ function installFolderRequestTrigger() {
   ScriptApp.newTrigger('processFolderRequests')
     .timeBased().everyMinutes(15).create();
   return '설치 완료 — 15분마다';
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+ * 첨부 필터 — contracts/attachment_rules.json (공개 리포, 1시간 캐시)
+ * 규칙 순서: drop → keep(이름) → keep(확장자, 이미지는 크기) → 제외
+ * ═══════════════════════════════════════════════════════════════ */
+var ATTACH_RULES_URL =
+  'https://raw.githubusercontent.com/hwjung-bit/bwts-egcs-maintenance/main/contracts/attachment_rules.json';
+var ATTACH_RULES_FALLBACK = {
+  drop_name_patterns: ['EVENTLOG', 'DATALOG', 'DATAREPORT', 'OPERATIONTIME', 'TOTALLOG',
+                       'LOG\\s*DATA', 'BWRB', '^image\\d*\\.', '^outlook-', 'logo', 'signature',
+                       '\\.ics$', '\\.p7s$', '\\.vcf$', '\\.htm$', '\\.html$', '\\.eml$'],
+  keep_name_patterns: ['REPORT', '\\bSR\\b', '보고서', '견적', 'QUOT', 'INVOICE', 'CERT', '성적서',
+                       'CALIBRATION', '검교정', 'MANUAL', 'DRAWING'],
+  keep_extensions: ['pdf', 'xlsx', 'xls', 'docx', 'doc', 'pptx', 'zip', 'jpg', 'jpeg', 'png'],
+  min_image_bytes: 200000,
+  max_files_per_folder: 20,
+};
+
+function attachRules_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get('ATTACH_RULES');
+  if (hit) {
+    try { return JSON.parse(hit); } catch (e) { /* fall through */ }
+  }
+  try {
+    var res = UrlFetchApp.fetch(ATTACH_RULES_URL, { muteHttpExceptions: true });
+    if (res.getResponseCode() === 200) {
+      var txt = res.getContentText();
+      JSON.parse(txt);                       // validate before caching
+      cache.put('ATTACH_RULES', txt, 3600);
+      return JSON.parse(txt);
+    }
+  } catch (e) {
+    Logger.log('첨부 규칙 로드 실패 — 내장 기본값 사용: ' + e.message);
+  }
+  return ATTACH_RULES_FALLBACK;
+}
+
+function keepAttachment_(name, bytes, rules) {
+  var n = String(name || '');
+  var test = function (pats) {
+    return (pats || []).some(function (p) {
+      try { return new RegExp(p, 'i').test(n); } catch (e) { return false; }
+    });
+  };
+  if (test(rules.drop_name_patterns)) return false;
+  if (test(rules.keep_name_patterns)) return true;
+  var m = /\.([A-Za-z0-9]+)$/.exec(n);
+  var ext = m ? m[1].toLowerCase() : '';
+  if ((rules.keep_extensions || []).indexOf(ext) < 0) return false;
+  if (['jpg', 'jpeg', 'png', 'gif'].indexOf(ext) >= 0 &&
+      (bytes || 0) < (rules.min_image_bytes || 200000)) return false;
+  return true;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+ * 업로드 큐 — 웹에서 올린 파일(Supabase Storage)을 작업폴더로 옮긴다.
+ * sql/022_upload_requests.sql. 큐 규약은 folder_requests 와 동일.
+ * ═══════════════════════════════════════════════════════════════ */
+var UPLOAD_BUCKET = 'repair_uploads';
+
+function storageFetch_(path, method) {
+  var cfg = supaCfg_();
+  var res = UrlFetchApp.fetch(
+    cfg.url + '/storage/v1/object/' + UPLOAD_BUCKET + '/' +
+      path.split('/').map(encodeURIComponent).join('/'),
+    { method: method || 'get', muteHttpExceptions: true,
+      headers: { apikey: cfg.key, Authorization: 'Bearer ' + cfg.key } });
+  var code = res.getResponseCode();
+  if (code < 200 || code >= 300) {
+    throw new Error('storage ' + (method || 'get') + ' ' + code + ': ' +
+                    res.getContentText().slice(0, 200));
+  }
+  return res;
+}
+
+/** repairs.attachments 에 {name,url} 을 이름 기준으로 병합한다. */
+function mergeRepairAttachments_(repairId, urlByName) {
+  var rows = supaGet_('repairs?select=attachments&id=eq.' + encodeURIComponent(repairId));
+  var prev = [];
+  if (rows.length) {
+    try { prev = JSON.parse(rows[0].attachments || '[]'); } catch (e) { prev = []; }
+  }
+  if (!Array.isArray(prev)) prev = [];
+  var known = {};
+  var merged = prev.map(function (it) {
+    var name = it && it.name ? it.name : String(it || '');
+    known[name] = 1;
+    if (urlByName[name] && !(it && it.url)) return { name: name, url: urlByName[name] };
+    return it;
+  });
+  Object.keys(urlByName).forEach(function (name) {
+    if (!known[name]) merged.push({ name: name, url: urlByName[name] });
+  });
+  supaPatch_('repairs?id=eq.' + encodeURIComponent(repairId),
+             { attachments: JSON.stringify(merged) });
+}
+
+/** 이 수리 건의 작업폴더 id — 알려진 것 → 색인 근사 → 새로 생성 순. */
+function resolveRepairFolder_(req, index) {
+  var rows = supaGet_('repairs?select=id,file_url&id=eq.' + encodeURIComponent(req.repair_id));
+  if (!rows.length) return null;                     // 수리이력 삭제됨
+  var m = /\/folders\/([A-Za-z0-9_-]+)/.exec(rows[0].file_url || '');
+  if (m) return m[1];
+  var fr = supaGet_('folder_requests?select=folder_id&repair_id=eq.' +
+                    encodeURIComponent(req.repair_id));
+  if (fr.length && fr[0].folder_id) return fr[0].folder_id;
+  var hit = findIndexedFolder_(req, index);
+  if (hit) return hit.id;
+  var id = getEventFolder_(req.system, req.ship_code, req.req_date, req.title);
+  var shipId = getShipFolder_(req.system, req.ship_code);
+  supaUpsertFolders_([folderRow_(DriveApp.getFolderById(id), req.ship_code, req.system, shipId)]);
+  return id;
+}
+
+function processUploadRequests_() {
+  var reqs = claimRequests_('upload_requests', 'id', 30);
+  if (!reqs.length) return 0;
+  var index = loadFolderIndex_(reqs);
+  var done = 0;
+  reqs.forEach(function (req) {
+    try {
+      var folderId = resolveRepairFolder_(req, index);
+      if (!folderId) {
+        finishRequest_('upload_requests', 'id', req,
+                       { status: 'cancelled', note: '수리이력이 삭제됨' }, null);
+        return;
+      }
+      var blob = storageFetch_(req.object_path, 'get').getBlob().setName(req.file_name);
+      var folder = DriveApp.getFolderById(folderId);
+      var existing = folder.getFilesByName(req.file_name);
+      var file = existing.hasNext() ? existing.next() : folder.createFile(blob);
+      var urlByName = {};
+      urlByName[req.file_name] = file.getUrl();
+      mergeRepairAttachments_(req.repair_id, urlByName);
+      try { storageFetch_(req.object_path, 'delete'); } catch (e) {
+        Logger.log('storage 삭제 실패(무시): ' + e.message);
+      }
+      var repair = supaGet_('repairs?select=file_url&id=eq.' + encodeURIComponent(req.repair_id));
+      if (repair.length && !repair[0].file_url) {
+        supaPatch_('repairs?id=eq.' + encodeURIComponent(req.repair_id),
+                   { file_url: 'https://drive.google.com/drive/folders/' + folderId });
+      }
+      finishRequest_('upload_requests', 'id', req,
+                     { status: 'done', folder_id: folderId, file_url: file.getUrl() }, null);
+      done++;
+    } catch (e) {
+      finishRequest_('upload_requests', 'id', req, null, e);
+    }
+  });
+  Logger.log('upload_requests 처리: ' + done + '/' + reqs.length);
+  return done;
 }

@@ -67,6 +67,8 @@ function setParams(p) {
 function refresh() {
   $('rfShip').innerHTML = shipOptions(S.REPAIRS);
   renderRows();
+  // pending uploads are a separate small query; render again when it lands
+  loadPending().then(renderRows).catch(() => {});
 }
 
 function renderRows() {
@@ -137,6 +139,8 @@ function renderRows() {
       `<td class="edit-cell" onclick="repairsTab.editField('${eid}','action',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">${esc(r.action || '—')}</td>` +
       `<td style="white-space:nowrap">${foldCell}${attCell}` +
         `<button onclick="repairsTab.editFileUrl('${eid}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8" title="Drive 링크 지정/변경">🔗</button>` +
+        `<button onclick="repairsTab.openUpload('${eid}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:#2563eb" title="파일 업로드 → Drive 작업폴더 (서비스리포트 등)">⬆</button>` +
+        (PENDING[r.id] ? `<span class="up-badge" title="Drive 로 옮기는 중 (5분 내)">⏳${PENDING[r.id]}</span>` : '') +
       '</td>' +
       `<td style="text-align:center"><button onclick="repairsTab.deleteRepair('${eid}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>`;
   }).join('');
@@ -256,6 +260,106 @@ async function saveNewRepair() {
   await requestDriveFolder(newR);
 }
 
-window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair };
+/* ===== Upload → Drive 작업폴더 (sql/022, GAS processUploadRequests_) =====
+   파일은 Supabase Storage 에 잠깐 머물다 GAS 5분 트리거가 선박/시스템/날짜
+   폴더로 옮기고 attachments 에 링크를 채운다. 여기서는 큐에 넣기만 한다. */
+let PENDING = {};           // repair_id → pending upload count
+let uploadTarget = null;
+
+async function loadPending() {
+  const res = await sb.from('upload_requests').select('repair_id,status')
+    .in('status', ['pending', 'processing']);
+  PENDING = {};
+  (res.data || []).forEach(x => { PENDING[x.repair_id] = (PENDING[x.repair_id] || 0) + 1; });
+}
+
+function ensureUploadModal() {
+  if ($('repairUpload')) return;
+  const d = document.createElement('div');
+  d.id = 'repairUpload';
+  d.innerHTML = `
+  <div class="box">
+    <h3>⬆ 파일 업로드 <span id="ruTitle" style="font-weight:400;color:#94a3b8;font-size:11px"></span></h3>
+    <label>파일 (여러 개 가능, 50MB 이하)<input id="ruFiles" type="file" multiple></label>
+    <div class="up-list" id="ruList"></div>
+    <label>조치 내용 / 메모 (선택 — 수리이력 '조치'에 날짜와 함께 추가됨)<textarea id="ruNote" placeholder="예: 테크로스 방선 점검 완료, TRO 센서 교체. 서비스리포트 첨부"></textarea></label>
+    <div style="font-size:11px;color:#94a3b8">저장 위치: Drive › 시스템 › 선박 › "날짜 제목" 작업폴더 (없으면 자동 생성). 5분 내 📄 첨부 목록에 링크가 생깁니다.</div>
+    <div class="btns">
+      <button id="ruCancel">취소</button>
+      <button class="pri" id="ruSave">업로드</button>
+    </div>
+  </div>`;
+  document.body.appendChild(d);
+  d.onclick = e => { if (e.target === d) closeUpload(); };
+  $('ruCancel').onclick = closeUpload;
+  $('ruSave').onclick = submitUpload;
+  $('ruFiles').onchange = () => {
+    const fs = [...$('ruFiles').files];
+    $('ruList').innerHTML = fs.map(f => `• ${esc(f.name)} (${(f.size / 1024).toFixed(0)}KB)`).join('<br>');
+  };
+}
+
+function openUpload(id) {
+  const r = S.REPAIRS.find(x => x.id === id);
+  if (!r) return;
+  ensureUploadModal();
+  uploadTarget = r;
+  $('ruTitle').textContent = `— ${r.ship_code} ${r.system} ${r.date || ''} ${(r.symptom || r.email_subject || '').slice(0, 40)}`;
+  $('ruFiles').value = ''; $('ruList').innerHTML = ''; $('ruNote').value = '';
+  $('repairUpload').classList.add('open');
+}
+function closeUpload() { $('repairUpload').classList.remove('open'); uploadTarget = null; }
+
+async function submitUpload() {
+  const r = uploadTarget;
+  if (!r) return;
+  const files = [...$('ruFiles').files];
+  const note = $('ruNote').value.trim();
+  if (!files.length && !note) { toast('파일 또는 메모를 입력하세요'); return; }
+  if (files.some(f => f.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
+  $('ruSave').disabled = true; $('ruSave').textContent = '업로드 중...';
+  const who = S.USER && S.USER.email;
+  let okCount = 0;
+  try {
+    for (const f of files) {
+      const safe = f.name.replace(/[\\/:*?"<>|]+/g, '_');
+      const path = `${r.id}/${Date.now()}_${safe}`;
+      const up = await sb.storage.from('repair_uploads').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
+      if (up.error) { toast(`업로드 실패 (${f.name}): ${up.error.message}`); continue; }
+      const ins = await sb.from('upload_requests').insert({
+        repair_id: r.id, ship_code: r.ship_code, system: r.system, req_date: r.date || null,
+        title: r.symptom || r.email_subject || '', object_path: path, file_name: safe, file_size: f.size,
+        user_note: note || null, requested_by: who, status: 'pending',
+      });
+      if (ins.error) { toast(`큐 등록 실패 (${f.name}): ${ins.error.message}`); continue; }
+      okCount++;
+      // 프론트 목록에도 이름을 미리 넣어 둔다 — GAS 가 url 만 채운다
+      const atts = repairAtts(r);
+      if (!atts.some(a => a.name === safe)) {
+        atts.push({ name: safe });
+        r.attachments = JSON.stringify(atts);
+        await sb.from('repairs').update({ attachments: r.attachments }).eq('id', r.id);
+      }
+    }
+    if (note) {
+      const stamp = todayStr();
+      const action = (r.action ? r.action + '\n' : '') + `[${stamp}] ${note}`;
+      let hist = [];
+      try { hist = JSON.parse(r.history || '[]'); } catch (e) { hist = []; }
+      if (!Array.isArray(hist)) hist = [];
+      hist.push({ date: stamp, by: who, note, files: files.map(f => f.name) });
+      const ok = await dbSave(sb.from('repairs').update({ action, history: JSON.stringify(hist) }).eq('id', r.id));
+      if (ok) { r.action = action; r.history = JSON.stringify(hist); }
+    }
+    toast(okCount ? `${okCount}개 파일 업로드 — 5분 내 Drive 작업폴더로 이동` : (note ? '메모 저장됨' : '업로드된 파일 없음'));
+    closeUpload();
+    await loadPending();
+    renderRows();
+  } finally {
+    $('ruSave').disabled = false; $('ruSave').textContent = '업로드';
+  }
+}
+
+window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload };
 
 export default { id: 'repairs', mount, refresh, setParams };
