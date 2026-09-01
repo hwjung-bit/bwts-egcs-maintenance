@@ -219,6 +219,7 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 - 📥 파일 저장(2026-09-01, v20260901m): 메일 없이 파일+한 줄 정보만으로 수리이력 등록 + Drive 폴더 자동 생성.
   E2E 확인: 폴더 `01. KPS/2026-09-01 KPS BWTS TEST 파일저장 테스트` 생성 후 테스트 데이터 정리.
   주의: Storage 키에 한글 넣으면 400 InvalidKey 로 조용히 실패 — 키는 ASCII, 이름은 file_name.
+- 텍스트 검색(v20260901n): 수리이력·메일대장 검색창, 띄어쓰기 = AND (`js/shared/search.js` matchQuery). 수리이력은 검색 중 완료 건도 표시.
   Storage 에 남은 객체 = 아직 안 옮겨진 것 (정상은 이동 후 삭제).
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
