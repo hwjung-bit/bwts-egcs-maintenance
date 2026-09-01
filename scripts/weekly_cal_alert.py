@@ -379,6 +379,12 @@ def send_email(to, subject, html_body):
     log.info("Email sent via SMTP to %s", to)
 
 
+# Primary key per table — the paging ORDER BY must use a column that exists
+# (ships has no id; its key is code). 2026-09-01: ordering by "id" made the
+# weekly alert fail with 42703 on ships.
+_PK = {"ships": "code"}
+
+
 def fetch_all(sb, table, eq=None):
     """Page through a table — a single read caps at 1000 rows."""
     rows = []
@@ -386,7 +392,7 @@ def fetch_all(sb, table, eq=None):
     offset = 0
     while True:
         # ORDER BY 없는 range 는 페이지 경계에서 행이 중복·누락될 수 있다.
-        q = sb.table(table).select("*").order("id")
+        q = sb.table(table).select("*").order(_PK.get(table, "id"))
         if eq:
             q = q.eq(eq[0], eq[1])
         res = q.range(offset, offset + page_size - 1).execute()
