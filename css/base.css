@@ -97,8 +97,8 @@ tr.stale:hover{background:#fef3c7 !important}
 #repairAdd input,#repairAdd select,#repairAdd textarea,#repairUpload input,#repairUpload textarea{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
 #repairAdd input:focus,#repairAdd select:focus,#repairAdd textarea:focus{border-color:#3b82f6}
 #repairAdd textarea,#repairUpload textarea{min-height:56px;resize:vertical}
-#repairAdd .row{display:flex;gap:8px}
-#repairAdd .row>label{flex:1}
+#repairAdd .row,#repairUpload .row{display:flex;gap:8px}
+#repairAdd .row>label,#repairUpload .row>label{flex:1}
 #repairAdd .btns,#repairUpload .btns{display:flex;gap:8px;margin-top:10px}
 #repairAdd .btns button,#repairUpload .btns button{flex:1;padding:7px 0;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
 #repairAdd .btns button.pri,#repairUpload .btns button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
