@@ -4,7 +4,8 @@
   "bwts_calibration": {
     "interval_months": 12,
     "soon_days": 60,
-    "_doc": "BWTS TRO 센서 검교정. days<=0 만료, <=soon_days 임박"
+    "_doc": "BWTS TRO 센서 검교정. days<=0 만료, <=soon_days 임박",
+    "stale_after_days": 365
   },
   "egcs_calibration": {
     "soon_days": 30,
@@ -38,7 +39,8 @@
         "repl": 12
       }
     },
-    "_doc": "WMS 센서 모델별 검교정(cal)/신환(repl) 주기. WMS 매뉴얼 2026.06.18. cal null = 검교정 없음(신환만)"
+    "_doc": "WMS 센서 모델별 검교정(cal)/신환(repl) 주기. WMS 매뉴얼 2026.06.18. cal null = 검교정 없음(신환만) stale_after_days: 만료 후 이 일수를 넘긴 기록은 실제 만료가 아니라 '기록 미갱신'으로 분류(알림 메일 별도 섹션).",
+    "stale_after_days": 365
   },
   "bwts_log": {
     "tro_ballast_min_ppm": 5.0,

@@ -10,6 +10,20 @@ import { go } from '../core/router.js';
 
 // Filter state survives tab switches (module scope)
 const F = { year: '', sys: '', src: '', ship: '', status: '', cat: '', q: '' };
+// Month groups: collapsed set persists per browser; default = everything but the
+// two most recent months folded. A search/filter shows all matching rows expanded.
+let COLLAPSED = null;
+function loadCollapsed(months) {
+  if (COLLAPSED) return;
+  try {
+    const v = localStorage.getItem('mail.collapsed');
+    if (v) { COLLAPSED = new Set(JSON.parse(v)); return; }
+  } catch (e) { /* ignore */ }
+  COLLAPSED = new Set(months.slice(2));
+}
+function saveCollapsed() {
+  try { localStorage.setItem('mail.collapsed', JSON.stringify([...COLLAPSED])); } catch (e) { /* ignore */ }
+}
 
 function opts(list, cur) {
   return list.map(v => `<option${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
@@ -123,8 +137,24 @@ function renderRows() {
         `<button onclick="mailTab.mailToRepair('${eid}')"${repairBtnCls} style="background:none;border:none;color:#2563eb;cursor:pointer;font-size:13px;margin-right:4px" title="${isRepairCandidate ? '⚡ 수리요청 메일 — 수리이력 전환 추천' : '수리이력으로 복사'}">🔧</button>` +
         `<button onclick="mailTab.deleteMail('${eid}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td>` +
       `</tr>`;
-  }).join('');
-  $('tbody').innerHTML = rows || '<tr><td colspan="12" class="loading">데이터 없음</td></tr>';
+  });
+  // ── 월별 그룹 (년-월 내림차순, 접기/펼치기) ──
+  const filtering = !!(F.year || F.sys || F.src || F.ship || F.status || F.cat || q);
+  const months = [...new Set(filtered.map(m => (m.date || '').slice(0, 7) || '날짜없음'))];
+  loadCollapsed(months);
+  const rowList = filtered.map((m, i) => ({ ym: (m.date || '').slice(0, 7) || '날짜없음', html: rows[i], stale: isStale(m) }));
+  let out = '';
+  months.forEach(ym => {
+    const grp = rowList.filter(x => x.ym === ym);
+    const isCollapsed = !filtering && COLLAPSED.has(ym);
+    const staleN = grp.filter(x => x.stale).length;
+    out += `<tr class="mail-grp" onclick="mailTab.toggleMonth('${esc(ym)}')"><td colspan="12">` +
+      `<span class="mail-grp-arrow">${isCollapsed ? '▶' : '▼'}</span> <b>${esc(ym)}</b> · ${grp.length}건` +
+      (staleN ? ` · <span style="color:#b45309">미확인 3일+ ${staleN}</span>` : '') +
+      (isCollapsed ? ' <span class="muted" style="font-size:11px">— 클릭하여 펼치기</span>' : '') + '</td></tr>';
+    if (!isCollapsed) out += grp.map(x => x.html).join('');
+  });
+  $('tbody').innerHTML = out || '<tr><td colspan="12" class="loading">데이터 없음</td></tr>';
 
   const staleCnt = filtered.filter(isStale).length;
   let cntText = filtered.length + ' / ' + MAIL.length + '건';
@@ -200,6 +230,12 @@ async function mailToRepair(mailId) {
 
 function goRepairs(shipCode) { go('repairs', { ship: shipCode || '' }); }
 
-window.mailTab = { updateStatus, deleteMail, editNote, mailToRepair, goRepairs };
+function toggleMonth(ym) {
+  if (COLLAPSED.has(ym)) COLLAPSED.delete(ym); else COLLAPSED.add(ym);
+  saveCollapsed();
+  renderRows();
+}
+
+window.mailTab = { updateStatus, deleteMail, editNote, mailToRepair, goRepairs, toggleMonth };
 
 export default { id: 'mail', mount, refresh };

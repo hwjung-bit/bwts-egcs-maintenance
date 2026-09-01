@@ -6,7 +6,8 @@ import { STATUS_LIST, STATUS_COLOR, ORIGIN_LIST, ORIGIN_ICON, YEARS } from '../s
 import { getShipOrder, shipByCode, shipOptions } from '../shared/ships.js';
 import { findDriveFolder, shipFolderUrl, requestDriveFolder, knownFolderId, repairAtts } from '../shared/drive.js';
 
-const F = { year: '', ship: '', system: '', stage: '' };
+const F = { year: '', ship: '', system: '', stage: '', hideDone: true };
+try { const v = localStorage.getItem('repairs.hideDone'); if (v !== null) F.hideDone = v === '1'; } catch (e) { /* ignore */ }
 
 function opts(list, cur) {
   return list.map(v => `<option${v === cur ? ' selected' : ''}>${esc(v)}</option>`).join('');
@@ -51,6 +52,7 @@ function mount(root) {
     <select id="rfSys"><option value="">전체 시스템</option>${opts(['BWTS', 'EGCS'], F.system)}</select>
     <select id="rfShip"><option value="">전체 선박</option></select>
     <select id="rfStage"><option value="">전체 단계</option>${opts(STATUS_LIST, F.stage)}</select>
+    <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rfHideDone"${F.hideDone ? ' checked' : ''}> 완료 숨기기</label>
     <button class="add-btn" id="raOpen" title="메일 없이 카톡·전화 등으로 처리된 건 등록">➕ 직접 등록</button>
     <span class="count" id="repairCnt"></span>
   </div>
@@ -58,6 +60,11 @@ function mount(root) {
   const bind = (id, key) => { $(id).onchange = e => { F[key] = e.target.value; renderRows(); }; };
   bind('rfYear', 'year'); bind('rfSys', 'system'); bind('rfShip', 'ship'); bind('rfStage', 'stage');
   $('raOpen').onclick = openRepairAdd;
+  $('rfHideDone').onchange = e => {
+    F.hideDone = e.target.checked;
+    try { localStorage.setItem('repairs.hideDone', F.hideDone ? '1' : '0'); } catch (err) { /* ignore */ }
+    renderRows();
+  };
 }
 
 function setParams(p) {
@@ -83,6 +90,8 @@ function renderRows() {
     if (F.ship && r.ship_code !== F.ship) return false;
     if (F.system && r.system !== F.system) return false;
     if (F.stage && r.stage !== F.stage) return false;
+    // 완료 숨기기 — 단계 필터로 '완료'를 직접 고른 경우는 보여준다
+    if (F.hideDone && !F.stage && r.stage === '완료') return false;
     return true;
   });
   // 완료만 아래, 나머지는 날짜 최신순
@@ -105,7 +114,8 @@ function renderRows() {
   $('repairStats').innerHTML =
     card('전체', st.total, '', '') + card('BWTS', st.BWTS, 'blue', '') + card('EGCS', st.EGCS, 'green', '') +
     STATUS_LIST.map(s => card(s, st[s] || 0, STATUS_COLOR[s], s)).join('');
-  $('repairCnt').textContent = filtered.length + ' / ' + REPAIRS.length + '건';
+  const hidden = F.hideDone && !F.stage ? REPAIRS.filter(r => r.stage === '완료').length : 0;
+  $('repairCnt').textContent = filtered.length + ' / ' + REPAIRS.length + '건' + (hidden ? ` (완료 ${hidden}건 숨김)` : '');
 
   if (!REPAIRS.length) {
     $('repairsRoot').innerHTML = '<div class="loading">수리이력 없음</div>';

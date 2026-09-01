@@ -43,6 +43,11 @@ BWTS_INTERVAL = _TH["bwts_calibration"]["interval_months"]
 BWTS_SOON_DAYS = _TH["bwts_calibration"]["soon_days"]
 SENSOR_CYCLE = _TH["egcs_calibration"]["sensor_cycle_months"]   # {model: {cal, repl}}
 EGCS_SOON_DAYS = _TH["egcs_calibration"]["soon_days"]
+# 만료 후 이만큼 지난 기록은 센서가 그때까지 방치됐다기보다 기록이 갱신되지
+# 않은 것이다 (2020-02-04 같은 시드 날짜가 여러 척에 동일). 알람이 아니라
+# "기록 갱신 필요" 로 따로 보여 준다.
+STALE_AFTER_DAYS = _TH["egcs_calibration"].get("stale_after_days", 365)
+BWTS_STALE_AFTER_DAYS = _TH["bwts_calibration"].get("stale_after_days", 365)
 
 KST = timezone(timedelta(hours=9))
 
@@ -120,7 +125,8 @@ def collect_bwts_alerts(calibrations, today):
                 "kind": "검교정",
                 "due": due.isoformat(),
                 "days": days,
-                "level": "expired" if days <= 0 else "soon",
+                "level": ("stale" if days <= -BWTS_STALE_AFTER_DAYS
+                          else "expired" if days <= 0 else "soon"),
             })
     alerts.sort(key=lambda a: a["days"])
     return alerts
@@ -193,12 +199,31 @@ def collect_egcs_alerts(calibrations, ships_map, today):
                     "expired" if repl_days <= 0 else "soon"
                 ),
             })
-    # Sort by ship, then WMS, then days (for rowspan grouping)
+    # 센서 하나에 검교정·신환 두 행이 생기면 건수가 두 배로 보인다 (2026-09-01
+    # "37건" 메일). 같은 센서는 한 행으로 합치고 더 급한 쪽 날짜/일수를 쓴다.
+    merged = {}
+    for a in alerts:
+        key = (a["ship"], a.get("wms", ""), a.get("sensor", ""))
+        cur = merged.get(key)
+        if cur is None:
+            merged[key] = dict(a, kinds=[a["kind"]])
+        else:
+            cur["kinds"].append(a["kind"])
+            if a["days"] < cur["days"]:
+                cur.update({"due": a["due"], "days": a["days"]})
+    alerts = []
+    for a in merged.values():
+        a["kind"] = "·".join(sorted(set(a.pop("kinds")), key=lambda k: k != "검교정"))
+        a["level"] = ("stale" if a["days"] <= -STALE_AFTER_DAYS
+                      else "expired" if a["days"] <= 0 else "soon")
+        alerts.append(a)
     alerts.sort(key=lambda a: (a["ship"], a.get("wms", ""), a["days"]))
     return alerts, skipped
 
 
-def status_text(days):
+def status_text(days, level=None):
+    if level == "stale":
+        return f"{abs(days)}일 경과 — 기록 갱신 필요"
     if days <= 0:
         return f"{abs(days)}일 경과(만료)"
     return f"D-{days} 임박"
@@ -207,22 +232,28 @@ def status_text(days):
 def status_color(level):
     if level == "expired":
         return "#b91c1c"
+    if level == "stale":
+        return "#6b7280"
     return "#b45309"
 
 
 def row_bg(level):
     if level == "expired":
         return "#fef2f2"
+    if level == "stale":
+        return "#f3f4f6"
     return "#fffbeb"
 
 
 def build_html(bwts_alerts, egcs_alerts, egcs_skipped=0):
-    """GAS 메일과 동일한 포맷의 HTML 생성."""
+    """GAS 메일과 동일한 포맷의 HTML 생성. 'stale'(기록 미갱신)은 표에는 회색으로
+    남기되 만료·임박 건수에서는 뺀다 — 그 숫자가 조치 대상이어야 한다."""
     bwts_exp = sum(1 for a in bwts_alerts if a["level"] == "expired")
     bwts_soon = sum(1 for a in bwts_alerts if a["level"] == "soon")
     egcs_exp = sum(1 for a in egcs_alerts if a["level"] == "expired")
     egcs_soon = sum(1 for a in egcs_alerts if a["level"] == "soon")
-    total = len(bwts_alerts) + len(egcs_alerts)
+    stale_n = sum(1 for a in bwts_alerts + egcs_alerts if a["level"] == "stale")
+    total = bwts_exp + bwts_soon + egcs_exp + egcs_soon
     total_exp = bwts_exp + egcs_exp
     total_soon = bwts_soon + egcs_soon
 
@@ -245,7 +276,7 @@ def build_html(bwts_alerts, egcs_alerts, egcs_skipped=0):
             f'<td style="{td}">{a["due"]}</td>'
             f'<td style="{td}">'
             f'<span style="color:{sc};font-weight:600">'
-            f'{status_text(a["days"])}</span></td>'
+            f'{status_text(a["days"], a["level"])}</span></td>'
             f'</tr>'
         )
 
@@ -303,7 +334,7 @@ width:100%">
                     f'<td style="{td}">{a["due"]}</td>'
                     f'<td style="{td}">'
                     f'<span style="color:{sc};font-weight:600">'
-                    f'{status_text(a["days"])}</span></td>'
+                    f'{status_text(a["days"], a["level"])}</span></td>'
                     f'</tr>'
                 )
             i += span
@@ -350,7 +381,11 @@ border-top:1px solid #e2e8f0;padding-top:10px">\
 앱 검교정 보드</a>에서 상세를 확인하세요.<br>\
 이 메일은 매주 월요일 오전 8시 자동 발송됩니다 \
 (GitHub Actions).</p></div>"""
-    return html, total, len(bwts_alerts), len(egcs_alerts)
+    if stale_n:
+        html += f"""
+<p style="color:#6b7280;font-size:12px;margin:12px 0 0">회색 {stale_n}건은 만료 후 {STALE_AFTER_DAYS}일 이상 지난 기록 —
+실제 만료가 아니라 <b>검교정 기록이 갱신되지 않은 것</b>으로 봅니다. 최근 성적서 확인 후 관리대장에서 날짜를 고쳐 주세요.</p>"""
+    return html, total, bwts_exp + bwts_soon, egcs_exp + egcs_soon, stale_n
 
 
 def send_email(to, subject, html_body):
@@ -446,12 +481,13 @@ def main():
         len(bwts_alerts), len(egcs_alerts),
     )
 
-    html, total, bwts_cnt, egcs_cnt = build_html(
+    html, total, bwts_cnt, egcs_cnt, stale_n = build_html(
         bwts_alerts, egcs_alerts, egcs_skipped
     )
     subject = (
         f"[검교정] 주간 만료·임박 {total}건 "
         f"(BWTS {bwts_cnt} · EGCS {egcs_cnt})"
+        + (f" · 기록갱신 필요 {stale_n}" if stale_n else "")
     )
 
     send_email(ALERT_TO, subject, html)
