@@ -66,6 +66,105 @@ def export(sb, verbose=False):
     return OUT_DIR
 
 
+# ── 구 GAS 스냅샷 호환 (env_snapshot.json / env_data.js) ────────────────────
+# 공무팀 Dash 는 2026-09 시점에 구 GAS 웹앱이 Drive `_dashboard/` 에 내보내던
+# env_snapshot.json 을 읽는다. 구 시트 DB 가 멈추면서 그 파일은 7월 이후 굳었다.
+# 옛 트리거를 끄는 대신 여기서 Supabase 기준으로 같은 모양을 써 준다 —
+# Dash 코드를 건드리지 않고 최신 데이터가 흐르게. 새 계약(env_summary.json)이
+# 자리잡으면 이 블록은 지운다.
+LEGACY_SNAPSHOT_DIRS = [
+    Path(r"G:\공유 드라이브\고려에스엠 0033 공무팀 환경기술파트\_dashboard"),
+    Path("G:/공유 드라이브/고려에스엠 0033 공무팀 환경기술파트/025  SCRUBBER 업무/13 메이커 서비스/_dashboard"),
+]
+_STAGE_LEGACY = {"미확인": "received", "확인": "diagnosing", "수리준비중": "repairing",
+                 "자재준비중": "repairing", "방선예정": "repairing", "완료": "done"}
+
+
+def _kst_now():
+    from datetime import timedelta
+    return (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d %H:%M")
+
+
+def _atts(v):
+    if not v:
+        return []
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return []
+    return v if isinstance(v, list) else []
+
+
+def build_legacy_snapshot(sb):
+    ships = sb.table("ships").select("*").execute().data or []
+    repairs = sb.table("repairs").select("*").order("date", desc=True).execute().data or []
+    cals = sb.table("calibrations").select("*").execute().data or []
+    mails = sb.table("mail_log").select(
+        "id,date,system,ship_code,subject,sender,status,note,category,source,mail_link") \
+        .order("date", desc=True).limit(300).execute().data or []
+    now = _kst_now()
+    snap = {
+        "email": "hwjung@ekmtc.com", "role": "admin", "dbUrl": "",
+        "ships": [{"code": s["code"], "name": s.get("name") or "", "teu": s.get("teu") or "",
+                   "bwts_maker": s.get("bwts_maker") or "", "egcs_maker": s.get("egcs_maker") or "",
+                   "wms": s.get("wms") or "", "cems": s.get("cems") or "", "scrubber_folder": "",
+                   "hidden": bool(s.get("hidden")), "updatedAt": s.get("updated_at") or ""}
+                  for s in sorted(ships, key=lambda x: (x.get("sort_order") or 999))],
+        "repairs": [{"id": r["id"], "shipCode": r.get("ship_code") or "", "system": r.get("system") or "",
+                     "date": r.get("date") or "", "equip": r.get("equip") or "",
+                     "stage": _STAGE_LEGACY.get(r.get("stage"), "received"), "stageKo": r.get("stage") or "",
+                     "symptom": r.get("symptom") or "", "action": r.get("action") or "",
+                     "parts": r.get("parts") or "", "cost": r.get("cost") or "",
+                     "attachments": _atts(r.get("attachments")), "createdAt": "", "updatedAt": "",
+                     "history": _atts(r.get("history")), "sourceFolderId": "",
+                     "sourceMsgId": r.get("source_msg_id") or "", "needsReview": bool(r.get("needs_review")),
+                     "emailSubject": r.get("email_subject") or "", "emailLink": r.get("email_link") or "",
+                     "fileUrl": r.get("file_url") or "", "origin": r.get("origin") or ""}
+                    for r in repairs],
+        "bwtsCal": [{"id": c.get("id"), "shipCode": c["ship_code"], "equip": "연간검교정",
+                     "lastCalibration": c.get("last_date") or "", "intervalMonths": c.get("interval_months") or 12,
+                     "note": c.get("note") or "", "updatedAt": "", "system": "BWTS",
+                     "serial": c.get("serial") or "", "model": c.get("model") or "", "certUrl": c.get("cert_url") or ""}
+                    for c in cals if c.get("system") == "BWTS"],
+        "egcsCal": [{"id": c.get("id"), "shipCode": c["ship_code"], "equip": (c.get("equip") or "").replace("-", "/"),
+                     "date": c.get("last_date") or "", "text": "" if c.get("last_date") else (c.get("note") or ""),
+                     "serial": c.get("serial") or "", "model": c.get("model") or ""}
+                    for c in cals if c.get("system") == "EGCS"],
+        "syncStatus": {"at": now, "source": "supabase bwts-egcs-maintenance"},
+        "snapStatus": {"at": now, "ok": True, "source": "export_contract.py"},
+        "collectLog": [],
+    }
+    mail_init = [{"id": m["id"], "date": m.get("date") or "", "system": m.get("system") or "",
+                  "shipCode": m.get("ship_code") or "", "subject": m.get("subject") or "",
+                  "from": m.get("sender") or "", "status": m.get("status") or "",
+                  "note": m.get("note") or "", "category": m.get("category") or "",
+                  "source": m.get("source") or "", "link": m.get("mail_link") or ""} for m in mails]
+    return snap, mail_init
+
+
+def export_legacy_snapshot(sb, verbose=False):
+    snap, mail_init = build_legacy_snapshot(sb)
+    js = json.dumps(snap, ensure_ascii=False)
+    js_file = ("// Auto-generated " + _kst_now() + " by bwts-egcs-maintenance export_contract.py\n"
+               "var ENV_DATA = " + js + ";\n"
+               "var MAIL_DATA_INIT = " + json.dumps(mail_init, ensure_ascii=False) + ";\n")
+    written = []
+    for d in LEGACY_SNAPSHOT_DIRS:
+        if not d.parent.exists():
+            continue
+        d.mkdir(parents=True, exist_ok=True)
+        for name, content in (("env_snapshot.json", js), ("env_data.js", js_file)):
+            tmp = d / (name + ".tmp")
+            tmp.write_text(content, encoding="utf-8")
+            tmp.replace(d / name)
+        written.append(str(d))
+    if verbose:
+        print(f"  legacy snapshot: ships {len(snap['ships'])} · repairs {len(snap['repairs'])} · "
+              f"bwtsCal {len(snap['bwtsCal'])} · egcsCal {len(snap['egcsCal'])} → {len(written)} dirs")
+    return written
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sb = get_client()
@@ -73,6 +172,7 @@ def main():
     print(f"thresholds sync: {n} sections, {m} sensor models")
     out = export(sb, verbose=True)
     print(f"contract JSON → {out}")
+    export_legacy_snapshot(sb, verbose=True)
 
 
 if __name__ == "__main__":

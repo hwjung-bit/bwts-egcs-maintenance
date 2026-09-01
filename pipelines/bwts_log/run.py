@@ -125,6 +125,7 @@ def main():
             export_contract.sync_thresholds(sb)
             out = export_contract.export(sb, verbose=args.verbose)
             print(f"공무팀 계약 JSON → {out}")
+            export_contract.export_legacy_snapshot(sb, verbose=args.verbose)
         except Exception as e:   # export is secondary — never fail the publish
             print(f"[경고] 계약 JSON 내보내기 실패: {e}")
     return 0
