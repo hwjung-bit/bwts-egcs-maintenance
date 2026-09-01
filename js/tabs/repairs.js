@@ -397,7 +397,7 @@ async function submitUpload() {
     const title = [v('ruShip'), v('ruSys'), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ');
     const rec = {
       id: 'FL_' + Date.now(), ship_code: v('ruShip'), system: v('ruSys'), date: v('ruDate'),
-      equip: v('ruEquip'), stage: v('ruStage') || '완료', symptom: title, action: note || '',
+      equip: v('ruEquip'), stage: v('ruStage') || '완료', symptom: title, action: '',
       parts: '', cost: '', attachments: '[]', history: '[]', email_subject: '', email_link: '',
       needs_review: false, source_msg_id: '', origin: '파일',
     };
@@ -414,7 +414,8 @@ async function submitUpload() {
       const safe = base
         ? `${base}${files.length > 1 ? ` (${i + 1})` : ''}${extOf(f.name)}`
         : f.name.replace(SAFE, '_');
-      const path = `${r.id}/${Date.now()}_${safe}`;
+      // Storage keys must be ASCII — Drive gets the real (Korean) name via file_name
+      const path = `${r.id}/${Date.now()}_${i}${extOf(f.name).replace(/[^\w.]/g, '')}`;
       const up = await sb.storage.from('repair_uploads').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
       if (up.error) { toast(`업로드 실패 (${f.name}): ${up.error.message}`); continue; }
       const ins = await sb.from('upload_requests').insert({
