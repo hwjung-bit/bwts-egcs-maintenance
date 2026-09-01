@@ -1,7 +1,7 @@
 // 🔧 수리이력 — repairs table, stage cards, manual entry, Drive folder links.
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
-import { $, esc, toast, todayStr } from '../core/dom.js';
+import { $, esc, toast, todayStr, freezeCell } from '../core/dom.js';
 import { STATUS_LIST, STATUS_COLOR, ORIGIN_LIST, ORIGIN_ICON, YEARS } from '../shared/constants.js';
 import { getShipOrder, shipByCode, shipOptions } from '../shared/ships.js';
 import { findDriveFolder, shipFolderUrl, requestDriveFolder, knownFolderId, repairAtts } from '../shared/drive.js';
@@ -167,17 +167,19 @@ function editField(id, field, el) {
   if (!r) return;
   const cur = r[field] || '';
   const isLong = (field === 'symptom' || field === 'action');
+  const unfreeze = freezeCell(el);          // keep the column where it is
+  const h = Math.max(isLong ? 60 : 0, el.getBoundingClientRect().height);
   const node = document.createElement(isLong ? 'textarea' : 'input');
   node.value = cur;
   node.style.cssText = isLong
-    ? 'width:100%;min-height:60px;font-size:12px;padding:4px;border:1px solid #3b82f6;border-radius:4px;outline:none;font-family:inherit'
-    : 'width:100%;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
+    ? `width:100%;box-sizing:border-box;min-height:${h}px;font-size:12px;padding:4px;border:1px solid #3b82f6;border-radius:4px;outline:none;font-family:inherit;resize:vertical`
+    : 'width:100%;box-sizing:border-box;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
   el.textContent = ''; el.appendChild(node); node.focus();
-  const save = () => { const v = node.value.trim(); r[field] = v; el.textContent = v || '—'; updateField(id, field, v); };
+  const save = () => { node.onblur = null; const v = node.value.trim(); r[field] = v; el.textContent = v || '—'; unfreeze(); updateField(id, field, v); };
   node.onblur = save;
   node.onkeydown = e => {
     if (!isLong && e.key === 'Enter') node.blur();
-    if (e.key === 'Escape') { node.onblur = null; el.textContent = cur || '—'; }
+    if (e.key === 'Escape') { node.onblur = null; el.textContent = cur || '—'; unfreeze(); }
   };
 }
 

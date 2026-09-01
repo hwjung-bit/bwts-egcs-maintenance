@@ -59,14 +59,28 @@ export function placePopup(pop, ev, width) {
 
 /* Inline single-line editor: replaces el's text with an input, saves on
    blur/Enter, cancels on Escape. onSave(value) does the persistence. */
+/* Freeze a cell's box while an editor replaces its text — otherwise the table
+   re-flows around the wider/narrower input and every column shifts. Returns
+   a restore() that undoes the inline styles. */
+export function freezeCell(el) {
+  const cell = el.closest('td') || el;
+  const w = cell.getBoundingClientRect().width;
+  const prev = { width: cell.style.width, maxWidth: cell.style.maxWidth, minWidth: cell.style.minWidth, box: cell.style.boxSizing };
+  cell.style.width = w + 'px'; cell.style.maxWidth = w + 'px'; cell.style.minWidth = w + 'px';
+  cell.style.boxSizing = 'border-box';
+  return () => { cell.style.width = prev.width; cell.style.maxWidth = prev.maxWidth; cell.style.minWidth = prev.minWidth; cell.style.boxSizing = prev.box; };
+}
+
 export function inlineEdit(el, cur, onSave, opts) {
   opts = opts || {};
+  const unfreeze = freezeCell(el);
   const inp = document.createElement('input');
   inp.type = opts.type || 'text';
   inp.value = cur || '';
   inp.placeholder = opts.placeholder || '';
   inp.style.cssText = opts.css ||
     'width:100%;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none';
+  inp.style.boxSizing = 'border-box'; inp.style.maxWidth = '100%';
   const restore = opts.restore || (() => { el.textContent = cur || (opts.empty || ''); });
   if (opts.hide) { el.style.display = 'none'; el.parentNode.appendChild(inp); }
   else { el.textContent = ''; el.appendChild(inp); }
@@ -76,6 +90,7 @@ export function inlineEdit(el, cur, onSave, opts) {
     const v = opts.type === 'date' ? inp.value : inp.value.trim();
     if (opts.hide) { el.style.display = ''; inp.remove(); }
     onSave(v);
+    unfreeze();
   }
   inp.onblur = save;
   // Enter saves through blur so save() runs once; Escape drops the handler
@@ -85,6 +100,7 @@ export function inlineEdit(el, cur, onSave, opts) {
     if (e.key === 'Escape') {
       inp.onblur = null;
       if (opts.hide) { el.style.display = ''; inp.remove(); } else restore();
+      unfreeze();
     }
   };
   return inp;
