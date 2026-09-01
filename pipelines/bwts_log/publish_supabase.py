@@ -19,7 +19,7 @@ _PAYLOAD_KEYS = (
     "grade", "grade_rule", "grade_reasons", "reception",
     "ballast_count", "deballast_count", "op_days",
     "tro_b_avg", "tro_b_min", "tro_d_max", "tro_b_in_range", "tro_d_compliant",
-    "trip_count", "alarm_count", "chattering", "recovery_pattern", "integrity", "flags",
+    "trip_count", "alarm_count", "chattering", "recovery_pattern", "integrity",
 )
 
 
@@ -47,8 +47,10 @@ def to_row(summary):
     row["grade_reasons"] = row["grade_reasons"] or []
     row["chattering"] = row["chattering"] or []
     row["recovery_pattern"] = row["recovery_pattern"] or {}
-    row["integrity"] = row["integrity"] or {}
-    row["flags"] = row["flags"] or []
+    # flags (grade-neutral markers such as valve chattering) ride inside the
+    # integrity JSON so no schema change is needed; the web reads integrity.flags
+    row["integrity"] = dict(row["integrity"] or {})
+    row["integrity"]["flags"] = summary.get("flags") or []
     # Whole summary as JSON (cache-file content) for the detail view
     row["summary"] = json.loads(json.dumps(summary, ensure_ascii=False, default=str))
     row["analyzer_version"] = ANALYZER_VERSION

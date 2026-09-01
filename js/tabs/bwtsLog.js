@@ -21,7 +21,7 @@ const STYLE = {
 };
 const REVIEW_MARK = { requested: '❓', reviewed: '✅', overridden: '✎' };
 const COLS = 'ship_code,period,grade,grade_rule,grade_reasons,reception,ballast_count,deballast_count,op_days,' +
-  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,flags,' +
+  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,' +
   'review_status,final_grade,review_note,reviewed_by,reviewed_at,analyzed_at';
 
 // module state
@@ -32,6 +32,7 @@ let selected = null;        // {ship_code, period}
 let loadedYear = null;
 
 const disp = r => r.final_grade || r.grade;
+const flagsOf = r => (r.integrity && r.integrity.flags) || r.flags || [];
 
 function mount(root) {
   root.innerHTML = `
@@ -121,7 +122,8 @@ function renderMatrix() {
       const mark = REVIEW_MARK[r.review_status] || '';
       const ops = (r.ballast_count || 0) + (r.deballast_count || 0);
       const sub = g === '미수신' ? '' : (g === '판독실패' ? (r.integrity && r.integrity.hits ? r.integrity.hits.join(' ') : '') : (ops ? `B${r.ballast_count}/D${r.deballast_count}` : ''));
-      const flag = (r.flags && r.flags.length) ? ` <span class="bl-flag" title="${esc(r.flags.join(', '))}">⚙</span>` : '';
+      const fl = flagsOf(r);
+      const flag = fl.length ? ` <span class="bl-flag" title="${esc(fl.join(', '))}">⚙</span>` : '';
       return `<td class="bl-cell" style="background:${st.bg};color:${st.fg};${dim}${sel}" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')" title="${esc(code)} ${esc(r.period)} ${esc(g)}${r.grade !== g ? ' (자동: ' + esc(r.grade) + ')' : ''}">` +
         `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}</div><div class="bl-sub">${esc(sub)}</div></td>`;
     }).join('');
@@ -147,8 +149,9 @@ async function renderDetail() {
   const st = STYLE[g] || STYLE['미수신'];
   const num = v => v == null ? '—' : (+v).toFixed(2);
   const reasons = (r.grade_reasons || []).map(x => `<li>${esc(x)}</li>`).join('') || '<li class="muted">—</li>';
-  const flagsHtml = (r.flags && r.flags.length)
-    ? `<div class="bl-sec"><h4>참고 표시 (등급 무관)</h4><ul>${r.flags.map(x => `<li>⚙ ${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const fl = flagsOf(r);
+  const flagsHtml = fl.length
+    ? `<div class="bl-sec"><h4>참고 표시 (등급 무관)</h4><ul>${fl.map(x => `<li>⚙ ${esc(x)}</li>`).join('')}</ul></div>` : '';
   const integ = r.integrity && r.integrity.hits && r.integrity.hits.length
     ? `<div class="bl-sec"><h4>판독 무결성 검사 (${esc(r.integrity.hits.join(', '))})</h4><ul>${(r.integrity.detail || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const review = r.review_status !== 'auto'
