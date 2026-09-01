@@ -63,6 +63,9 @@
 ## 첨부 파일 흐름
 - 메일→수리이력 전환 시: GAS `saveRequestAttachments_` 가 스레드 첨부 중 `contracts/attachment_rules.json` 규칙에 맞는 것만 작업폴더에 저장.
 - 웹 ⬆ 업로드: 브라우저 → Supabase Storage(`repair_uploads`, 비공개) + `upload_requests` 큐 → GAS `processUploadRequests_`
+- 웹 📥 파일 저장(수리이력 탭, 2026-09-01): 날짜·선박·시스템·장비·내용 + 파일 드롭 → 수리이력 1건 자동 등록(`id FL_*`, origin `파일`)
+  → 폴더명·파일명 = `YYYY-MM-DD 선박 시스템 장비 내용` (여러 파일은 ` (1)`, ` (2)`), 같은 큐로 Drive 이동.
+  **Storage 객체 키는 ASCII 만 허용(InvalidKey)** → 키는 `<repair_id>/<ts>_<n><ext>`, 한글 이름은 `upload_requests.file_name` 으로만 전달(GAS 가 Drive 파일명에 사용).
   (folder_requests 와 같은 선점/재시도 규약) → 작업폴더(알려진 폴더 → 색인 근사 → 생성) → `repairs.attachments` 링크, 객체 삭제.
   메모는 `repairs.action` 에 `[날짜] 내용` 으로 추가되고 `history` 에 남음.
 

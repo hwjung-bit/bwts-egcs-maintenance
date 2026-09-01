@@ -216,6 +216,9 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   main 에 푸시하면 최대 1시간 뒤 반영. 기존 저장 파일은 건드리지 않음.
 - 웹 업로드: 수리이력 ⬆ → Storage `repair_uploads` → `upload_requests` → GAS 5분 트리거가 Drive 로 이동.
   멈춘 건 확인: `select * from upload_requests where status in ('pending','error') order by created_at;`
+- 📥 파일 저장(2026-09-01, v20260901m): 메일 없이 파일+한 줄 정보만으로 수리이력 등록 + Drive 폴더 자동 생성.
+  E2E 확인: 폴더 `01. KPS/2026-09-01 KPS BWTS TEST 파일저장 테스트` 생성 후 테스트 데이터 정리.
+  주의: Storage 키에 한글 넣으면 400 InvalidKey 로 조용히 실패 — 키는 ASCII, 이름은 file_name.
   Storage 에 남은 객체 = 아직 안 옮겨진 것 (정상은 이동 후 삭제).
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
