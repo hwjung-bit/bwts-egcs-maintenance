@@ -11,8 +11,8 @@ export const STATUS_COLOR = (() => {
 })();
 
 /* 접수 경로 — 메일로 안 들어온 건을 어디서 받았는지 */
-export const ORIGIN_LIST = ['카톡', '전화', '구두', '방선', '기타'];
-export const ORIGIN_ICON = { '카톡': '💬', '전화': '☎', '구두': '🗣', '방선': '🚢', '기타': '📝' };
+export const ORIGIN_LIST = ['카톡', '전화', '구두', '방선', '파일', '기타'];
+export const ORIGIN_ICON = { '카톡': '💬', '전화': '☎', '구두': '🗣', '방선': '🚢', '파일': '📥', '기타': '📝' };
 
 /* 현황 탭 */
 export const STATUS_OPTS = ['-', '정상', '수리중', '문제'];

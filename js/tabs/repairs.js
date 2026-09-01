@@ -54,12 +54,14 @@ function mount(root) {
     <select id="rfStage"><option value="">전체 단계</option>${opts(STATUS_LIST, F.stage)}</select>
     <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rfHideDone"${F.hideDone ? ' checked' : ''}> 완료 숨기기</label>
     <button class="add-btn" id="raOpen" title="메일 없이 카톡·전화 등으로 처리된 건 등록">➕ 직접 등록</button>
+    <button class="add-btn" id="fileSaveOpen" style="background:#059669;border-color:#059669" title="파일 + 한 줄 정보 → Drive 작업폴더 자동 생성·저장">📥 파일 저장</button>
     <span class="count" id="repairCnt"></span>
   </div>
   <div class="wrap" id="repairsRoot"></div>`;
   const bind = (id, key) => { $(id).onchange = e => { F[key] = e.target.value; renderRows(); }; };
   bind('rfYear', 'year'); bind('rfSys', 'system'); bind('rfShip', 'ship'); bind('rfStage', 'stage');
   $('raOpen').onclick = openRepairAdd;
+  $('fileSaveOpen').onclick = () => openUpload(null);
   $('rfHideDone').onchange = e => {
     F.hideDone = e.target.checked;
     try { localStorage.setItem('repairs.hideDone', F.hideDone ? '1' : '0'); } catch (err) { /* ignore */ }
@@ -291,8 +293,21 @@ function ensureUploadModal() {
   d.id = 'repairUpload';
   d.innerHTML = `
   <div class="box">
-    <h3>⬆ 파일 업로드 <span id="ruTitle" style="font-weight:400;color:#94a3b8;font-size:11px"></span></h3>
-    <label>파일 (여러 개 가능, 50MB 이하)<input id="ruFiles" type="file" multiple></label>
+    <h3 id="ruHead">⬆ 파일 업로드 <span id="ruTitle" style="font-weight:400;color:#94a3b8;font-size:11px"></span></h3>
+    <div id="ruMeta">
+      <div class="row">
+        <label>날짜<input id="ruDate" type="date"></label>
+        <label>선박<select id="ruShip"></select></label>
+        <label>시스템<select id="ruSys"><option>BWTS</option><option>EGCS</option></select></label>
+      </div>
+      <div class="row">
+        <label>장비<input id="ruEquip" placeholder="예: CEMS, TRO 센서, WMS1"></label>
+        <label>단계<select id="ruStage"></select></label>
+      </div>
+      <label>내용 (짧게)<input id="ruDesc" placeholder="예: 방선점검 정상확인"></label>
+      <div id="ruPreview" style="font-size:11px;color:#2563eb;margin:-4px 0 8px;min-height:14px"></div>
+    </div>
+    <div id="ruDrop" class="dropzone">여기에 파일을 <b>드래그</b>하거나 클릭해서 선택 (여러 개 가능, 50MB 이하)<input id="ruFiles" type="file" multiple style="display:none"></div>
     <div class="up-list" id="ruList"></div>
     <label>조치 내용 / 메모 (선택 — 수리이력 '조치'에 날짜와 함께 추가됨)<textarea id="ruNote" placeholder="예: 테크로스 방선 점검 완료, TRO 센서 교체. 서비스리포트 첨부"></textarea></label>
     <div style="font-size:11px;color:#94a3b8">저장 위치: Drive › 시스템 › 선박 › "날짜 제목" 작업폴더 (없으면 자동 생성). 5분 내 📄 첨부 목록에 링크가 생깁니다.</div>
@@ -305,36 +320,100 @@ function ensureUploadModal() {
   d.onclick = e => { if (e.target === d) closeUpload(); };
   $('ruCancel').onclick = closeUpload;
   $('ruSave').onclick = submitUpload;
-  $('ruFiles').onchange = () => {
-    const fs = [...$('ruFiles').files];
-    $('ruList').innerHTML = fs.map(f => `• ${esc(f.name)} (${(f.size / 1024).toFixed(0)}KB)`).join('<br>');
-  };
+  const drop = $('ruDrop');
+  drop.onclick = e => { if (e.target.id !== 'ruFiles') $('ruFiles').click(); };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); };
+  $('ruFiles').onchange = () => { addFiles([...$('ruFiles').files]); $('ruFiles').value = ''; };
+  ['ruDate', 'ruShip', 'ruSys', 'ruEquip', 'ruDesc'].forEach(id => { $(id).oninput = renderPreview; $(id).onchange = renderPreview; });
+}
+
+let pickedFiles = [];
+function addFiles(list) {
+  list.forEach(f => { if (!pickedFiles.some(p => p.name === f.name && p.size === f.size)) pickedFiles.push(f); });
+  renderFileList();
+}
+function removeFile(i) { pickedFiles.splice(i, 1); renderFileList(); }
+function renderFileList() {
+  $('ruList').innerHTML = pickedFiles.map((f, i) =>
+    `• ${esc(f.name)} (${(f.size / 1024).toFixed(0)}KB) <a href="#" onclick="repairsTab.removeFile(${i});return false" style="color:#ef4444;text-decoration:none">✕</a>`).join('<br>');
+  renderPreview();
+}
+const SAFE = /[\\/:*?"<>|]+/g;
+const extOf = name => (name.match(/\.[^.]+$/) || [''])[0];
+/* 파일명/폴더명 = "YYYY-MM-DD 선박 시스템 장비 내용" */
+function baseName() {
+  const v = id => ($(id).value || '').trim();
+  return [v('ruDate'), v('ruShip'), v('ruSys'), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ').replace(SAFE, '_');
+}
+function renderPreview() {
+  if (uploadTarget || !$('ruPreview')) return;
+  const b = baseName();
+  const ext = pickedFiles[0] ? extOf(pickedFiles[0].name) : '';
+  $('ruPreview').textContent = b ? `→ 폴더 "${b}" / 파일 "${b}${pickedFiles.length > 1 ? ' (1)' : ''}${ext}"` : '';
 }
 
 function openUpload(id) {
-  const r = S.REPAIRS.find(x => x.id === id);
-  if (!r) return;
   ensureUploadModal();
+  pickedFiles = []; $('ruList').innerHTML = ''; $('ruNote').value = ''; $('ruPreview').textContent = '';
+  const r = id ? S.REPAIRS.find(x => x.id === id) : null;
+  if (id && !r) return;
   uploadTarget = r;
-  $('ruTitle').textContent = `— ${r.ship_code} ${r.system} ${r.date || ''} ${(r.symptom || r.email_subject || '').slice(0, 40)}`;
-  $('ruFiles').value = ''; $('ruList').innerHTML = ''; $('ruNote').value = '';
+  if (r) {
+    // 기존 수리 건에 첨부
+    $('ruMeta').style.display = 'none';
+    $('ruHead').firstChild.textContent = '⬆ 파일 업로드 ';
+    $('ruTitle').textContent = `— ${r.ship_code} ${r.system} ${r.date || ''} ${(r.symptom || r.email_subject || '').slice(0, 40)}`;
+  } else {
+    // 신규: 정보 한 줄 + 파일 → 폴더·파일명 자동, 수리이력 1건 자동 등록
+    $('ruMeta').style.display = '';
+    $('ruHead').firstChild.textContent = '📥 파일 저장 ';
+    $('ruTitle').textContent = '— 날짜·선박·시스템·장비·내용으로 폴더/파일명 자동 생성';
+    $('ruShip').innerHTML = getShipOrder().map(c => { const sh = shipByCode(c); return `<option value="${esc(c)}">${esc(c + (sh && sh.name ? ' — ' + sh.name : ''))}</option>`; }).join('');
+    $('ruStage').innerHTML = STATUS_LIST.map(st => `<option${st === '완료' ? ' selected' : ''}>${st}</option>`).join('');
+    $('ruDate').value = todayStr(); $('ruEquip').value = ''; $('ruDesc').value = '';
+    if (F.ship) $('ruShip').value = F.ship;
+    if (F.system) $('ruSys').value = F.system;
+  }
   $('repairUpload').classList.add('open');
+  if (!r) $('ruEquip').focus();
 }
-function closeUpload() { $('repairUpload').classList.remove('open'); uploadTarget = null; }
+function closeUpload() { $('repairUpload').classList.remove('open'); uploadTarget = null; pickedFiles = []; }
 
 async function submitUpload() {
-  const r = uploadTarget;
-  if (!r) return;
-  const files = [...$('ruFiles').files];
+  const files = pickedFiles.slice();
   const note = $('ruNote').value.trim();
-  if (!files.length && !note) { toast('파일 또는 메모를 입력하세요'); return; }
   if (files.some(f => f.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
-  $('ruSave').disabled = true; $('ruSave').textContent = '업로드 중...';
   const who = S.USER && S.USER.email;
+  let r = uploadTarget;
+  let base = null;                       // 신규 모드: 파일명/폴더명 공통 앞머리
+  if (!r) {
+    const v = id => ($(id).value || '').trim();
+    if (!v('ruShip') || !v('ruDate')) { toast('날짜·선박은 필수'); return; }
+    if (!v('ruEquip') && !v('ruDesc')) { toast('장비 또는 내용을 적어주세요'); return; }
+    if (!files.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
+    base = baseName();
+    const title = [v('ruShip'), v('ruSys'), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ');
+    const rec = {
+      id: 'FL_' + Date.now(), ship_code: v('ruShip'), system: v('ruSys'), date: v('ruDate'),
+      equip: v('ruEquip'), stage: v('ruStage') || '완료', symptom: title, action: note || '',
+      parts: '', cost: '', attachments: '[]', history: '[]', email_subject: '', email_link: '',
+      needs_review: false, source_msg_id: '', origin: '파일',
+    };
+    const ins = await sb.from('repairs').insert(rec).select();
+    if (ins.error) { toast('수리이력 등록 실패: ' + ins.error.message); return; }
+    r = ins.data && ins.data[0] ? ins.data[0] : rec;
+    S.REPAIRS.unshift(r);
+  } else if (!files.length && !note) { toast('파일 또는 메모를 입력하세요'); return; }
+  $('ruSave').disabled = true; $('ruSave').textContent = '업로드 중...';
   let okCount = 0;
   try {
-    for (const f of files) {
-      const safe = f.name.replace(/[\\/:*?"<>|]+/g, '_');
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const safe = base
+        ? `${base}${files.length > 1 ? ` (${i + 1})` : ''}${extOf(f.name)}`
+        : f.name.replace(SAFE, '_');
       const path = `${r.id}/${Date.now()}_${safe}`;
       const up = await sb.storage.from('repair_uploads').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
       if (up.error) { toast(`업로드 실패 (${f.name}): ${up.error.message}`); continue; }
@@ -363,15 +442,15 @@ async function submitUpload() {
       const ok = await dbSave(sb.from('repairs').update({ action, history: JSON.stringify(hist) }).eq('id', r.id));
       if (ok) { r.action = action; r.history = JSON.stringify(hist); }
     }
-    toast(okCount ? `${okCount}개 파일 업로드 — 5분 내 Drive 작업폴더로 이동` : (note ? '메모 저장됨' : '업로드된 파일 없음'));
+    toast(okCount ? `${okCount}개 파일 업로드 — 5분 내 Drive "${base || ''}" 폴더로 이동` : (note ? '메모 저장됨' : '업로드된 파일 없음'));
     closeUpload();
     await loadPending();
-    renderRows();
+    refresh();
   } finally {
     $('ruSave').disabled = false; $('ruSave').textContent = '업로드';
   }
 }
 
-window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload };
+window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload, removeFile };
 
 export default { id: 'repairs', mount, refresh, setParams };
