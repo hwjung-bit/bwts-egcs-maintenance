@@ -22,7 +22,9 @@ from alarm_info import ALARM_INFO
 #   quarantined *.bad.csv / _oldbug_*.bak never read as input.
 # 2026-09-01e: DataLog rows sorted by time before session analysis —
 #   Format-B files are exported newest-first (35 of 100 months in 2026).
-PARSER_VERSION = "parser-2026-09-01e"
+# 2026-09-01f: session TRO judged on the steady-period AVERAGE after a 10-minute
+#   time-based warm-up (operator rule), not on the minimum after 5 rows.
+PARSER_VERSION = "parser-2026-09-01f"
 
 
 # ─── Helpers ────────────────────────────────────────────────

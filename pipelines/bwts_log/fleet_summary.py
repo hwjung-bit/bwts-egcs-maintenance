@@ -100,6 +100,9 @@ def compute_grade(summary):
     b_count = summary.get("ballast_count", 0)
     d_count = summary.get("deballast_count", 0)
 
+    if summary.get("datalog_period"):
+        return "데이터불량", [f"DataLog 기간 불일치 — 파일 내용 {summary['datalog_period']} (해당 월 데이터 아님, 재요청)"]
+
     if b_count == 0 and d_count == 0:
         # Check if DataLog CSV exists but parsing failed
         sess = summary.get("session_count", 0)
@@ -122,7 +125,7 @@ def compute_grade(summary):
 
     if not no_tro:
         if tro_b_ok is False:
-            reasons.append("주입 TRO 범위 이탈")
+            reasons.append(f"주입 TRO 범위 이탈 (정상 세션 {summary.get('tro_b_session_ok', '?')})")
         if tro_d_ok is False:
             reasons.append("배출 TRO 기준 초과")
     if trip_count >= BL["trip_check_needed"]:
@@ -373,6 +376,16 @@ def compute_vessel_summary(code, year, month, verbose=False):
 
     summary["session_count"] = len(deep.get("sessions", []))
     summary["_datalog_rows"] = deep.get("row_count")
+    # A DataLog whose sessions all fall outside the folder's month is another
+    # month's export (KMU 2026-07 folder held 08-10..11) — say so instead of
+    # grading July on August data.
+    sess_dates = [x.get("date") for x in deep.get("session_summaries", []) if x.get("date")]
+    if sess_dates:
+        ym = f"{year}-{month:02d}"
+        in_month = sum(1 for d in sess_dates if d.startswith(ym))
+        summary["_datalog_month_match"] = in_month
+        if in_month == 0:
+            summary["datalog_period"] = f"{min(sess_dates)}~{max(sess_dates)}"
     summary["session_summaries"] = deep.get(
         "session_summaries", [])
     summary["recovery_pattern"] = deep.get(
@@ -399,23 +412,21 @@ def compute_vessel_summary(code, year, month, verbose=False):
     # TRO range checks (only if sensor exists)
     # Use avg for judgment (min can be warm-up artifact)
     if not no_tro_sensor:
-        b_check = summary["tro_b_avg"]
-        if b_check is not None:
-            summary["tro_b_in_range"] = BL["tro_ballast_min_ppm"] <= b_check <= BL["tro_ballast_max_ppm"]
-            # Stable-ratio relaxation: check session-level
-            # in_range results — if majority of sessions OK,
-            # override overall judgment
-            if not summary["tro_b_in_range"]:
-                b_sessions = [
-                    s for s in summary.get(
-                        "session_summaries", [])
-                    if s["mode"] == "BALLAST"
-                    and s.get("in_range") is not None]
-                if b_sessions:
-                    ok_count = sum(
-                        1 for s in b_sessions if s["in_range"])
-                    if ok_count >= len(b_sessions) * BL["tro_ballast_relaxed_ratio"]:
-                        summary["tro_b_in_range"] = True
+        # Month verdict = share of judged ballast sessions that are in range
+        # (each session already judged on its steady-period average after the
+        # warm-up; 보류 sessions are excluded). Falls back to the month average
+        # only when no session could be judged.
+        b_sessions = [
+            s for s in summary.get("session_summaries", [])
+            if s["mode"] == "BALLAST" and s.get("in_range") is not None]
+        if b_sessions:
+            ok_count = sum(1 for s in b_sessions if s["in_range"])
+            summary["tro_b_session_ok"] = f"{ok_count}/{len(b_sessions)}"
+            summary["tro_b_in_range"] =                 ok_count >= len(b_sessions) * BL["tro_ballast_relaxed_ratio"]
+        else:
+            b_check = summary["tro_b_avg"]
+            if b_check is not None:
+                summary["tro_b_in_range"] =                     BL["tro_ballast_min_ppm"] <= b_check <= BL["tro_ballast_max_ppm"]
         # Format B: D-TRO is shared sensor residual, skip judgment
         if not is_format_b:
             d_avg = summary.get("tro_d_avg")

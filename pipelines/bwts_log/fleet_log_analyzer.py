@@ -304,8 +304,12 @@ def analyze_tro_session(session, has_tro_sensor_global=True):
             break
 
     if first_appear_idx is None:
-        # TRO sensor exists globally but didn't produce
-        # reading in this session (short run or warm-up only)
+        # TRO never appeared. On a ballast longer than the warm-up window
+        # that is a failure in its own right (no treatment happened); a run
+        # shorter than the warm-up is inconclusive.
+        wm = BL.get("warmup_minutes", 10)
+        dur = session.get("duration_min") or 0
+        long_run = mode == "BALLAST" and has_tro_sensor_global and dur >= wm
         return {
             "mode": mode,
             "total_rows": len(rows),
@@ -318,58 +322,68 @@ def analyze_tro_session(session, has_tro_sensor_global=True):
             "stable_avg": None,
             "stable_min": None,
             "stable_max": None,
-            "in_range": None,
+            "in_range": False if long_run else None,
             "tro_appeared_at_min": None,
-            "issue": "TRO 미생성" if mode == "BALLAST"
-                     else None,
+            "issue": (f"TRO 미생성 — 운전 {dur}분 동안 TRO 없음 ({wm}분 초과)" if long_run
+                      else ("TRO 미생성 (운전 짧음, 판정 보류)" if mode == "BALLAST" else None)),
         }
 
-    # Warm-up = first 5 rows after TRO appears
-    warmup_end = min(first_appear_idx + BL["warmup_rows"], len(all_tro))
-    warmup = all_tro[first_appear_idx:warmup_end]
+    # Warm-up = the first `warmup_minutes` of the session, by clock time.
+    # Operator's rule (2026-09-01): after ~10 minutes of running the plant
+    # must be in range; what happens while it ramps up is not a fault, and
+    # the judgment is the AVERAGE of the steady period, not its minimum —
+    # one dip does not fail a ballast. Rows without timestamps fall back to
+    # `warmup_rows`. Rows before TRO first appears are warm-up as well.
+    wm = BL.get("warmup_minutes", 10)
+    start_t = session.get("start_time")
+    if start_t and rows and rows[0].get("time"):
+        warmup_end = sum(1 for r in rows if r.get("time")
+                         and (r["time"] - start_t).total_seconds() < wm * 60)
+    else:
+        warmup_end = min(BL["warmup_rows"], len(all_tro))
+    if mode == "BALLAST":
+        warmup_end = max(warmup_end, first_appear_idx)
+    warmup_end = min(warmup_end, len(all_tro))
+    warmup = all_tro[:warmup_end]
     stable = all_tro[warmup_end:]
 
-    # Deballast: also skip first 5 rows as warm-up
-    if mode in ("DEBALLAST", "STRIPPING"):
-        warmup = all_tro[:BL["warmup_rows"]]
-        stable = all_tro[5:]
-
     # Filter out zeros in stable (sensor noise)
-    stable_nonzero = [v for v in stable if v > 0] \
-        if mode == "BALLAST" else stable
+    stable_nonzero = [v for v in stable if v > 0]         if mode == "BALLAST" else stable
 
     s_avg = avg(stable_nonzero) if stable_nonzero else None
     s_min = arr_min(stable_nonzero) if stable_nonzero else None
     s_max = arr_max(stable_nonzero) if stable_nonzero else None
 
-    if mode == "BALLAST":
-        in_range = (s_min is not None and BL["tro_ballast_min_ppm"] <= s_min <= BL["tro_ballast_max_ppm"]) \
-            if s_min is not None else None
-        # Stable-ratio relaxation: if max in 5~12 and
-        # >=50% of stable readings in 5~10, treat as OK.
-        # Short sessions (<10 rows): 1+ in range → OK.
-        if not in_range and s_max is not None \
-                and BL["tro_ballast_min_ppm"] <= s_max <= BL["tro_ballast_relaxed_max_ppm"] and stable_nonzero:
-            in_range_count = sum(
-                1 for v in stable_nonzero if BL["tro_ballast_min_ppm"] <= v <= BL["tro_ballast_max_ppm"])
-            ratio = in_range_count / len(stable_nonzero)
-            if len(stable_nonzero) >= BL["tro_ballast_relaxed_min_rows"] and ratio >= BL["tro_ballast_relaxed_ratio"]:
-                in_range = True
-            elif len(stable_nonzero) < 10 and in_range_count > 0:
-                in_range = True
-    else:
-        in_range = (s_max is not None and s_max < BL["tro_deballast_max_ppm"]) \
-            if s_max is not None else None
-
-    # Detect issue
+    lo, hi = BL["tro_ballast_min_ppm"], BL["tro_ballast_max_ppm"]
+    min_rows = BL.get("steady_min_rows", 3)
     issue = None
-    if mode == "BALLAST" and s_min is not None:
-        if s_min < BL["tro_ballast_min_ppm"] and not in_range:
-            issue = f"TRO 최솟값 {s_min}ppm ({BL['tro_ballast_min_ppm']}ppm 미달)"
-        elif s_min > BL["tro_ballast_max_ppm"]:
-            issue = f"TRO 최솟값 {s_min}ppm ({BL['tro_ballast_max_ppm']}ppm 초과)"
-    elif mode == "DEBALLAST" and s_max is not None:
-        if s_max > BL["tro_deballast_max_ppm"]:
+    if mode == "BALLAST":
+        if len(stable_nonzero) < min_rows:
+            # Too short after warm-up to say anything — not a failure
+            in_range = None
+            issue = (f"판정 보류 — {wm}분 이후 정상운전 구간 {len(stable_nonzero)}행"
+                     f" (운전 {session.get('duration_min', '?')}분)")
+        else:
+            in_range_count = sum(1 for v in stable_nonzero if lo <= v <= hi)
+            ratio = in_range_count / len(stable_nonzero)
+            avg_ok = lo <= s_avg <= hi
+            # Relaxation: most of the steady period in range and no runaway
+            # peak counts as normal even if the average is just outside.
+            ratio_ok = (ratio >= BL["tro_ballast_relaxed_ratio"]
+                        and s_max <= BL["tro_ballast_relaxed_max_ppm"])
+            in_range = bool(avg_ok or ratio_ok)
+            if not in_range:
+                if s_avg < lo:
+                    issue = (f"정상운전 구간 평균 {round(s_avg, 2)}ppm ({lo}ppm 미달, "
+                             f"범위내 {ratio:.0%}, max {s_max})")
+                elif s_avg > hi:
+                    issue = (f"정상운전 구간 평균 {round(s_avg, 2)}ppm ({hi}ppm 초과, "
+                             f"범위내 {ratio:.0%})")
+                else:
+                    issue = f"정상운전 구간 평균 {round(s_avg, 2)}ppm, 범위내 {ratio:.0%}"
+    else:
+        in_range = (s_max is not None and s_max < BL["tro_deballast_max_ppm"])             if s_max is not None else None
+        if s_max is not None and s_max > BL["tro_deballast_max_ppm"]:
             issue = f"D-TRO 최댓값 {s_max}ppm ({BL['tro_deballast_max_ppm']}ppm 초과)"
 
     return {
