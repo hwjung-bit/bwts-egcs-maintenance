@@ -58,6 +58,12 @@
 - **integrity 예외:** OpTime 표가 0행으로 파싱됐으면(`_optime_rows == 0`) I1·I4 안 걸림(진짜 미운전 증거).
   헤더만 있는 DataLog(`_datalog_rows == 0`)는 파싱 실패가 아니라 미운전. 알파라발은 I6/I7 만.
 
+## 첨부 파일 흐름
+- 메일→수리이력 전환 시: GAS `saveRequestAttachments_` 가 스레드 첨부 중 `contracts/attachment_rules.json` 규칙에 맞는 것만 작업폴더에 저장.
+- 웹 ⬆ 업로드: 브라우저 → Supabase Storage(`repair_uploads`, 비공개) + `upload_requests` 큐 → GAS `processUploadRequests_`
+  (folder_requests 와 같은 선점/재시도 규약) → 작업폴더(알려진 폴더 → 색인 근사 → 생성) → `repairs.attachments` 링크, 객체 삭제.
+  메모는 `repairs.action` 에 `[날짜] 내용` 으로 추가되고 `history` 에 남음.
+
 ## 검토 루프
 웹 `bwtsLog` 탭 「재검토 요청」 → `bwts_reviews` + `review_status='requested'` →
 로컬 `/bwts-review` 스킬 (`C:\Users\user\.claude\skills\bwts-review\SKILL.md`) 이 `review_io.py list/show/answer/label` 로

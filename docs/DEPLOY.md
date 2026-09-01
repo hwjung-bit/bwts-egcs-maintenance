@@ -205,3 +205,15 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 - `weekly_cal_alert.fetch_all` 이 `ships` 를 `id` 로 페이징해 42703 — `code` 로 수정 (8/23 이후 매주 실패했던 원인).
 - **토큰이 12일 만에 만료된 점**: OAuth 동의 화면이 "테스트" 상태면 refresh token 이 7일마다 죽는다.
   GCP Console → OAuth consent screen → Publishing status 를 "In production" 으로 바꾸면 만료 없음. 미확인.
+
+## 2026-09-01 첨부 필터 + 웹 업로드 (sql/022, GAS)
+
+- **GAS 배포는 이제 clasp.** 프로젝트 "EGCS&BWTS 정비 관리"(`190_uBRU-UaaHCbRYvFXSKOU41YkGKCU6daryZMRnPK4PyD_ztu2S7TUB`).
+  `clasp pull` 로 받은 폴더에 `gas/SupabaseDriveIndex.gs` 를 `SupabaseDriveIndex.js` 로 복사 후 `clasp push -f`.
+  라이브에 있던 구버전(hardening 이전, 393줄)은 `_archive/` 백업. 다른 파일(Code.js 등)은 그대로 푸시(무변경).
+  스코프 추가 없음 → 재승인 불필요.
+- 자동첨부 필터 규칙: `contracts/attachment_rules.json` (GAS 가 raw.githubusercontent 로 읽음, 1시간 캐시).
+  main 에 푸시하면 최대 1시간 뒤 반영. 기존 저장 파일은 건드리지 않음.
+- 웹 업로드: 수리이력 ⬆ → Storage `repair_uploads` → `upload_requests` → GAS 5분 트리거가 Drive 로 이동.
+  멈춘 건 확인: `select * from upload_requests where status in ('pending','error') order by created_at;`
+  Storage 에 남은 객체 = 아직 안 옮겨진 것 (정상은 이동 후 삭제).
