@@ -21,7 +21,7 @@ const STYLE = {
 };
 const REVIEW_MARK = { requested: '❓', reviewed: '✅', overridden: '✎' };
 const COLS = 'ship_code,period,grade,grade_rule,grade_reasons,reception,ballast_count,deballast_count,op_days,' +
-  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,' +
+  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,flags,' +
   'review_status,final_grade,review_note,reviewed_by,reviewed_at,analyzed_at';
 
 // module state
@@ -46,7 +46,7 @@ function mount(root) {
     <div id="blDetail" class="bl-detail" style="display:none"></div>
     <div style="margin-top:8px;color:#94a3b8;font-size:11px">
       셀 클릭 → 상세·재검토 · 표시 등급 = 검토 후 등급(있으면) 또는 자동 판정 ·
-      빗금 = 판독실패(파서가 못 읽은 것으로 의심 — 미운전 아님) · ❓ 재검토 요청 중 · ✅ 검토 완료 · ✎ 등급 수정됨 ·
+      빗금 = 판독실패(파서가 못 읽은 것으로 의심 — 미운전 아님) · ⚙ 밸브 채터링(참고, 등급 무관) · ❓ 재검토 요청 중 · ✅ 검토 완료 · ✎ 등급 수정됨 ·
       갱신: <code>pipelines/bwts_log/run.py</code></div>
   </div>`;
   $('blYear').onchange = e => { F.year = e.target.value; loadYear().then(renderAll); };
@@ -121,8 +121,9 @@ function renderMatrix() {
       const mark = REVIEW_MARK[r.review_status] || '';
       const ops = (r.ballast_count || 0) + (r.deballast_count || 0);
       const sub = g === '미수신' ? '' : (g === '판독실패' ? (r.integrity && r.integrity.hits ? r.integrity.hits.join(' ') : '') : (ops ? `B${r.ballast_count}/D${r.deballast_count}` : ''));
+      const flag = (r.flags && r.flags.length) ? ` <span class="bl-flag" title="${esc(r.flags.join(', '))}">⚙</span>` : '';
       return `<td class="bl-cell" style="background:${st.bg};color:${st.fg};${dim}${sel}" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')" title="${esc(code)} ${esc(r.period)} ${esc(g)}${r.grade !== g ? ' (자동: ' + esc(r.grade) + ')' : ''}">` +
-        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}</div><div class="bl-sub">${esc(sub)}</div></td>`;
+        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}</div><div class="bl-sub">${esc(sub)}</div></td>`;
     }).join('');
     return `<tr><td><b>${esc(code)}</b><div style="font-size:10px;color:#94a3b8">${esc(s ? (s.bwts_maker || '') : '')}</div></td>${tds}</tr>`;
   }).join('');
@@ -146,6 +147,8 @@ async function renderDetail() {
   const st = STYLE[g] || STYLE['미수신'];
   const num = v => v == null ? '—' : (+v).toFixed(2);
   const reasons = (r.grade_reasons || []).map(x => `<li>${esc(x)}</li>`).join('') || '<li class="muted">—</li>';
+  const flagsHtml = (r.flags && r.flags.length)
+    ? `<div class="bl-sec"><h4>참고 표시 (등급 무관)</h4><ul>${r.flags.map(x => `<li>⚙ ${esc(x)}</li>`).join('')}</ul></div>` : '';
   const integ = r.integrity && r.integrity.hits && r.integrity.hits.length
     ? `<div class="bl-sec"><h4>판독 무결성 검사 (${esc(r.integrity.hits.join(', '))})</h4><ul>${(r.integrity.detail || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const review = r.review_status !== 'auto'
@@ -172,7 +175,7 @@ async function renderDetail() {
     <div class="bl-sec"><h4>TRO (warm-up 제외)</h4>
       <div>주입 avg ${num(r.tro_b_avg)} / min ${num(r.tro_b_min)} ppm ${r.tro_b_in_range === false ? '<span class="lv-expired pill">범위 이탈</span>' : r.tro_b_in_range ? '<span class="lv-ok pill">정상</span>' : ''}</div>
       <div>배출 max ${num(r.tro_d_max)} ppm ${r.tro_d_compliant === false ? '<span class="lv-expired pill">초과</span>' : r.tro_d_compliant ? '<span class="lv-ok pill">정상</span>' : ''}</div></div>
-    ${integ}${review}
+    ${flagsHtml}${integ}${review}
   </div>
   <div id="blSessions" class="bl-sec"><span class="spin"></span> 세션·재검토 이력 로딩...</div>`;
   // Heavy parts on demand: full summary (sessions) + review thread

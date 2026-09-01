@@ -130,8 +130,14 @@ def compute_grade(summary):
             reasons.append("배출 TRO 기준 초과")
     if trip_count >= BL["trip_check_needed"]:
         reasons.append(f"Trip {trip_count}건")
+    # 밸브 채터링: 2026-09-01 부터 등급이 아니라 참고 표시(flags). 밸브가
+    # 열고 닫히는 패턴만으로 점검필요를 매기면 정상 운전의 절반이 걸렸다.
+    flags = summary.setdefault("flags", [])
     if chattering:
-        reasons.append("밸브 채터링 감지")
+        if BL.get("chatter_affects_grade", False):
+            reasons.append("밸브 채터링 감지")
+        else:
+            flags.append(f"밸브 채터링 {len(chattering)}건")
 
     if reasons:
         return "점검필요", reasons

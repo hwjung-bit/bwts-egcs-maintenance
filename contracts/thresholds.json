@@ -55,11 +55,12 @@
     "chatter_interval_sec": 30,
     "chatter_min_burst_events": 6,
     "recovery_split_day": 15,
-    "_doc": "fleet_summary.compute_grade / fleet_log_analyzer 상수. 세션 판정(2026-09-01 사용자 기준): 세션 시작 후 warmup_minutes(10분)는 warm-up으로 제외, 그 뒤 정상운전 구간의 '평균'이 tro_ballast_min~max(5~10ppm)면 정상. 평균이 살짝 벗어나도 범위내 비율≥relaxed_ratio(50%)이고 max≤relaxed_max(12)면 정상. 정상운전 구간이 steady_min_rows(3행) 미만이면 판정 보류. warmup_rows는 타임스탬프 없는 파일용 폴백. alfa_min_events_per_month/alfa_min_heartbeat_days: 알파라발 export 범위 판단.",
+    "_doc": "fleet_summary.compute_grade / fleet_log_analyzer 상수. 세션 판정(2026-09-01 사용자 기준): 세션 시작 후 warmup_minutes(10분)는 warm-up으로 제외, 그 뒤 정상운전 구간의 '평균'이 tro_ballast_min~max(5~10ppm)면 정상. 평균이 살짝 벗어나도 범위내 비율≥relaxed_ratio(50%)이고 max≤relaxed_max(12)면 정상. 정상운전 구간이 steady_min_rows(3행) 미만이면 판정 보류. warmup_rows는 타임스탬프 없는 파일용 폴백. alfa_min_events_per_month/alfa_min_heartbeat_days: 알파라발 export 범위 판단. chatter_affects_grade: false 면 밸브 채터링은 등급에 안 반영되고 flags 에 '채터링 N건' 표시만(2026-09-01 사용자 결정).",
     "alfa_min_events_per_month": 5,
     "alfa_min_heartbeat_days": 3,
     "warmup_minutes": 10,
-    "steady_min_rows": 3
+    "steady_min_rows": 3,
+    "chatter_affects_grade": false
   },
   "integrity": {
     "csv_min_bytes_for_content": 20480,

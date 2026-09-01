@@ -24,7 +24,9 @@ from alarm_info import ALARM_INFO
 #   Format-B files are exported newest-first (35 of 100 months in 2026).
 # 2026-09-01f: session TRO judged on the steady-period AVERAGE after a 10-minute
 #   time-based warm-up (operator rule), not on the minimum after 5 rows.
-PARSER_VERSION = "parser-2026-09-01f"
+# 2026-09-01g: valve chattering no longer changes the grade — it is a flag
+#   shown on the cell (thresholds.json chatter_affects_grade=false).
+PARSER_VERSION = "parser-2026-09-01g"
 
 
 # ─── Helpers ────────────────────────────────────────────────
