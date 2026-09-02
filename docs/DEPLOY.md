@@ -234,7 +234,14 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   → `scripts/open_local_folder.ps1` 이 키→G드라이브 경로 매핑 후 explorer 실행.
   폴더 추가는 ps1 의 `$map` 에 키 추가 + 웹 버튼 href. 미등록 PC는 클릭해도 무반응(정상).
   주의: ps1 은 한글 경로 때문에 UTF-8 BOM 필수 (PS 5.1 이 BOM 없으면 ANSI 로 읽어 깨짐).
-- v20260902e: 현황 탭 히스토리 — sql/022 `status_history` (실행 완료).
+- v20260902f: BWTS 검교정 📥 파일 저장 — 날짜·선박·종류(CERT/SERVICE REPORT/
+  SAFETY ALARM TEST) 입력 + 드래그 → 파일명 `YYYY-MM-DD SHIP BWTS <종류>` 자동.
+  upload_requests 재사용: sql/024 로 repair_id nullable + target 컬럼.
+  GAS 가 target 행을 `11. CALIBRATION 연간 검교정 › <종류> › YYYY년 › 'YYYY-MM-DD SHIP'`
+  로 이동(폴더 자동 생성), repair 연동 스킵. GAS 배포는 clasp
+  (scriptId 190_uBRU…, scratchpad 에 .clasp.json 만들어 pull→복사→push -f).
+- v20260902e: 현황 탭 히스토리 — sql/023 `status_history` (실행 완료. 파일명이
+  처음에 022 로 중복 생성됐다가 023 으로 rename — DB 는 그대로).
   상태/메모 저장마다 (선박,계통) 스냅샷 기록, 직전 스냅샷이 5분 이내면 insert 대신
   update 로 병합(저장 직후 재수정 = 이력 1건). 셀의 🕘 → 이력 팝업(KST, 최근 30건).
   E2E: KPS bwts 2회 저장 → 1행 병합 확인.
