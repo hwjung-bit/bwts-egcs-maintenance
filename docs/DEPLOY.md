@@ -244,7 +244,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   (파일명에서 자동 추정: alarm/safety→ALARM, report/service→REPORT, 그외 CERT).
   종류별 (n) 번호. 같은 날짜·선박 재업로드는 기존 폴더 합류(GAS getOrCreateChild_).
   E2E: KPS 테스트 → 04. SAFETY ALARM TEST › 2026년 › '2026-09-02 KPS' 생성 확인 후 정리.
-  03. SERVICE REPORT 폴더 사전 생성. 트리거 주기 15분 — 업로드 후 최대 15분 대기.
+  03. SERVICE REPORT 폴더 사전 생성. 트리거 실제 주기 **30분**(매시 :25·:55,
+  Apps Script 실행 이력으로 확인 — 코드 주석의 15분은 옛 값) → 업로드 후 최대 30분 대기.
 - v20260902h: 수리이력 증상·조치 길면(60자↑ 또는 개행) 한 줄 접힘 + ▾ 토글.
   본문 클릭 = 수정(편집 시 clamp 자동 해제). `.clamp1` (css/base.css).
 - GAS syncCalRecord_: CERT 종류 업로드 처리 시 calibrations(BWTS, 해당 선박)의
