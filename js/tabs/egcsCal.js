@@ -171,7 +171,19 @@ function copyCycles() {
   copyText(txt, '주기표 복사됨');
 }
 
-/* ===== per-ship history copy ===== */
+/* ===== per-ship expiry copy (text + HTML table on the same clipboard:
+   pasting into Outlook/Excel gives a table, KakaoTalk gets the text) ===== */
+async function copyRich(html, text, msg) {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+    })]);
+    toast(msg);
+  } catch (e) {
+    copyText(text, msg);
+  }
+}
 function copyShip(code) {
   const th = requireTH('egcs_calibration');
   const CYCLE = th.sensor_cycle_months;
@@ -184,32 +196,40 @@ function copyShip(code) {
     equipSet[eq] = 1;
     map[eq] = c;
   });
-  const maker = getShipWms(code);
-  let txt = `${code} EGCS 검교정 현황 (${fmtD(new Date())} 기준${maker ? ' / WMS: ' + maker : ''})\n`;
+  // one row per sensor: the earliest expiry (cal due; repl due when no cal cycle)
+  const rows = [];
   orderEquips(equipSet).forEach(o => {
     const d = map[o.key];
     if (!d) return;
     const sm = sensorModel(code, o.key, d.model, CYCLE);
-    const head = `- ${o.key}${sm ? ' (' + sm + ')' : ''}${d.serial ? ' S/N ' + d.serial : ''}: `;
-    if (!d.last_date) { txt += head + (d.note || '기록 없음') + '\n'; return; }
     const cyc = sm ? CYCLE[sm] : null;
-    let line = head + '검교정일 ' + d.last_date;
-    if (cyc) {
-      if (cyc.cal != null) {
-        const days = daysUntil(addMonths(d.last_date, cyc.cal));
-        line += ` → 다음 검교정 ${fmtD(addMonths(d.last_date, cyc.cal))} (${dLabel(days)})` +
-          (level(days, SOON) !== 'ok' ? ' ⚠' : '');
-      }
-      if (cyc.cal !== cyc.repl) {
-        const rd = daysUntil(addMonths(d.last_date, cyc.repl));
-        line += ` / 신품교환 ${fmtD(addMonths(d.last_date, cyc.repl))} (${dLabel(rd)})` +
-          (level(rd, SOON) !== 'ok' ? ' ⚠' : '');
-      }
+    if (!d.last_date || !cyc) {
+      rows.push({ equip: o.key, due: '-', st: d.note || '기록 없음' });
+      return;
     }
-    if (d.note) line += ' — ' + d.note;
-    txt += line + '\n';
+    const kind = cyc.cal != null ? '검교정' : '신품교환';
+    const months = cyc.cal != null ? cyc.cal : cyc.repl;
+    const days = daysUntil(addMonths(d.last_date, months));
+    const lv = level(days, SOON);
+    rows.push({
+      equip: o.key, due: fmtD(addMonths(d.last_date, months)),
+      st: (lv === 'expired' ? '⚠ 만료 ' : lv === 'soon' ? '⚠ 임박 ' : '') + dLabel(days) +
+        (kind === '신품교환' ? ' (신환)' : ''),
+    });
   });
-  copyText(txt.trimEnd(), code + ' 검교정 이력 복사됨');
+  const title = `${code} EGCS 검교정 만료일 (${fmtD(new Date())} 기준)`;
+  const text = title + '\n' +
+    rows.map(r => `- ${r.equip}: ${r.due} (${r.st})`).join('\n');
+  const html = `<b>${esc(title)}</b>` +
+    '<table border="1" style="border-collapse:collapse;font-size:13px">' +
+    '<tr><th style="padding:3px 10px;background:#eef2ff">장비</th>' +
+    '<th style="padding:3px 10px;background:#eef2ff">만료일</th>' +
+    '<th style="padding:3px 10px;background:#eef2ff">상태</th></tr>' +
+    rows.map(r => `<tr><td style="padding:3px 10px">${esc(r.equip)}</td>` +
+      `<td style="padding:3px 10px;text-align:center">${esc(r.due)}</td>` +
+      `<td style="padding:3px 10px">${esc(r.st)}</td></tr>`).join('') +
+    '</table>';
+  copyRich(html, text, code + ' 만료일 복사됨 (엑셀·메일 = 표)');
 }
 
 /* ===== cell edit popup ===== */
