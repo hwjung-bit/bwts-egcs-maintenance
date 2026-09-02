@@ -229,6 +229,11 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   클립보드에 text/plain·text/html 동시 탑재 — 엑셀·아웃룩 붙여넣기 = 표, 카톡 = 텍스트.
 - v20260902c: BWTS 로그 탭 필터바에 📁 LOG 폴더 버튼 (Drive `4. BWTS LOG DATA`,
   폴더 ID 1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE). bwtsCal CERT 폴더 버튼과 동일 스타일.
+- v20260902d: 💻 PC 폴더 버튼 — `kmtcfolder:bwtslog` 커스텀 프로토콜로 로컬 탐색기 열기.
+  PC마다 1회 등록 필요: `scripts/register_kmtcfolder.reg` 더블클릭 (HKCU, 관리자 불필요)
+  → `scripts/open_local_folder.ps1` 이 키→G드라이브 경로 매핑 후 explorer 실행.
+  폴더 추가는 ps1 의 `$map` 에 키 추가 + 웹 버튼 href. 미등록 PC는 클릭해도 무반응(정상).
+  주의: ps1 은 한글 경로 때문에 UTF-8 BOM 필수 (PS 5.1 이 BOM 없으면 ANSI 로 읽어 깨짐).
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
 
