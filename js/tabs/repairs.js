@@ -152,8 +152,8 @@ function renderRows() {
       `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || '—')}</td>` +
       `<td style="padding:4px 6px"><select class="status-select st-${esc(r.stage)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','stage',this.value)">${stOpts}</select></td>` +
       `<td>${mailCell}</td>` +
-      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','symptom',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">${esc(r.symptom || '—')}</td>` +
-      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','action',this)" style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" title="클릭하여 수정">${esc(r.action || '—')}</td>` +
+      longCell(eid, 'symptom', r.symptom) +
+      longCell(eid, 'action', r.action) +
       `<td style="white-space:nowrap">${foldCell}${attCell}` +
         `<button onclick="repairsTab.editFileUrl('${eid}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8" title="Drive 링크 지정/변경">🔗</button>` +
         `<button onclick="repairsTab.openUpload('${eid}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:#2563eb" title="파일 업로드 → Drive 작업폴더 (서비스리포트 등)">⬆</button>` +
@@ -166,6 +166,25 @@ function renderRows() {
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 💬 → 메일 없이 접수(카톡 등) · 📁 → Drive 폴더 · 📄 → 첨부 목록 · 🔗 → 선박 폴더 링크 변경</div>';
 }
 
+/* 증상·조치 — 길면 첫 줄만 보이고 ▾ 로 펼친다. 본문 클릭은 기존대로 수정. */
+function longCell(eid, field, val) {
+  const txt = val || '—';
+  const long = txt.length > 60 || txt.indexOf('\n') >= 0;
+  const toggle = long
+    ? `<span onclick="repairsTab.toggleClamp(event,this)" style="cursor:pointer;color:#2563eb;font-size:10px;flex-shrink:0;user-select:none" title="펼치기/접기">▾</span>`
+    : '';
+  return `<td style="max-width:300px"><div style="display:flex;gap:4px;align-items:flex-start">` +
+    `<span class="edit-cell${long ? ' clamp1' : ''}" onclick="repairsTab.editField('${eid}','${field}',this)"` +
+    ` style="flex:1;white-space:pre-wrap;word-break:break-word;cursor:pointer;min-width:0" title="클릭하여 수정">${esc(txt)}</span>` +
+    toggle + '</div></td>';
+}
+function toggleClamp(ev, el) {
+  ev.stopPropagation();
+  const txt = el.parentElement.querySelector('.edit-cell');
+  const collapsed = txt.classList.toggle('clamp1') === false;
+  el.textContent = collapsed ? '▴' : '▾';
+}
+
 /* ===== handlers ===== */
 function filterStage(stage) { F.stage = stage; renderRows(); }
 
@@ -174,6 +193,7 @@ function editField(id, field, el) {
   if (!r) return;
   const cur = r[field] || '';
   const isLong = (field === 'symptom' || field === 'action');
+  el.classList.remove('clamp1');            // clamp would clip the textarea
   const unfreeze = freezeCell(el);          // keep the column where it is
   const h = Math.max(isLong ? 60 : 0, el.getBoundingClientRect().height);
   const node = document.createElement(isLong ? 'textarea' : 'input');
@@ -457,6 +477,6 @@ async function submitUpload() {
   }
 }
 
-window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload, removeFile };
+window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload, removeFile, toggleClamp };
 
 export default { id: 'repairs', mount, refresh, setParams };
