@@ -221,6 +221,10 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   주의: Storage 키에 한글 넣으면 400 InvalidKey 로 조용히 실패 — 키는 ASCII, 이름은 file_name.
 - 텍스트 검색(v20260901n): 수리이력·메일대장 검색창, 띄어쓰기 = AND (`js/shared/search.js` matchQuery). 수리이력은 검색 중 완료 건도 표시.
   Storage 에 남은 객체 = 아직 안 옮겨진 것 (정상은 이동 후 삭제).
+- EGCS 검교정 탭 개편(v20260902a): WMS1/WMS2 좌측 rowspan 열 + 센서 열 2열 구조.
+  상단 접이식 검교정 주기표(`<details>`, thresholds.json 동적 생성) + 📋 주기표 복사.
+  선박 코드 헤더 가운데 정렬·클릭 시 해당 선박 검교정 이력 텍스트 클립보드 복사(메일·카톡용).
+  `egcsCal.js` copyShip/copyCycles, 주기 라벨은 CYCLE_ROWS(라벨만) + thresholds 값 조합.
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
 
