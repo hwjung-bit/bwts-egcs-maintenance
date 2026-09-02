@@ -1,7 +1,7 @@
 // EGCS 검교정 — WMS1/WMS2 sensor matrix. Cycles come from thresholds.json.
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
-import { $, esc, placePopup } from '../core/dom.js';
+import { $, esc, placePopup, toast } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
@@ -29,6 +29,40 @@ export function sensorModel(code, equip, model, CYCLE) {
 function level(days, soon) {
   return days <= 0 ? 'expired' : (days <= soon ? 'soon' : 'ok');
 }
+function fmtD(d) {
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function fmtMonths(m) {
+  if (m == null) return '필요시';
+  return m % 12 === 0 ? (m / 12) + '년' : m + '개월';
+}
+/* Sensor cycle rows for the reference table; months come from thresholds.json */
+const CYCLE_ROWS = [
+  { maker: 'TriOS', sensor: 'PAH', model: 'enviroFlu' },
+  { maker: 'TriOS', sensor: '탁도', model: 'TTurb' },
+  { maker: 'TriOS', sensor: 'pH', model: 'TpH-D' },
+  { maker: 'GI', sensor: 'PAH', model: 'G6110' },
+  { maker: 'GI', sensor: 'PAH', model: 'G6111' },
+  { maker: 'GI', sensor: '탁도', model: 'G6120', note: '광원 수명' },
+  { maker: 'GI', sensor: 'pH', model: 'G6130' },
+];
+function copyText(txt, msg) {
+  navigator.clipboard.writeText(txt).then(() => toast(msg))
+    .catch(() => toast('복사 실패 — 브라우저 권한 확인'));
+}
+/* Ordered equip keys shared by the matrix and copyShip */
+function orderEquips(equipSet) {
+  const out = [];
+  ['WMS1', 'WMS2'].forEach(g => ['PH', 'TURB', 'PAH'].forEach(s => {
+    const key = g + '/' + s;
+    if (equipSet[key]) out.push({ group: g, sensor: s, key });
+  }));
+  Object.keys(equipSet).forEach(eq => {
+    if (!out.some(o => o.key === eq)) out.push({ group: '기타', sensor: eq, key: eq });
+  });
+  return out;
+}
 
 function mount(root) {
   root.innerHTML = '<div class="wrap" id="egcsCalRoot"></div>';
@@ -54,23 +88,16 @@ function refresh() {
     const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  const orderedEquips = [];
-  ['WMS1', 'WMS2'].forEach(g => ['PH', 'TURB', 'PAH'].forEach(s => {
-    const key = g + '/' + s;
-    if (equipSet[key]) orderedEquips.push({ group: g, sensor: s, key });
-  }));
-  Object.keys(equipSet).forEach(eq => {
-    if (!orderedEquips.some(o => o.key === eq)) orderedEquips.push({ group: '기타', sensor: eq, key: eq });
-  });
+  const orderedEquips = orderEquips(equipSet);
 
-  const colg = '<colgroup><col style="width:72px">' + ships.map(() => '<col style="width:110px">').join('') + '</colgroup>';
-  const thead = '<tr><th style="text-align:left;background:#f8fafc">장비</th>' + ships.map(s => `<th>${esc(s)}</th>`).join('') + '</tr>';
-  let body = '', lastGroup = null;
-  orderedEquips.forEach(o => {
-    if (o.group !== lastGroup) {
-      body += `<tr><th colspan="${ships.length + 1}" style="text-align:left;background:#eef2ff;color:#1d4ed8;font-weight:800;font-size:12px;padding:6px 10px">${esc(o.group)}</th></tr>`;
-      lastGroup = o.group;
-    }
+  const colg = '<colgroup><col style="width:52px"><col style="width:56px">' + ships.map(() => '<col style="width:110px">').join('') + '</colgroup>';
+  const thead = '<tr><th colspan="2" style="text-align:center;background:#f8fafc">장비</th>' +
+    ships.map(s => `<th style="text-align:center;cursor:pointer" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사">${esc(s)} 📋</th>`).join('') + '</tr>';
+  let body = '';
+  orderedEquips.forEach((o, idx) => {
+    const groupTh = (idx === 0 || orderedEquips[idx - 1].group !== o.group)
+      ? `<th rowspan="${orderedEquips.filter(x => x.group === o.group).length}" style="text-align:center;vertical-align:middle;background:#eef2ff;color:#1d4ed8;font-weight:800;font-size:12px">${esc(o.group)}</th>`
+      : '';
     const tds = ships.map(s => {
       const d = map[s + '|' + o.key];
       if (!d) return '<td style="text-align:center;font-size:12px;color:#cbd5e1">—</td>';
@@ -99,12 +126,90 @@ function refresh() {
       return `<td class="lv-${bgCls}"${ed} style="text-align:center;font-size:12px;padding:4px 6px;cursor:pointer">` +
         `<div style="font-weight:700">${esc(d.last_date)}</div>${calTxt}${replTag}${mdl}${sn}</td>`;
     }).join('');
-    body += `<tr><th style="text-align:left;background:#f8fafc;font-weight:700;font-size:12px">${esc(o.sensor)}</th>${tds}</tr>`;
+    body += `<tr>${groupTh}<th style="text-align:center;background:#f8fafc;font-weight:700;font-size:12px">${esc(o.sensor)}</th>${tds}</tr>`;
   });
   $('egcsCalRoot').innerHTML =
-    '<div style="margin-bottom:12px;color:#64748b;font-size:12px">TriOS: PAH·탁도 검4년·신환8년 / pH 2년 · GI: PAH 모델별 · 탁도 광원5년 · pH 1년 · 임박 ' + SOON + '일</div>' +
+    cycleBoxHtml(CYCLE, SOON) +
     '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">' + colg + '<thead>' + thead + '</thead><tbody>' + body + '</tbody></table></div>' +
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정</div>';
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정 · 선박 코드 클릭 → 이력 복사</div>';
+}
+
+/* ===== cycle reference (collapsible, copyable) ===== */
+function cycleCells(cyc) {
+  if (!cyc) return ['?', '?'];
+  const cal = cyc.cal == null ? '필요시' : fmtMonths(cyc.cal);
+  const repl = cyc.cal != null && cyc.cal === cyc.repl
+    ? fmtMonths(cyc.repl) + ' (검교정=교환)' : fmtMonths(cyc.repl);
+  return [cal, repl];
+}
+function cycleBoxHtml(CYCLE, SOON) {
+  const rows = CYCLE_ROWS.map(r => {
+    const [cal, repl] = cycleCells(CYCLE[r.model]);
+    return `<tr><td style="text-align:center;font-weight:700">${r.maker}</td>` +
+      `<td style="text-align:center">${r.sensor}</td><td style="text-align:center">${r.model}</td>` +
+      `<td style="text-align:center">${cal}</td><td style="text-align:center">${repl}</td>` +
+      `<td style="text-align:center;color:#64748b">${r.note || ''}</td></tr>`;
+  }).join('');
+  return '<details style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;background:#f8fafc">' +
+    `<summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1d4ed8">📘 검교정 주기 <span style="font-weight:400;color:#64748b;font-size:11px">— 클릭하여 펼치기 · 임박 알림 D-${SOON}</span></summary>` +
+    '<div style="margin-top:8px;overflow-x:auto"><table class="cal-table" style="width:auto">' +
+    '<thead><tr><th>제조사</th><th>센서</th><th>모델</th><th>검교정</th><th>신품교환</th><th>비고</th></tr></thead>' +
+    `<tbody>${rows}</tbody></table>` +
+    '<button style="margin-top:8px" onclick="egcsCalTab.copyCycles()">📋 주기표 복사</button></div></details>';
+}
+function copyCycles() {
+  const th = requireTH('egcs_calibration');
+  const CYCLE = th.sensor_cycle_months;
+  let txt = 'EGCS WMS 센서 검교정 주기 (매뉴얼 2026.06.18)\n';
+  let lastMaker = null;
+  CYCLE_ROWS.forEach(r => {
+    if (r.maker !== lastMaker) { txt += `[${r.maker}]\n`; lastMaker = r.maker; }
+    const [cal, repl] = cycleCells(CYCLE[r.model]);
+    txt += `- ${r.sensor} (${r.model}): 검교정 ${cal} / 신품교환 ${repl}${r.note ? ' (' + r.note + ')' : ''}\n`;
+  });
+  txt += `※ 임박 알림: 만료 ${th.soon_days}일 전부터`;
+  copyText(txt, '주기표 복사됨');
+}
+
+/* ===== per-ship history copy ===== */
+function copyShip(code) {
+  const th = requireTH('egcs_calibration');
+  const CYCLE = th.sensor_cycle_months;
+  const SOON = th.soon_days;
+  const recs = S.EGCS_CAL.filter(c => c.ship_code === code);
+  if (!recs.length) { toast(code + ' 기록 없음'); return; }
+  const equipSet = {}, map = {};
+  recs.forEach(c => {
+    const eq = (c.equip || '').replace('-', '/');
+    equipSet[eq] = 1;
+    map[eq] = c;
+  });
+  const maker = getShipWms(code);
+  let txt = `${code} EGCS 검교정 현황 (${fmtD(new Date())} 기준${maker ? ' / WMS: ' + maker : ''})\n`;
+  orderEquips(equipSet).forEach(o => {
+    const d = map[o.key];
+    if (!d) return;
+    const sm = sensorModel(code, o.key, d.model, CYCLE);
+    const head = `- ${o.key}${sm ? ' (' + sm + ')' : ''}${d.serial ? ' S/N ' + d.serial : ''}: `;
+    if (!d.last_date) { txt += head + (d.note || '기록 없음') + '\n'; return; }
+    const cyc = sm ? CYCLE[sm] : null;
+    let line = head + '검교정일 ' + d.last_date;
+    if (cyc) {
+      if (cyc.cal != null) {
+        const days = daysUntil(addMonths(d.last_date, cyc.cal));
+        line += ` → 다음 검교정 ${fmtD(addMonths(d.last_date, cyc.cal))} (${dLabel(days)})` +
+          (level(days, SOON) !== 'ok' ? ' ⚠' : '');
+      }
+      if (cyc.cal !== cyc.repl) {
+        const rd = daysUntil(addMonths(d.last_date, cyc.repl));
+        line += ` / 신품교환 ${fmtD(addMonths(d.last_date, cyc.repl))} (${dLabel(rd)})` +
+          (level(rd, SOON) !== 'ok' ? ' ⚠' : '');
+      }
+    }
+    if (d.note) line += ' — ' + d.note;
+    txt += line + '\n';
+  });
+  copyText(txt.trimEnd(), code + ' 검교정 이력 복사됨');
 }
 
 /* ===== cell edit popup ===== */
@@ -152,6 +257,6 @@ async function save(id) {
   refresh();
 }
 
-window.egcsCalTab = { edit, close, save };
+window.egcsCalTab = { edit, close, save, copyShip, copyCycles };
 
 export default { id: 'egcsCal', mount, refresh, destroy: close };
