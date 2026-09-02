@@ -2,9 +2,77 @@
 // Column naming rule (sql/016): <계통>_status ↔ <계통>_memo
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
-import { $, esc, toast, inlineEdit } from '../core/dom.js';
+import { $, esc, toast, inlineEdit, placePopup } from '../core/dom.js';
 import { STATUS_OPTS } from '../shared/constants.js';
 import { getShipOrder } from '../shared/ships.js';
+
+/* History snapshots merge into the last row when it is younger than this,
+   so a save followed by quick corrections stays one history entry. */
+const MERGE_MS = 5 * 60 * 1000;
+
+function kst(ts) {
+  return new Date(ts).toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul', year: '2-digit', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+
+/* Snapshot current status+memo of one system into status_history.
+   Fire-and-forget: a missing table must not break the status save itself. */
+async function logHistory(code, sys) {
+  const s = S.SHIPS.find(x => x.code === code);
+  if (!s) return;
+  const row = {
+    status: s[sys + '_status'] || '정상',
+    memo: s[sys + '_memo'] || '',
+    changed_by: (S.USER && S.USER.email) || null,
+    updated_at: new Date().toISOString(),
+  };
+  try {
+    const last = await sb.from('status_history').select('id,updated_at')
+      .eq('ship_code', code).eq('system', sys)
+      .order('id', { ascending: false }).limit(1);
+    if (last.error) throw last.error;
+    const l = last.data && last.data[0];
+    if (l && Date.now() - new Date(l.updated_at).getTime() < MERGE_MS) {
+      await sb.from('status_history').update(row).eq('id', l.id);
+    } else {
+      await sb.from('status_history').insert({ ship_code: code, system: sys, ...row });
+    }
+  } catch (e) {
+    toast(/status_history/.test(e.message || '') || e.code === '42P01'
+      ? '이력 테이블 없음 — sql/022 실행 필요' : '이력 저장 실패: ' + (e.message || e));
+  }
+}
+
+async function history(code, sys, ev) {
+  ev.stopPropagation();
+  const pop = $('calEdit');
+  pop.innerHTML = '<div class="loading">이력 로딩...</div>';
+  placePopup(pop, ev, 320);
+  const res = await sb.from('status_history').select('*')
+    .eq('ship_code', code).eq('system', sys)
+    .order('id', { ascending: false }).limit(30);
+  if (res.error) {
+    pop.innerHTML = `<div style="font-size:12px;color:#be185d">이력 조회 실패 — sql/022 실행 필요<br><code style="font-size:10px">${esc(res.error.message)}</code></div>` +
+      '<button style="margin-top:8px" onclick="statusTab.closeHistory()">닫기</button>';
+    return;
+  }
+  const rows = (res.data || []).map(h =>
+    `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
+    `<td style="text-align:center;font-weight:700">${esc(h.status || '')}</td>` +
+    `<td>${esc(h.memo || '')}</td></tr>`).join('');
+  pop.innerHTML =
+    `<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())} 이력</div>` +
+    (rows
+      ? `<div style="max-height:280px;overflow-y:auto"><table class="cal-table" style="font-size:11px"><thead><tr><th>저장일시</th><th>상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : '<div style="font-size:12px;color:#94a3b8">이력 없음 — 다음 저장부터 쌓입니다</div>') +
+    '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">' +
+    '<span style="font-size:10px;color:#94a3b8">5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
+    '<button onclick="statusTab.closeHistory()">닫기</button></div>';
+  placePopup(pop, ev, 320);
+}
+function closeHistory() { $('calEdit').style.display = 'none'; }
 
 function stColor(st) {
   if (st === '정상') return 'background:#d1fae5;color:#065f46';
@@ -16,12 +84,14 @@ function stColor(st) {
 function stCell(code, field, val, memo, disabled) {
   if (disabled) return '<td style="padding:4px 6px;background:#f8fafc;color:#cbd5e1;text-align:center;font-size:11px">—</td>';
   const opts = STATUS_OPTS.map(s => `<option value="${s}"${val === s ? ' selected' : ''}>${s}</option>`).join('');
-  const memoField = field.replace('_status', '') + '_memo';
+  const sys = field.replace('_status', '');
+  const memoField = sys + '_memo';
   const memoHtml = `<span class="note-text" onclick="statusTab.editMemo(this,'${esc(code)}','${memoField}')" style="font-size:10px;color:#64748b;cursor:pointer;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${esc(memo || '')}</span>`;
+  const histBtn = `<span onclick="statusTab.history('${esc(code)}','${sys}',event)" title="이전 이력 보기" style="cursor:pointer;font-size:10px;flex-shrink:0;opacity:.55">🕘</span>`;
   return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden">` +
     '<div style="display:flex;align-items:center;gap:2px">' +
     `<select class="status-select" style="${stColor(val)};padding:1px 14px 1px 4px;font-size:11px;font-weight:600;flex-shrink:0" onchange="statusTab.update('${esc(code)}','${field}',this.value)">${opts}</select>` +
-    memoHtml + '</div></td>';
+    memoHtml + histBtn + '</div></td>';
 }
 
 function mount(root) {
@@ -74,20 +144,21 @@ async function update(code, field, val) {
   if (s) s[field] = val;
   const patch = {}; patch[field] = val;
   const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), code + ' ' + val);
-  if (ok) refresh();
+  if (ok) { logHistory(code, field.replace('_status', '')); refresh(); }
 }
 
 function editMemo(el, code, field) {
   const s = S.SHIPS.find(x => x.code === code);
   if (!s) return;
-  inlineEdit(el, s[field] || '', v => {
+  inlineEdit(el, s[field] || '', async v => {
     s[field] = v;
     el.textContent = v;
     const patch = {}; patch[field] = v;
-    dbSave(sb.from('ships').update(patch).eq('code', code), '메모 저장');
+    const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), '메모 저장');
+    if (ok) logHistory(code, field.replace('_memo', ''));
   }, { hide: true, placeholder: '메모...', css: 'width:90px;font-size:10px;padding:2px 4px;border:1px solid #3b82f6;border-radius:3px;outline:none' });
 }
 
-window.statusTab = { update, editMemo };
+window.statusTab = { update, editMemo, history, closeHistory };
 
 export default { id: 'status', mount, refresh };
