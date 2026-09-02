@@ -43,6 +43,9 @@ function mount(root) {
     <a href="https://drive.google.com/drive/folders/1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE" target="_blank"
       style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d"
       title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
+    <a href="kmtcfolder:bwtslog"
+      style="text-decoration:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
+      title="내 PC 탐색기로 열기 — kmtcfolder 프로토콜 등록된 PC에서만 작동 (scripts/register_kmtcfolder.reg)">💻 PC 폴더</a>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">

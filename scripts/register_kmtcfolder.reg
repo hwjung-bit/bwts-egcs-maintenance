@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+; kmtcfolder:// protocol — web app "PC folder open" button handler.
+; Per-user (HKCU), no admin needed. Remove: delete HKCU\Software\Classes\kmtcfolder
+
+[HKEY_CURRENT_USER\Software\Classes\kmtcfolder]
+@="URL:KMTC Folder Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\kmtcfolder\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\kmtcfolder\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\kmtcfolder\shell\open\command]
+@="powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"D:\\CLAUDE CODE\\bwts-egcs-maintenance\\scripts\\open_local_folder.ps1\" \"%1\""
