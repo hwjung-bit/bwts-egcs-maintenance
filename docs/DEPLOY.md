@@ -240,6 +240,13 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   GAS 가 target 행을 `11. CALIBRATION 연간 검교정 › <종류> › YYYY년 › 'YYYY-MM-DD SHIP'`
   로 이동(폴더 자동 생성), repair 연동 스킵. GAS 배포는 clasp
   (scriptId 190_uBRU…, scratchpad 에 .clasp.json 만들어 pull→복사→push -f).
+- v20260902g: 검교정 파일 저장 개선 — 날짜·선박 1회 입력, 파일마다 종류 드롭다운
+  (파일명에서 자동 추정: alarm/safety→ALARM, report/service→REPORT, 그외 CERT).
+  종류별 (n) 번호. 같은 날짜·선박 재업로드는 기존 폴더 합류(GAS getOrCreateChild_).
+  E2E: KPS 테스트 → 04. SAFETY ALARM TEST › 2026년 › '2026-09-02 KPS' 생성 확인 후 정리.
+  03. SERVICE REPORT 폴더 사전 생성. 트리거 주기 15분 — 업로드 후 최대 15분 대기.
+- v20260902h: 수리이력 증상·조치 길면(60자↑ 또는 개행) 한 줄 접힘 + ▾ 토글.
+  본문 클릭 = 수정(편집 시 clamp 자동 해제). `.clamp1` (css/base.css).
 - v20260902e: 현황 탭 히스토리 — sql/023 `status_history` (실행 완료. 파일명이
   처음에 022 로 중복 생성됐다가 023 으로 rename — DB 는 그대로).
   상태/메모 저장마다 (선박,계통) 스냅샷 기록, 직전 스냅샷이 5분 이내면 insert 대신
