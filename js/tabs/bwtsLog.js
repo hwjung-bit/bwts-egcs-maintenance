@@ -40,6 +40,9 @@ function mount(root) {
     <select id="blYear"></select>
     <span id="blChips" style="display:flex;gap:4px;flex-wrap:wrap"></span>
     <button class="refresh-btn" id="blReload">🔄 새로고침</button>
+    <a href="https://drive.google.com/drive/folders/1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE" target="_blank"
+      style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d"
+      title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
