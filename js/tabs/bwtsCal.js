@@ -1,13 +1,19 @@
 // BWTS 검교정 — TRO sensor calibration, 12-month cycle (thresholds.json).
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
-import { $, esc, fmtDate, inlineEdit } from '../core/dom.js';
+import { $, esc, fmtDate, inlineEdit, toast, todayStr } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
+/* GAS CAL_UPLOAD_DIRS 와 짝: 종류 → (큐 target, 파일명 라벨) */
+const KIND = {
+  bwts_cal_cert: 'CERT',
+  bwts_cal_report: 'SERVICE REPORT',
+  bwts_cal_alarm: 'SAFETY ALARM TEST',
+};
 
 /* 만료일은 정렬과 표시가 같은 값을 쓰도록 여기서만 센다 */
 export function bwtsDue(c) {
@@ -23,7 +29,103 @@ export function bwtsLevel(days) {
 }
 
 function mount(root) {
-  root.innerHTML = '<div class="wrap" id="bwtsCalRoot"></div>';
+  root.innerHTML = '<div class="wrap" id="bwtsCalRoot"></div>' +
+    '<div id="bwtsCalUpload"><div class="box">' +
+    '<h3>📥 검교정 파일 저장</h3>' +
+    '<div class="row">' +
+      `<label>날짜 *<input id="cuDate" type="date"></label>` +
+      '<label>선박 *<select id="cuShip"></select></label>' +
+      '<label>종류 *<select id="cuKind">' +
+        Object.keys(KIND).map(k => `<option value="${k}">${KIND[k]}</option>`).join('') +
+      '</select></label></div>' +
+    '<div id="cuPreview" style="font-size:11px;color:#2563eb;font-weight:600;margin-bottom:8px;min-height:14px"></div>' +
+    '<div id="cuDrop" class="dropzone">파일을 여기로 드래그 (또는 클릭하여 선택)' +
+      '<input id="cuFiles" type="file" multiple style="display:none"></div>' +
+    '<div id="cuList" style="font-size:11px;color:#334155;margin-top:6px"></div>' +
+    '<div class="btns">' +
+      '<button class="pri" id="cuSave" onclick="bwtsCalTab.submitUpload()">업로드</button>' +
+      '<button onclick="bwtsCalTab.closeUpload()">취소</button></div>' +
+    '</div></div>';
+  const drop = $('cuDrop');
+  drop.onclick = () => $('cuFiles').click();
+  $('cuFiles').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+  drop.ondragleave = () => drop.classList.remove('over');
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
+  ['cuDate', 'cuShip', 'cuKind'].forEach(id => { $(id).onchange = renderPreview; });
+}
+
+/* ===== calibration file upload (queue target, no repair row) ===== */
+let pickedFiles = [];
+const extOf = name => (name.match(/\.[^.]+$/) || [''])[0];
+
+function baseName() {
+  const d = $('cuDate').value, s = $('cuShip').value, k = $('cuKind').value;
+  return d && s ? `${d} ${s} BWTS ${KIND[k]}` : '';
+}
+function renderPreview() {
+  const b = baseName();
+  $('cuPreview').textContent = b ? `저장 위치·이름: ${KIND[$('cuKind').value]} › ${b.slice(0, 4)}년 › ${$('cuDate').value} ${$('cuShip').value} / ${b}` : '';
+}
+function renderFileList() {
+  $('cuList').innerHTML = pickedFiles.map((f, i) =>
+    `<div>📎 ${esc(f.name)} <span style="color:#94a3b8">(${(f.size / 1024 / 1024).toFixed(1)}MB)</span>` +
+    ` <span style="color:#be185d;cursor:pointer" onclick="bwtsCalTab.removeFile(${i})">✕</span></div>`).join('');
+}
+function addFiles(list) {
+  [...list].forEach(f => { if (!pickedFiles.some(p => p.name === f.name && p.size === f.size)) pickedFiles.push(f); });
+  renderFileList();
+}
+function removeFile(i) { pickedFiles.splice(i, 1); renderFileList(); }
+
+function openUpload() {
+  if (!S.USER) { toast('로그인 후 사용할 수 있습니다'); return; }
+  pickedFiles = [];
+  renderFileList();
+  $('cuShip').innerHTML = '<option value=""></option>' +
+    getShipOrder().map(c => `<option value="${c}">${c}</option>`).join('');
+  $('cuDate').value = todayStr();
+  renderPreview();
+  $('bwtsCalUpload').classList.add('open');
+}
+function closeUpload() { $('bwtsCalUpload').classList.remove('open'); pickedFiles = []; }
+
+async function submitUpload() {
+  const files = pickedFiles.slice();
+  const date = $('cuDate').value, ship = $('cuShip').value, kind = $('cuKind').value;
+  if (!date || !ship) { toast('날짜·선박은 필수'); return; }
+  if (!files.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
+  if (files.some(f => f.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
+  const base = baseName();
+  $('cuSave').disabled = true; $('cuSave').textContent = '업로드 중...';
+  let okCount = 0;
+  try {
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const name = `${base}${files.length > 1 ? ` (${i + 1})` : ''}${extOf(f.name)}`;
+      // Storage keys must be ASCII — Drive gets the real name via file_name
+      const path = `cal/${Date.now()}_${i}${extOf(f.name).replace(/[^\w.]/g, '')}`;
+      const up = await sb.storage.from('repair_uploads').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
+      if (up.error) { toast(`업로드 실패 (${f.name}): ${up.error.message}`); continue; }
+      const ins = await sb.from('upload_requests').insert({
+        repair_id: null, target: kind, ship_code: ship, system: 'BWTS', req_date: date,
+        title: base, object_path: path, file_name: name, file_size: f.size,
+        requested_by: S.USER && S.USER.email, status: 'pending',
+      });
+      if (ins.error) {
+        toast(/target|null value/.test(ins.error.message)
+          ? '큐 등록 실패 — sql/024 실행 필요' : `큐 등록 실패: ${ins.error.message}`);
+        continue;
+      }
+      okCount++;
+    }
+    if (okCount) {
+      toast(`${okCount}개 파일 업로드 — 5분 내 Drive ${KIND[kind]} › ${date} ${ship} 폴더로 이동`);
+      closeUpload();
+    }
+  } finally {
+    $('cuSave').disabled = false; $('cuSave').textContent = '업로드';
+  }
 }
 
 function toggleSort(key) {
@@ -76,6 +178,7 @@ function refresh() {
     '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">' +
       `<div style="font-size:12px;color:#64748b">검교정 주기 ${th.interval_months}개월 · 임박 ${th.soon_days}일 · 날짜 클릭하여 수정</div>` +
       `<a href="${CERT_FOLDER}" target="_blank" style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d;margin-left:8px" title="Google Drive CERT 폴더 열기">📁 CERT 폴더</a>` +
+      '<button onclick="bwtsCalTab.openUpload()" style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#047857;cursor:pointer" title="CERT·서비스레포트·SAFETY ALARM TEST 파일을 Drive 에 자동 저장">📥 파일 저장</button>' +
       '<div style="margin-left:auto;display:flex;gap:6px">' +
         `<span class="pill lv-expired" style="font-size:11px;padding:3px 8px">만료 ${expCnt}</span>` +
         `<span class="pill lv-soon" style="font-size:11px;padding:3px 8px">임박 ${soonCnt}</span>` +
@@ -120,6 +223,6 @@ function editCertUrl(id) {
     .then(ok => { if (ok) refresh(); });
 }
 
-window.bwtsCalTab = { sort: toggleSort, editDate, editNote, editCertUrl };
+window.bwtsCalTab = { sort: toggleSort, editDate, editNote, editCertUrl, openUpload, closeUpload, submitUpload, removeFile };
 
 export default { id: 'bwtsCal', mount, refresh };

@@ -826,6 +826,29 @@ function resolveRepairFolder_(req, index) {
   return id;
 }
 
+/* BWTS 검교정 자료실 업로드 (sql/024 target 컬럼).
+   ROOT › <종류 폴더> › YYYY년 › 'YYYY-MM-DD SHIP' — 없으면 만든다. */
+var CAL_UPLOAD_ROOT = '1YZlUbAgq2_ADwrIvtiOSmRsyUAHl9xum';  // 11. CALIBRATION 연간 검교정
+var CAL_UPLOAD_DIRS = {
+  bwts_cal_cert: '02. CERT',
+  bwts_cal_report: '03. SERVICE REPORT',
+  bwts_cal_alarm: '04. SAFETY ALARM TEST'
+};
+function getOrCreateChild_(parent, name) {
+  var it = parent.getFoldersByName(name);
+  return it.hasNext() ? it.next() : parent.createFolder(name);
+}
+function resolveCalFolder_(req) {
+  var dirName = CAL_UPLOAD_DIRS[req.target];
+  if (!dirName) throw new Error('알 수 없는 target: ' + req.target);
+  var date = String(req.req_date || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('req_date 없음');
+  var root = DriveApp.getFolderById(CAL_UPLOAD_ROOT);
+  var kind = getOrCreateChild_(root, dirName);
+  var year = getOrCreateChild_(kind, date.slice(0, 4) + '년');
+  return getOrCreateChild_(year, date + ' ' + req.ship_code).getId();
+}
+
 function processUploadRequests_() {
   var reqs = claimRequests_('upload_requests', 'id', 30);
   if (!reqs.length) return 0;
@@ -833,7 +856,7 @@ function processUploadRequests_() {
   var done = 0;
   reqs.forEach(function (req) {
     try {
-      var folderId = resolveRepairFolder_(req, index);
+      var folderId = req.target ? resolveCalFolder_(req) : resolveRepairFolder_(req, index);
       if (!folderId) {
         finishRequest_('upload_requests', 'id', req,
                        { status: 'cancelled', note: '수리이력이 삭제됨' }, null);
@@ -843,16 +866,20 @@ function processUploadRequests_() {
       var folder = DriveApp.getFolderById(folderId);
       var existing = folder.getFilesByName(req.file_name);
       var file = existing.hasNext() ? existing.next() : folder.createFile(blob);
-      var urlByName = {};
-      urlByName[req.file_name] = file.getUrl();
-      mergeRepairAttachments_(req.repair_id, urlByName);
+      if (!req.target) {
+        var urlByName = {};
+        urlByName[req.file_name] = file.getUrl();
+        mergeRepairAttachments_(req.repair_id, urlByName);
+      }
       try { storageFetch_(req.object_path, 'delete'); } catch (e) {
         Logger.log('storage 삭제 실패(무시): ' + e.message);
       }
-      var repair = supaGet_('repairs?select=file_url&id=eq.' + encodeURIComponent(req.repair_id));
-      if (repair.length && !repair[0].file_url) {
-        supaPatch_('repairs?id=eq.' + encodeURIComponent(req.repair_id),
-                   { file_url: 'https://drive.google.com/drive/folders/' + folderId });
+      if (!req.target) {
+        var repair = supaGet_('repairs?select=file_url&id=eq.' + encodeURIComponent(req.repair_id));
+        if (repair.length && !repair[0].file_url) {
+          supaPatch_('repairs?id=eq.' + encodeURIComponent(req.repair_id),
+                     { file_url: 'https://drive.google.com/drive/folders/' + folderId });
+        }
       }
       finishRequest_('upload_requests', 'id', req,
                      { status: 'done', folder_id: folderId, file_url: file.getUrl() }, null);
