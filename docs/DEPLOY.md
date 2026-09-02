@@ -227,6 +227,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   `egcsCal.js` copyShip/copyCycles, 주기 라벨은 CYCLE_ROWS(라벨만) + thresholds 값 조합.
 - v20260902b: copyShip 만료일만 출력(센서당 1줄, cal 없으면 신환 기준) +
   클립보드에 text/plain·text/html 동시 탑재 — 엑셀·아웃룩 붙여넣기 = 표, 카톡 = 텍스트.
+- v20260902c: BWTS 로그 탭 필터바에 📁 LOG 폴더 버튼 (Drive `4. BWTS LOG DATA`,
+  폴더 ID 1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE). bwtsCal CERT 폴더 버튼과 동일 스타일.
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
 
