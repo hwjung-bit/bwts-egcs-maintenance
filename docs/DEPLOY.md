@@ -247,6 +247,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   03. SERVICE REPORT 폴더 사전 생성. 트리거 주기 15분 — 업로드 후 최대 15분 대기.
 - v20260902h: 수리이력 증상·조치 길면(60자↑ 또는 개행) 한 줄 접힘 + ▾ 토글.
   본문 클릭 = 수정(편집 시 clamp 자동 해제). `.clamp1` (css/base.css).
+- GAS syncCalRecord_: CERT 종류 업로드 처리 시 calibrations(BWTS, 해당 선박)의
+  cert_url·last_date 자동 갱신. 입력 날짜 < 기존 검교정일이면 건너뜀(백필 보호).
 - v20260902e: 현황 탭 히스토리 — sql/023 `status_history` (실행 완료. 파일명이
   처음에 022 로 중복 생성됐다가 023 으로 rename — DB 는 그대로).
   상태/메모 저장마다 (선박,계통) 스냅샷 기록, 직전 스냅샷이 5분 이내면 insert 대신
