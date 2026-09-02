@@ -838,6 +838,21 @@ function getOrCreateChild_(parent, name) {
   var it = parent.getFoldersByName(name);
   return it.hasNext() ? it.next() : parent.createFolder(name);
 }
+/* CERT 업로드가 끝나면 검교정 대장도 따라간다: cert_url = 새 파일 링크,
+   last_date = 입력 날짜. 옛 CERT 백필이 최신 기록을 되돌리지 않도록
+   날짜가 기존 이상일 때만 갱신한다. */
+function syncCalRecord_(req, fileUrl) {
+  if (req.target !== 'bwts_cal_cert') return;
+  var q = 'calibrations?system=eq.BWTS&ship_code=eq.' + encodeURIComponent(req.ship_code);
+  var rows = supaGet_(q + '&select=id,last_date');
+  if (!rows.length) return;
+  var cur = rows[0].last_date || '';
+  var nd = String(req.req_date || '').slice(0, 10);
+  if (cur && nd < cur) return;               // older cert — leave the ledger alone
+  supaPatch_('calibrations?id=eq.' + encodeURIComponent(rows[0].id),
+             { last_date: nd, cert_url: fileUrl });
+}
+
 function resolveCalFolder_(req) {
   var dirName = CAL_UPLOAD_DIRS[req.target];
   if (!dirName) throw new Error('알 수 없는 target: ' + req.target);
@@ -866,7 +881,11 @@ function processUploadRequests_() {
       var folder = DriveApp.getFolderById(folderId);
       var existing = folder.getFilesByName(req.file_name);
       var file = existing.hasNext() ? existing.next() : folder.createFile(blob);
-      if (!req.target) {
+      if (req.target) {
+        try { syncCalRecord_(req, file.getUrl()); } catch (e) {
+          Logger.log('검교정 대장 갱신 실패(무시): ' + e.message);
+        }
+      } else {
         var urlByName = {};
         urlByName[req.file_name] = file.getUrl();
         mergeRepairAttachments_(req.repair_id, urlByName);
