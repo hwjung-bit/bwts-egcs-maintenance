@@ -1,4 +1,4 @@
-# kmtcfolder:// protocol handler — opens a mapped local folder in Explorer.
+﻿# kmtcfolder:// protocol handler — opens a mapped local folder in Explorer.
 # Registered under HKCU\Software\Classes\kmtcfolder (per-PC, see docs/DEPLOY.md).
 # Web app buttons link to e.g. "kmtcfolder:bwtslog"; add new keys below as needed.
 param([string]$Url = '')
