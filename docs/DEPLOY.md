@@ -225,6 +225,8 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   상단 접이식 검교정 주기표(`<details>`, thresholds.json 동적 생성) + 📋 주기표 복사.
   선박 코드 헤더 가운데 정렬·클릭 시 해당 선박 검교정 이력 텍스트 클립보드 복사(메일·카톡용).
   `egcsCal.js` copyShip/copyCycles, 주기 라벨은 CYCLE_ROWS(라벨만) + thresholds 값 조합.
+- v20260902b: copyShip 만료일만 출력(센서당 1줄, cal 없으면 신환 기준) +
+  클립보드에 text/plain·text/html 동시 탑재 — 엑셀·아웃룩 붙여넣기 = 표, 카톡 = 텍스트.
 
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
 
