@@ -4,7 +4,7 @@
 // app.js compares its own ?v with this BUILD: a mismatch means the browser
 // still holds old modules, so it re-fetches FILES with cache:'reload' and
 // reloads. Bump BUILD together with index.html ?v= and version.json.
-export const BUILD = '20260902f';
+export const BUILD = '20260902g';
 
 export const FILES = [
   'js/version.js', 'js/app.js',

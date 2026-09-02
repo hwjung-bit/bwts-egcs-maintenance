@@ -34,12 +34,9 @@ function mount(root) {
     '<h3>📥 검교정 파일 저장</h3>' +
     '<div class="row">' +
       `<label>날짜 *<input id="cuDate" type="date"></label>` +
-      '<label>선박 *<select id="cuShip"></select></label>' +
-      '<label>종류 *<select id="cuKind">' +
-        Object.keys(KIND).map(k => `<option value="${k}">${KIND[k]}</option>`).join('') +
-      '</select></label></div>' +
+      '<label>선박 *<select id="cuShip"></select></label></div>' +
     '<div id="cuPreview" style="font-size:11px;color:#2563eb;font-weight:600;margin-bottom:8px;min-height:14px"></div>' +
-    '<div id="cuDrop" class="dropzone">파일을 여기로 드래그 (또는 클릭하여 선택)' +
+    '<div id="cuDrop" class="dropzone">파일을 여기로 드래그 (또는 클릭하여 선택) — 여러 개 가능, 파일마다 종류 지정' +
       '<input id="cuFiles" type="file" multiple style="display:none"></div>' +
     '<div id="cuList" style="font-size:11px;color:#334155;margin-top:6px"></div>' +
     '<div class="btns">' +
@@ -52,31 +49,46 @@ function mount(root) {
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
-  ['cuDate', 'cuShip', 'cuKind'].forEach(id => { $(id).onchange = renderPreview; });
+  ['cuDate', 'cuShip'].forEach(id => { $(id).onchange = renderPreview; });
 }
 
-/* ===== calibration file upload (queue target, no repair row) ===== */
-let pickedFiles = [];
+/* ===== calibration file upload (queue target, no repair row) =====
+   한 번에 여러 파일, 파일마다 종류 지정. 같은 날짜·선박이면 나중에 올려도
+   GAS getOrCreateChild_ 가 기존 'YYYY-MM-DD SHIP' 폴더를 재사용한다. */
+let pickedFiles = [];   // { file, kind }
 const extOf = name => (name.match(/\.[^.]+$/) || [''])[0];
 
-function baseName() {
-  const d = $('cuDate').value, s = $('cuShip').value, k = $('cuKind').value;
-  return d && s ? `${d} ${s} BWTS ${KIND[k]}` : '';
+/* 파일명에서 종류 추정 — 못 맞히면 CERT */
+function guessKind(name) {
+  const n = name.toLowerCase();
+  if (/alarm|safety|알람/.test(n)) return 'bwts_cal_alarm';
+  if (/report|service|레포트|리포트/.test(n)) return 'bwts_cal_report';
+  return 'bwts_cal_cert';
 }
 function renderPreview() {
-  const b = baseName();
-  $('cuPreview').textContent = b ? `저장 위치·이름: ${KIND[$('cuKind').value]} › ${b.slice(0, 4)}년 › ${$('cuDate').value} ${$('cuShip').value} / ${b}` : '';
+  const d = $('cuDate').value, s = $('cuShip').value;
+  $('cuPreview').textContent = d && s
+    ? `각 종류 폴더 › ${d.slice(0, 4)}년 › "${d} ${s}" 로 저장 · 파일명 "${d} ${s} BWTS <종류>"` : '';
 }
 function renderFileList() {
-  $('cuList').innerHTML = pickedFiles.map((f, i) =>
-    `<div>📎 ${esc(f.name)} <span style="color:#94a3b8">(${(f.size / 1024 / 1024).toFixed(1)}MB)</span>` +
-    ` <span style="color:#be185d;cursor:pointer" onclick="bwtsCalTab.removeFile(${i})">✕</span></div>`).join('');
+  $('cuList').innerHTML = pickedFiles.map((p, i) =>
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">' +
+    `<select style="width:150px;margin:0;padding:2px 4px;font-size:11px" onchange="bwtsCalTab.setKind(${i},this.value)">` +
+      Object.keys(KIND).map(k => `<option value="${k}"${p.kind === k ? ' selected' : ''}>${KIND[k]}</option>`).join('') +
+    '</select>' +
+    `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📎 ${esc(p.file.name)}</span>` +
+    `<span style="color:#94a3b8">(${(p.file.size / 1024 / 1024).toFixed(1)}MB)</span>` +
+    `<span style="color:#be185d;cursor:pointer" onclick="bwtsCalTab.removeFile(${i})">✕</span></div>`).join('');
 }
 function addFiles(list) {
-  [...list].forEach(f => { if (!pickedFiles.some(p => p.name === f.name && p.size === f.size)) pickedFiles.push(f); });
+  [...list].forEach(f => {
+    if (!pickedFiles.some(p => p.file.name === f.name && p.file.size === f.size))
+      pickedFiles.push({ file: f, kind: guessKind(f.name) });
+  });
   renderFileList();
 }
 function removeFile(i) { pickedFiles.splice(i, 1); renderFileList(); }
+function setKind(i, k) { if (pickedFiles[i]) pickedFiles[i].kind = k; }
 
 function openUpload() {
   if (!S.USER) { toast('로그인 후 사용할 수 있습니다'); return; }
@@ -91,26 +103,29 @@ function openUpload() {
 function closeUpload() { $('bwtsCalUpload').classList.remove('open'); pickedFiles = []; }
 
 async function submitUpload() {
-  const files = pickedFiles.slice();
-  const date = $('cuDate').value, ship = $('cuShip').value, kind = $('cuKind').value;
+  const picked = pickedFiles.slice();
+  const date = $('cuDate').value, ship = $('cuShip').value;
   if (!date || !ship) { toast('날짜·선박은 필수'); return; }
-  if (!files.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
-  if (files.some(f => f.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
-  const base = baseName();
+  if (!picked.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
+  if (picked.some(p => p.file.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
   $('cuSave').disabled = true; $('cuSave').textContent = '업로드 중...';
   let okCount = 0;
+  const kindCount = {}, kindSeq = {};
+  picked.forEach(p => { kindCount[p.kind] = (kindCount[p.kind] || 0) + 1; });
   try {
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      const name = `${base}${files.length > 1 ? ` (${i + 1})` : ''}${extOf(f.name)}`;
+    for (let i = 0; i < picked.length; i++) {
+      const { file: f, kind } = picked[i];
+      const seq = kindSeq[kind] = (kindSeq[kind] || 0) + 1;
+      const name = `${date} ${ship} BWTS ${KIND[kind]}` +
+        `${kindCount[kind] > 1 ? ` (${seq})` : ''}${extOf(f.name)}`;
       // Storage keys must be ASCII — Drive gets the real name via file_name
       const path = `cal/${Date.now()}_${i}${extOf(f.name).replace(/[^\w.]/g, '')}`;
       const up = await sb.storage.from('repair_uploads').upload(path, f, { upsert: false, contentType: f.type || 'application/octet-stream' });
       if (up.error) { toast(`업로드 실패 (${f.name}): ${up.error.message}`); continue; }
       const ins = await sb.from('upload_requests').insert({
         repair_id: null, target: kind, ship_code: ship, system: 'BWTS', req_date: date,
-        title: base, object_path: path, file_name: name, file_size: f.size,
-        requested_by: S.USER && S.USER.email, status: 'pending',
+        title: `${date} ${ship} BWTS ${KIND[kind]}`, object_path: path, file_name: name,
+        file_size: f.size, requested_by: S.USER && S.USER.email, status: 'pending',
       });
       if (ins.error) {
         toast(/target|null value/.test(ins.error.message)
@@ -120,7 +135,8 @@ async function submitUpload() {
       okCount++;
     }
     if (okCount) {
-      toast(`${okCount}개 파일 업로드 — 5분 내 Drive ${KIND[kind]} › ${date} ${ship} 폴더로 이동`);
+      const kinds = Object.keys(kindSeq).map(k => KIND[k]).join('·');
+      toast(`${okCount}개 파일 업로드 — 5분 내 Drive ${kinds} › ${date} ${ship} 폴더로 이동`);
       closeUpload();
     }
   } finally {
@@ -223,6 +239,6 @@ function editCertUrl(id) {
     .then(ok => { if (ok) refresh(); });
 }
 
-window.bwtsCalTab = { sort: toggleSort, editDate, editNote, editCertUrl, openUpload, closeUpload, submitUpload, removeFile };
+window.bwtsCalTab = { sort: toggleSort, editDate, editNote, editCertUrl, openUpload, closeUpload, submitUpload, removeFile, setKind };
 
 export default { id: 'bwtsCal', mount, refresh };
