@@ -250,6 +250,10 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   본문 클릭 = 수정(편집 시 clamp 자동 해제). `.clamp1` (css/base.css).
 - GAS syncCalRecord_: CERT 종류 업로드 처리 시 calibrations(BWTS, 해당 선박)의
   cert_url·last_date 자동 갱신. 입력 날짜 < 기존 검교정일이면 건너뜀(백필 보호).
+  실검증: KSG 2026-08-18 업로드 → last_date 2025-08-28→2026-08-18, cert_url 자동 연결.
+- v20260903a: BWTS 로그 탭 🤖 로그 분석 실행 버튼 — `kmtcfolder:bwts-analysis` →
+  핸들러가 wt 로 repo 에서 `claude "/bwts-analysis"` 실행. bwts-review 키도 예약.
+  kmtcfolder 프로토콜 등록(register_kmtcfolder.reg) 필요 — 미등록 PC 는 무반응.
 - v20260902e: 현황 탭 히스토리 — sql/023 `status_history` (실행 완료. 파일명이
   처음에 022 로 중복 생성됐다가 023 으로 rename — DB 는 그대로).
   상태/메모 저장마다 (선박,계통) 스냅샷 기록, 직전 스냅샷이 5분 이내면 insert 대신
