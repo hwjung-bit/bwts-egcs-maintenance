@@ -46,6 +46,9 @@ function mount(root) {
     <a href="kmtcfolder:bwtslog"
       style="text-decoration:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
       title="내 PC 탐색기로 열기 — kmtcfolder 프로토콜 등록된 PC에서만 작동 (scripts/register_kmtcfolder.reg)">💻 PC 폴더</a>
+    <a href="kmtcfolder:bwts-analysis"
+      style="text-decoration:none;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
+      title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</a>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
