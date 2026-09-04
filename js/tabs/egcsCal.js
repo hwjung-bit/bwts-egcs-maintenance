@@ -92,7 +92,12 @@ function refresh() {
 
   const colg = '<colgroup><col style="width:52px"><col style="width:56px">' + ships.map(() => '<col style="width:110px">').join('') + '</colgroup>';
   const thead = '<tr><th colspan="2" style="text-align:center;background:#f8fafc">장비</th>' +
-    ships.map(s => `<th style="text-align:center;cursor:pointer" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사">${esc(s)} 📋</th>`).join('') + '</tr>';
+    ships.map(s => {
+      const sh = shipByCode(s) || {};
+      const gear = [sh.wms, sh.cems].filter(Boolean).join(' · ');
+      return `<th style="text-align:center;cursor:pointer" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}">${esc(s)} 📋` +
+        (gear ? `<div style="font-size:9px;font-weight:400;color:#64748b;line-height:1.2">${esc(gear)}</div>` : '') + '</th>';
+    }).join('') + '</tr>';
   let body = '';
   orderedEquips.forEach((o, idx) => {
     const groupTh = (idx === 0 || orderedEquips[idx - 1].group !== o.group)
@@ -217,7 +222,9 @@ function copyShip(code) {
         (kind === '신품교환' ? ' (신환)' : ''),
     });
   });
-  const title = `${code} EGCS 검교정 만료일 (${fmtD(new Date())} 기준)`;
+  const sh = shipByCode(code) || {};
+  const gear = [sh.wms ? 'WMS ' + sh.wms : '', sh.cems ? 'CEMS ' + sh.cems : ''].filter(Boolean).join(' / ');
+  const title = `${code} EGCS 검교정 만료일 (${fmtD(new Date())} 기준${gear ? ' / ' + gear : ''})`;
   const text = title + '\n' +
     rows.map(r => `- ${r.equip}: ${r.due} (${r.st})`).join('\n');
   const html = `<b>${esc(title)}</b>` +
