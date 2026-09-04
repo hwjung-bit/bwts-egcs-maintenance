@@ -116,50 +116,53 @@ function makerTable(g, equipSet, map, CYCLE, SOON) {
     if (ships.some(s => map[s + '|' + eq])) usedEquips[eq] = 1;
   });
   const orderedEquips = orderEquips(usedEquips);
-  const colg = '<colgroup><col style="width:52px"><col style="width:56px">' + ships.map(() => '<col style="width:110px">').join('') + '</colgroup>';
-  const thead = '<tr><th colspan="2" style="text-align:center;background:#f8fafc">장비</th>' +
+  const colg = '<colgroup><col style="width:42px"><col style="width:46px">' + ships.map(() => '<col style="width:82px">').join('') + '</colgroup>';
+  const thead = '<tr><th colspan="2" style="text-align:center;background:#f8fafc;padding:3px 4px">장비</th>' +
     ships.map(s => {
       const sh = shipByCode(s) || {};
-      const gear = [sh.wms, sh.cems].filter(Boolean).join(' · ');
-      return `<th style="text-align:center;cursor:pointer" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}">${esc(s)} 📋` +
-        (gear ? `<div style="font-size:9px;font-weight:400;color:#64748b;line-height:1.2">${esc(gear)}</div>` : '') + '</th>';
+      const gear = [sh.wms, sh.cems].filter(Boolean).join('·');
+      return `<th style="text-align:center;cursor:pointer;padding:3px 4px" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}">${esc(s)}` +
+        (gear ? `<div style="font-size:8px;font-weight:400;color:#64748b;line-height:1.1">${esc(gear)}</div>` : '') + '</th>';
     }).join('') + '</tr>';
   let body = '';
   orderedEquips.forEach((o, idx) => {
     const groupTh = (idx === 0 || orderedEquips[idx - 1].group !== o.group)
-      ? `<th rowspan="${orderedEquips.filter(x => x.group === o.group).length}" style="text-align:center;vertical-align:middle;background:#eef2ff;color:#1d4ed8;font-weight:800;font-size:12px">${esc(o.group)}</th>`
+      ? `<th rowspan="${orderedEquips.filter(x => x.group === o.group).length}" style="text-align:center;vertical-align:middle;background:#eef2ff;color:#1d4ed8;font-weight:800;font-size:11px;padding:2px">${esc(o.group)}</th>`
       : '';
     const tds = ships.map(s => {
       const d = map[s + '|' + o.key];
-      if (!d) return '<td style="text-align:center;font-size:12px;color:#cbd5e1">—</td>';
-      const sn = d.serial ? `<div style="font-size:10px;color:#64748b;margin-top:2px">S/N ${esc(d.serial)}</div>` : '';
-      const mdl = d.model ? `<div style="font-size:10px;color:#64748b">${esc(d.model)}</div>` : '';
-      const ed = ` onclick="egcsCalTab.edit('${esc(d.id)}',event)" title="클릭하여 수정"`;
+      if (!d) return '<td style="text-align:center;font-size:11px;color:#cbd5e1;padding:3px 2px">—</td>';
+      const ed = ` onclick="egcsCalTab.edit('${esc(d.id)}',event)"`;
+      const info = [d.model, d.serial ? 'S/N ' + d.serial : '', d.note].filter(Boolean).join(' / ');
       if (!d.last_date) {
-        return `<td${ed} style="text-align:center;font-size:12px;cursor:pointer"><span style="color:#94a3b8">${esc(d.note || '—')}</span>${mdl}${sn}</td>`;
+        return `<td${ed} style="text-align:center;font-size:11px;cursor:pointer;padding:3px 2px;color:#94a3b8" title="${esc(info || '기록 없음')} — 클릭하여 수정">${esc(d.note || '—')}</td>`;
       }
       const sm = sensorModel(s, o.key, d.model, CYCLE);
       const cyc = sm ? CYCLE[sm] : null;
       if (!cyc) {
-        return `<td${ed} style="text-align:center;font-size:12px;cursor:pointer"><div style="font-weight:700">${esc(d.last_date)}</div>${mdl}${sn}</td>`;
+        return `<td${ed} style="text-align:center;font-size:11px;cursor:pointer;padding:3px 2px" title="검교정일 ${esc(d.last_date)}${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">${esc(d.last_date)}</td>`;
       }
-      let calDays = null, calLv = 'unknown';
-      if (cyc.cal != null) {
-        calDays = daysUntil(addMonths(d.last_date, cyc.cal));
-        calLv = level(calDays, SOON);
-      }
+      // 한 줄 요약: 먼저 도래하는 만료일만. 상세(검·신환·모델·S/N)는 툴팁으로.
+      const calDays = cyc.cal != null ? daysUntil(addMonths(d.last_date, cyc.cal)) : null;
       const replDays = daysUntil(addMonths(d.last_date, cyc.repl));
-      const replLv = level(replDays, SOON);
-      const replTag = (replLv === 'expired' || replLv === 'soon')
-        ? `<div style="font-size:10px;font-weight:700;margin-top:2px" class="lv-${replLv}">신환 ${dLabel(replDays)}</div>` : '';
-      const bgCls = cyc.cal != null ? calLv : replLv;
-      const calTxt = cyc.cal != null ? `<div style="font-size:10px;opacity:.8">검 ${dLabel(calDays)}</div>` : '';
-      return `<td class="lv-${bgCls}"${ed} style="text-align:center;font-size:12px;padding:4px 6px;cursor:pointer">` +
-        `<div style="font-weight:700">${esc(d.last_date)}</div>${calTxt}${replTag}${mdl}${sn}</td>`;
+      const calBad = calDays != null && level(calDays, SOON) !== 'ok';
+      const replBad = level(replDays, SOON) !== 'ok';
+      const bad = calBad || replBad;
+      const due = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : addMonths(d.last_date, cyc.repl);
+      const dueDays = cyc.cal != null ? calDays : replDays;
+      const tag = (!calBad && replBad) ? ' 신환' : (cyc.cal == null ? ' 신환' : '');
+      const tip = `검교정일 ${d.last_date}` +
+        (cyc.cal != null ? ` / 다음 검교정 ${fmtD(addMonths(d.last_date, cyc.cal))} (${dLabel(calDays)})` : '') +
+        ` / 신환 ${fmtD(addMonths(d.last_date, cyc.repl))} (${dLabel(replDays)})` +
+        (info ? ' / ' + info : '') + ' — 클릭하여 수정';
+      return `<td class="lv-${bad ? 'expired' : 'ok'}"${ed} title="${esc(tip)}" ` +
+        `style="text-align:center;font-size:11px;padding:3px 2px;cursor:pointer;white-space:nowrap;font-weight:${bad ? 700 : 400}">` +
+        `${fmtD(due)}${tag}` +
+        (bad ? `<div style="font-size:9px;line-height:1.1">${dLabel(dueDays)}</div>` : '') + '</td>';
     }).join('');
-    body += `<tr>${groupTh}<th style="text-align:center;background:#f8fafc;font-weight:700;font-size:12px">${esc(o.sensor)}</th>${tds}</tr>`;
+    body += `<tr>${groupTh}<th style="text-align:center;background:#f8fafc;font-weight:700;font-size:11px;padding:3px 2px">${esc(o.sensor)}</th>${tds}</tr>`;
   });
-  return `<div style="margin:14px 0 6px;font-weight:800;font-size:13px;color:#0f172a">🏭 ${esc(g.label)} <span style="font-weight:400;color:#94a3b8;font-size:11px">${ships.length}척</span></div>` +
+  return `<div style="margin:8px 0 3px;font-weight:800;font-size:12px;color:#0f172a">🏭 ${esc(g.label)} <span style="font-weight:400;color:#94a3b8;font-size:10px">${ships.length}척</span></div>` +
     '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">' + colg + '<thead>' + thead + '</thead><tbody>' + body + '</tbody></table></div>';
 }
 
