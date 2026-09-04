@@ -84,12 +84,38 @@ function refresh() {
     map[c.ship_code + '|' + eq] = c;
   });
   const ORDER = getShipOrder();
-  const ships = Object.keys(shipSet).sort((a, b) => {
+  const allShips = Object.keys(shipSet).sort((a, b) => {
     const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
-  const orderedEquips = orderEquips(equipSet);
+  // EGCS(스크러버) 메이커별로 표를 나눈다 — 현대머티리얼 → HPS → 글로벌에코
+  const MAKERS = [
+    { key: 'HM', label: '현대머티리얼 (HM)' },
+    { key: 'HPS', label: 'HPS' },
+    { key: '글로벌에코', label: '글로벌에코' },
+  ];
+  const groups = MAKERS.map(m => ({
+    label: m.label,
+    ships: allShips.filter(s => ((shipByCode(s) || {}).egcs_maker || '') === m.key),
+  }));
+  const known = groups.flatMap(g => g.ships);
+  const rest = allShips.filter(s => !known.includes(s));
+  if (rest.length) groups.push({ label: '기타', ships: rest });
 
+  $('egcsCalRoot').innerHTML =
+    cycleBoxHtml(CYCLE, SOON) +
+    groups.filter(g => g.ships.length)
+      .map(g => makerTable(g, equipSet, map, CYCLE, SOON)).join('') +
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정 · 선박 코드 클릭 → 이력 복사 · WMS·CEMS 장비는 선박관리 탭에서 수정</div>';
+}
+
+function makerTable(g, equipSet, map, CYCLE, SOON) {
+  const ships = g.ships;
+  const usedEquips = {};
+  Object.keys(equipSet).forEach(eq => {
+    if (ships.some(s => map[s + '|' + eq])) usedEquips[eq] = 1;
+  });
+  const orderedEquips = orderEquips(usedEquips);
   const colg = '<colgroup><col style="width:52px"><col style="width:56px">' + ships.map(() => '<col style="width:110px">').join('') + '</colgroup>';
   const thead = '<tr><th colspan="2" style="text-align:center;background:#f8fafc">장비</th>' +
     ships.map(s => {
@@ -133,10 +159,8 @@ function refresh() {
     }).join('');
     body += `<tr>${groupTh}<th style="text-align:center;background:#f8fafc;font-weight:700;font-size:12px">${esc(o.sensor)}</th>${tds}</tr>`;
   });
-  $('egcsCalRoot').innerHTML =
-    cycleBoxHtml(CYCLE, SOON) +
-    '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">' + colg + '<thead>' + thead + '</thead><tbody>' + body + '</tbody></table></div>' +
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정 · 선박 코드 클릭 → 이력 복사</div>';
+  return `<div style="margin:14px 0 6px;font-weight:800;font-size:13px;color:#0f172a">🏭 ${esc(g.label)} <span style="font-weight:400;color:#94a3b8;font-size:11px">${ships.length}척</span></div>` +
+    '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">' + colg + '<thead>' + thead + '</thead><tbody>' + body + '</tbody></table></div>';
 }
 
 /* ===== cycle reference (collapsible, copyable) ===== */
