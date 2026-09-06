@@ -3,6 +3,7 @@
   python review_io.py list                       # pending requests + this month's 판독실패/점검필요/데이터불량
   python review_io.py show KPS 2026-05           # everything Claude needs to re-judge one cell
   python review_io.py answer KPS 2026-05 --grade 운전양호 --note "..." [--answer "..."] [--request-id N]
+  python review_io.py escalate KPS 2026-05 --note "자동 2회 실패: ..."
   python review_io.py label KPS 2026-05 --rule 미운전 --final 운전양호 --source claude --note "..."
 
 `show` prints the cached summary, the G: folder, file sizes, the CSV
@@ -35,19 +36,37 @@ def _period(p):
 
 def cmd_list(args):
     sb = get_client()
+    codes = None
+    if getattr(args, "ships", None):
+        codes = [c.strip().upper() for c in args.ships.split(",") if c.strip()]
     pend = sb.table("bwts_reviews").select("*").eq("status", "pending") \
         .order("created_at").execute().data or []
-    latest = sb.table("bwts_log_analysis").select("period") \
-        .order("period", desc=True).limit(1).execute().data
-    latest = latest[0]["period"] if latest else None
+    latest = getattr(args, "period", None)
+    if not latest:
+        row = sb.table("bwts_log_analysis").select("period") \
+            .order("period", desc=True).limit(1).execute().data
+        latest = row[0]["period"] if row else None
     flagged = []
     if latest:
-        flagged = sb.table("bwts_log_analysis") \
+        q = sb.table("bwts_log_analysis") \
             .select("ship_code,period,grade,grade_rule,grade_reasons,review_status,integrity") \
             .eq("period", latest).eq("review_status", "auto") \
-            .in_("grade", ["판독실패", "점검필요", "데이터불량"]) \
-            .order("grade").execute().data or []
-    out = {"pending_requests": pend, "latest_period": latest, "flagged_auto": flagged}
+            .in_("grade", ["판독실패", "점검필요", "데이터불량"])
+        if codes:
+            q = q.in_("ship_code", codes)
+        flagged = q.order("grade").execute().data or []
+    if codes:
+        pend = [p for p in pend if p["ship_code"] in codes]
+    escalated = []
+    if latest:
+        q = sb.table("bwts_log_analysis") \
+            .select("ship_code,period,grade,final_grade,review_note") \
+            .eq("period", latest).eq("review_status", "escalated")
+        if codes:
+            q = q.in_("ship_code", codes)
+        escalated = q.order("ship_code").execute().data or []
+    out = {"pending_requests": pend, "latest_period": latest,
+           "flagged_auto": flagged, "escalated": escalated}
     print(json.dumps(out, ensure_ascii=False, indent=1, default=str))
 
 
@@ -119,6 +138,33 @@ def cmd_answer(args):
     print(f"OK {code} {period}: final_grade={args.grade or '(유지)'} · 요청 {len(pend)}건 답변")
 
 
+def cmd_escalate(args):
+    """Give up on a cell after the review loop's attempt limit.
+
+    escalated keeps the row out of `list`'s flagged_auto (which only picks
+    review_status='auto'), so the loop can never pick it up again; the web
+    marks it 🚩 for a human. Resetting the grade in the web puts it back to
+    'auto' and the next loop gets a fresh set of attempts."""
+    sb = get_client()
+    code, period = args.ship_code.upper(), args.period
+    now = datetime.now(timezone.utc).isoformat()
+    res = sb.table("bwts_log_analysis").update({
+        "review_status": "escalated", "reviewed_by": "claude",
+        "reviewed_at": now, "review_note": args.note}) \
+        .eq("ship_code", code).eq("period", period).execute()
+    if not res.data:
+        raise SystemExit(f"행 없음: {code} {period} — run.py 로 먼저 publish")
+    # 열린 사용자 요청을 닫는다. pending_requests 는 review_status 와 무관하게
+    # 반환되므로, 닫지 않으면 이 건이 매 루프마다 영원히 다시 잡힌다.
+    pend = sb.table("bwts_reviews").select("id").eq("ship_code", code) \
+        .eq("period", period).eq("status", "pending").execute().data or []
+    for r in pend:
+        sb.table("bwts_reviews").update({
+            "status": "answered", "answer": f"[확인 필요] {args.note}",
+            "answered_by": "claude", "answered_at": now}).eq("id", r["id"]).execute()
+    print(f"ESCALATED {code} {period}: {args.note} (요청 {len(pend)}건 닫음)")
+
+
 def cmd_label(args):
     LABELS.parent.mkdir(parents=True, exist_ok=True)
     new = not LABELS.exists()
@@ -135,7 +181,10 @@ def cmd_label(args):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("list").set_defaults(fn=cmd_list)
+    p = sub.add_parser("list")
+    p.add_argument("--period", help="대상 월 YYYY-MM (기본: 최신 분석월)")
+    p.add_argument("--ships", help="선박 코드 콤마 목록으로 범위 제한")
+    p.set_defaults(fn=cmd_list)
     p = sub.add_parser("show"); p.add_argument("ship_code"); p.add_argument("period"); p.set_defaults(fn=cmd_show)
     p = sub.add_parser("answer"); p.add_argument("ship_code"); p.add_argument("period")
     p.add_argument("--grade", help="확정 등급 (생략 시 자동 판정 유지)")
@@ -143,6 +192,9 @@ def main():
     p.add_argument("--answer", help="요청자에게 보이는 답변 (기본 = note)")
     p.add_argument("--request-id", type=int)
     p.set_defaults(fn=cmd_answer)
+    p = sub.add_parser("escalate"); p.add_argument("ship_code"); p.add_argument("period")
+    p.add_argument("--note", required=True, help="시도 이력과 남은 의문점")
+    p.set_defaults(fn=cmd_escalate)
     p = sub.add_parser("label"); p.add_argument("ship_code"); p.add_argument("period")
     p.add_argument("--rule", required=True); p.add_argument("--auto"); p.add_argument("--final", required=True)
     p.add_argument("--source", default="claude", choices=["claude", "user"]); p.add_argument("--note", default="")

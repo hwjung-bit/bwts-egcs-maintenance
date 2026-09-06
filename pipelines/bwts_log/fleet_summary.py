@@ -456,11 +456,17 @@ def compute_vessel_summary(code, year, month, verbose=False):
 
 
 def build_fleet_matrix(start_year, start_month,
-                       end_year, end_month, verbose=False):
+                       end_year, end_month, verbose=False,
+                       ship_codes=None):
     """
     Build {(year, month): [VesselMonthSummary, ...]}
     for all vessels across the date range.
     Uses cache: only re-parses if source folder is newer.
+
+    ship_codes: optional set/list of vessel codes to restrict the run to.
+    integrity.apply_matrix derives each cell's history from the earlier
+    months present in this matrix, so a restricted run should still start
+    at January to keep the history intact.
     """
     LOCAL_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -475,6 +481,8 @@ def build_fleet_matrix(start_year, start_month,
 
             for v in VESSELS:
                 code = v["code"]
+                if ship_codes and code not in ship_codes:
+                    continue
                 cp = _cache_path(code, year, month)
 
                 if not needs_reparse(code, year, month):

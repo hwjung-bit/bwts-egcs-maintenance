@@ -19,7 +19,7 @@ const STYLE = {
   '데이터불량': { bg: '#F3E5F5', fg: '#6A1B9A', dot: '#9C27B0' },
   '판독실패':   { bg: 'repeating-linear-gradient(135deg,#FFF9C4 0 6px,#FFE082 6px 12px)', fg: '#7A5C00', dot: '#FDD835' },
 };
-const REVIEW_MARK = { requested: '❓', reviewed: '✅', overridden: '✎' };
+const REVIEW_MARK = { requested: '❓', reviewed: '✅', overridden: '✎', escalated: '🚩' };
 const COLS = 'ship_code,period,grade,grade_rule,grade_reasons,reception,ballast_count,deballast_count,op_days,' +
   'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,' +
   'review_status,final_grade,review_note,reviewed_by,reviewed_at,analyzed_at';
@@ -46,9 +46,9 @@ function mount(root) {
     <a href="kmtcfolder:bwtslog"
       style="text-decoration:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
       title="내 PC 탐색기로 열기 — kmtcfolder 프로토콜 등록된 PC에서만 작동 (scripts/register_kmtcfolder.reg)">💻 PC 폴더</a>
-    <a href="kmtcfolder:bwts-analysis"
-      style="text-decoration:none;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
-      title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</a>
+    <button onclick="bwtsLogTab.runAnalysis()"
+      style="cursor:pointer;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
+      title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</button>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
@@ -90,13 +90,19 @@ function renderAll() {
   $('blYear').innerHTML = YEARS.map(y => `<option${y === F.year ? ' selected' : ''}>${y}</option>`).join('');
   const cnt = {};
   GRADES.forEach(g => { cnt[g] = 0; });
-  let req = 0, rev = 0;
-  ROWS.forEach(r => { cnt[disp(r)] = (cnt[disp(r)] || 0) + 1; if (r.review_status === 'requested') req++; if (r.review_status !== 'auto') rev++; });
+  let req = 0, rev = 0, esc_ = 0;
+  ROWS.forEach(r => {
+    cnt[disp(r)] = (cnt[disp(r)] || 0) + 1;
+    if (r.review_status === 'requested') req++;
+    if (r.review_status === 'escalated') esc_++;
+    if (r.review_status !== 'auto') rev++;
+  });
   const chip = (key, label, n) =>
     `<span class="chip${F.filter === key ? ' active' : ''}" onclick="bwtsLogTab.filter('${key}')">${label} ${n}</span>`;
   $('blChips').innerHTML = chip('', '전체', ROWS.length) +
     GRADES.map(g => chip(g, `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STYLE[g].dot};margin-right:3px"></span>${g}`, cnt[g] || 0)).join('') +
-    chip('requested', '❓ 재검토 대기', req) + chip('reviewed', '검토·수정됨', rev);
+    chip('requested', '❓ 재검토 대기', req) + chip('escalated', '🚩 확인요청', esc_) +
+    chip('reviewed', '검토·수정됨', rev);
   $('blCnt').textContent = `${ROWS.length} vessel-months`;
   renderMatrix();
   if (selected) renderDetail();
@@ -105,6 +111,7 @@ function renderAll() {
 function matches(r) {
   if (!F.filter) return true;
   if (F.filter === 'requested') return r.review_status === 'requested';
+  if (F.filter === 'escalated') return r.review_status === 'escalated';
   if (F.filter === 'reviewed') return r.review_status !== 'auto';
   return disp(r) === F.filter;
 }
@@ -165,6 +172,7 @@ async function renderDetail() {
     ? `<div class="bl-sec"><h4>판독 무결성 검사 (${esc(r.integrity.hits.join(', '))})</h4><ul>${(r.integrity.detail || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const review = r.review_status !== 'auto'
     ? `<div class="bl-sec bl-review"><h4>검토 결과 — ${esc(r.review_status)}${r.final_grade ? ' → <b>' + esc(r.final_grade) + '</b>' : ''}</h4>
+       ${r.review_status === 'escalated' ? '<div style="color:#b91c1c;font-weight:600;margin-bottom:4px">🚩 자동 재검토 실패 — 사람 확인 필요. 「재분석」을 누르면 다시 시도한다</div>' : ''}
        <div>${esc(r.review_note || '')}</div><div class="muted" style="font-size:11px">${esc(r.reviewed_by || '')} ${r.reviewed_at ? esc(r.reviewed_at.slice(0, 16).replace('T', ' ')) : ''}</div></div>` : '';
   box.innerHTML = `
   <div class="bl-head">
@@ -174,6 +182,8 @@ async function renderDetail() {
     ${r.grade_rule && r.grade_rule !== r.grade ? `<span class="muted">룰 판정: ${esc(r.grade_rule)}</span>` : ''}
     <span class="muted" style="font-size:11px">분석 ${esc((r.analyzed_at || '').slice(0, 16).replace('T', ' '))}</span>
     <div class="spacer"></div>
+    <button class="refresh-btn" onclick="bwtsLogTab.reanalyze()"
+      title="이 선박·월만 다시 분석 — 로컬 Claude Code 가 열린다">🔄 재분석</button>
     <button class="add-btn" onclick="bwtsLogTab.requestReview()">❓ 재검토 요청</button>
     <button class="refresh-btn" onclick="bwtsLogTab.override()">✎ 등급 수정</button>
     <button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button>
@@ -216,6 +226,43 @@ async function renderDetail() {
 
 function close() { selected = null; $('blDetail').style.display = 'none'; renderMatrix(); }
 function filter(k) { F.filter = k; renderAll(); }
+
+/* ===== 로컬 분석 실행 (kmtcfolder 프로토콜 → 로컬 Claude Code) =====
+   핸들러(scripts/open_local_folder.ps1)가 period/ships 를 화이트리스트로
+   검사한다. 형식이 어긋나면 파라미터를 버리고 전체 분석으로 떨어진다. */
+function launch(period, ships) {
+  const q = [];
+  if (period) q.push('period=' + period);
+  if (ships) q.push('ships=' + ships);
+  const url = 'kmtcfolder:bwts-analysis' + (q.length ? '?' + q.join('&') : '');
+  toast(ships ? `${ships} ${period} 재분석 — 터미널 확인` : '로그 분석 실행 — 터미널 확인');
+  location.href = url;
+}
+
+function runAnalysis() {
+  const months = [...new Set(ROWS.map(r => r.period))].sort();
+  const last = months.length ? months[months.length - 1] : '';
+  const p = prompt('분석할 월 (YYYY-MM). 비우면 전체 기간 분석', last);
+  if (p === null) return;
+  const period = p.trim();
+  if (period && !/^\d{4}-\d{2}$/.test(period)) { toast('YYYY-MM 형식으로 입력하세요'); return; }
+  launch(period, '');
+}
+
+async function reanalyze() {
+  if (!selected) return;
+  const r = ROWS.find(x => x.ship_code === selected.ship_code && x.period === selected.period);
+  if (!r) return;
+  // 🚩 건은 auto 로 되돌려야 재검토 루프가 다시 집는다 (list 는 auto 만 본다)
+  if (r.review_status === 'escalated') {
+    const patch = { review_status: 'auto', review_note: null, reviewed_by: null, reviewed_at: null };
+    if (!await dbSave(sb.from('bwts_log_analysis').update(patch)
+      .eq('ship_code', r.ship_code).eq('period', r.period), '🚩 해제 — 재분석 대상으로 복귀')) return;
+    Object.assign(r, patch);
+    renderAll();
+  }
+  launch(r.period, r.ship_code);
+}
 
 /* ===== review loop ===== */
 async function requestReview() {
@@ -260,7 +307,7 @@ async function override() {
   renderAll();
 }
 
-window.bwtsLogTab = { select, close, filter, requestReview, override,
+window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };

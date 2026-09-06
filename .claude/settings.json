@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python run.py:*)",
+      "Bash(python review_io.py:*)",
+      "Bash(python export_contract.py:*)",
+      "Bash(pytest:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout --:*)",
+      "Edit(pipelines/bwts_log/**)",
+      "Write(pipelines/bwts_log/tests/fixtures/**)"
+    ],
+    "deny": [
+      "Edit(contracts/thresholds.json)",
+      "Write(contracts/thresholds.json)"
+    ]
+  }
+}
