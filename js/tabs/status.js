@@ -2,7 +2,7 @@
 // Column naming rule (sql/016): <계통>_status ↔ <계통>_memo
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
-import { $, esc, toast, inlineEdit, placePopup } from '../core/dom.js';
+import { $, esc, toast, placePopup } from '../core/dom.js';
 import { STATUS_OPTS } from '../shared/constants.js';
 import { getShipOrder } from '../shared/ships.js';
 
@@ -17,14 +17,15 @@ function kst(ts) {
   });
 }
 
-/* Snapshot current status+memo of one system into status_history.
+/* Snapshot one system's status+memo into status_history. `over` overrides
+   the values written (used for 수리완료, which never lands in ships).
    Fire-and-forget: a missing table must not break the status save itself. */
-async function logHistory(code, sys) {
+async function logHistory(code, sys, over) {
   const s = S.SHIPS.find(x => x.code === code);
   if (!s) return;
   const row = {
-    status: s[sys + '_status'] || '정상',
-    memo: s[sys + '_memo'] || '',
+    status: (over && over.status) || s[sys + '_status'] || '정상',
+    memo: over && over.memo != null ? over.memo : (s[sys + '_memo'] || ''),
     changed_by: (S.USER && S.USER.email) || null,
     updated_at: new Date().toISOString(),
   };
@@ -34,7 +35,7 @@ async function logHistory(code, sys) {
       .order('id', { ascending: false }).limit(1);
     if (last.error) throw last.error;
     const l = last.data && last.data[0];
-    if (l && Date.now() - new Date(l.updated_at).getTime() < MERGE_MS) {
+    if (!(over && over.noMerge) && l && Date.now() - new Date(l.updated_at).getTime() < MERGE_MS) {
       await sb.from('status_history').update(row).eq('id', l.id);
     } else {
       await sb.from('status_history').insert({ ship_code: code, system: sys, ...row });
@@ -59,10 +60,11 @@ async function history(code, sys, ev) {
     return;
   }
   const list = res.data || [];
-  // 클리어 = 직전(더 오래된) 이력이 수리중/문제였다가 정상으로 저장된 행
+  // 클리어 = 수리완료 행, 또는 수리중/문제 다음에 정상으로 저장된 행
   const rows = list.map((h, i) => {
     const prev = list[i + 1];
-    const cleared = h.status === '정상' && prev && prev.status && prev.status !== '정상';
+    const cleared = h.status === '수리완료' ||
+      (h.status === '정상' && prev && prev.status && prev.status !== '정상' && prev.status !== '수리완료');
     return `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
       `<td style="text-align:center;font-weight:700;white-space:nowrap">${esc(h.status || '')}` +
       (cleared ? '<div style="color:#059669;font-size:10px;font-weight:700">✅ 클리어</div>' : '') + '</td>' +
@@ -89,15 +91,13 @@ function stColor(st) {
 
 function stCell(code, field, val, memo, disabled) {
   if (disabled) return '<td style="padding:4px 6px;background:#f8fafc;color:#cbd5e1;text-align:center;font-size:11px">—</td>';
-  const opts = STATUS_OPTS.map(s => `<option value="${s}"${val === s ? ' selected' : ''}>${s}</option>`).join('');
   const sys = field.replace('_status', '');
-  const memoField = sys + '_memo';
-  const memoHtml = `<span class="note-text" onclick="statusTab.editMemo(this,'${esc(code)}','${memoField}')" style="font-size:10px;color:#64748b;cursor:pointer;margin-left:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${esc(memo || '')}</span>`;
   const histBtn = `<span onclick="statusTab.history('${esc(code)}','${sys}',event)" title="이전 이력 보기" style="cursor:pointer;font-size:10px;flex-shrink:0;opacity:.55">🕘</span>`;
-  return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden">` +
-    '<div style="display:flex;align-items:center;gap:2px">' +
-    `<select class="status-select" style="${stColor(val)};padding:1px 14px 1px 4px;font-size:11px;font-weight:600;flex-shrink:0" onchange="statusTab.update('${esc(code)}','${field}',this.value)">${opts}</select>` +
-    memoHtml + histBtn + '</div></td>';
+  return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden;cursor:pointer" onclick="statusTab.editCell('${esc(code)}','${sys}',event)" title="클릭 → 상태·메모 수정">` +
+    '<div style="display:flex;align-items:center;gap:4px">' +
+    `<span style="font-size:11px;font-weight:700;flex-shrink:0">${esc(val)}</span>` +
+    `<span style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${esc(memo || '')}</span>` +
+    histBtn + '</div></td>';
 }
 
 function mount(root) {
@@ -145,26 +145,53 @@ function refresh() {
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
-async function update(code, field, val) {
-  const s = S.SHIPS.find(x => x.code === code);
-  if (s) s[field] = val;
-  const patch = {}; patch[field] = val;
-  const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), code + ' ' + val);
-  if (ok) { logHistory(code, field.replace('_status', '')); refresh(); }
-}
-
-function editMemo(el, code, field) {
+/* 상태+메모 통합 편집 팝업. 수리완료는 이력에만 남기고 현재값은 정상+메모 삭제. */
+function editCell(code, sys, ev) {
+  ev.stopPropagation();
   const s = S.SHIPS.find(x => x.code === code);
   if (!s) return;
-  inlineEdit(el, s[field] || '', async v => {
-    s[field] = v;
-    el.textContent = v;
-    const patch = {}; patch[field] = v;
-    const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), '메모 저장');
-    if (ok) logHistory(code, field.replace('_memo', ''));
-  }, { hide: true, placeholder: '메모...', css: 'width:90px;font-size:10px;padding:2px 4px;border:1px solid #3b82f6;border-radius:3px;outline:none' });
+  const cur = s[sys + '_status'] || '정상';
+  const pop = $('calEdit');
+  const opts = STATUS_OPTS.map(o => `<option value="${o}"${cur === o ? ' selected' : ''}>${o}</option>`).join('') +
+    '<option value="수리완료">✅ 수리완료 (클리어 — 이력에 남고 정상으로 복귀)</option>';
+  pop.innerHTML =
+    `<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())}</div>` +
+    `<label>상태<select id="scStatus">${opts}</select></label>` +
+    `<label>메모<input id="scMemo" value="${esc(s[sys + '_memo'] || '')}" placeholder="현상/조치 내용"></label>` +
+    '<div style="font-size:10px;color:#94a3b8;margin-top:4px">상태와 메모가 함께 저장되고 이력 한 건으로 남습니다</div>' +
+    '<div style="display:flex;gap:6px;margin-top:10px">' +
+      `<button class="pri" onclick="statusTab.saveCell('${esc(code)}','${esc(sys)}')">저장</button>` +
+      '<button onclick="statusTab.closeHistory()">취소</button></div>';
+  placePopup(pop, ev, 300);
+  $('scMemo').focus();
 }
 
-window.statusTab = { update, editMemo, history, closeHistory };
+async function saveCell(code, sys) {
+  const s = S.SHIPS.find(x => x.code === code);
+  if (!s) return;
+  const st = $('scStatus').value;
+  const memo = $('scMemo').value.trim();
+  const patch = {};
+  if (st === '수리완료') {
+    // 클리어: 이력에 수리완료(+메모)로 기록하고, 현황판은 정상·메모 비움
+    await logHistory(code, sys, { status: '수리완료', memo, noMerge: true });
+    patch[sys + '_status'] = '정상';
+    patch[sys + '_memo'] = '';
+    const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), code + ' 수리완료 — 정상 복귀');
+    if (!ok) return;
+    s[sys + '_status'] = '정상'; s[sys + '_memo'] = '';
+  } else {
+    patch[sys + '_status'] = st;
+    patch[sys + '_memo'] = memo;
+    const ok = await dbSave(sb.from('ships').update(patch).eq('code', code), code + ' ' + st + ' 저장');
+    if (!ok) return;
+    s[sys + '_status'] = st; s[sys + '_memo'] = memo;
+    logHistory(code, sys);
+  }
+  closeHistory();
+  refresh();
+}
+
+window.statusTab = { editCell, saveCell, history, closeHistory };
 
 export default { id: 'status', mount, refresh };
