@@ -1,0 +1,779 @@
+{
+  "_doc": "Techcross ECS 알람 코드별 본선 안내 문구. 메일 생성기가 그 달 EventLog 에 나온 코드만 골라 조합한다. match 는 메시지 정규식(대소문자 무시). review:true 는 메이커 문서에 없어 ETP 가 쓴 초안 — 사용자 검토 후 false 로. toc_only:true 는 목차·Fault List 조건만 보고 쓴 것(본문 미확인). notice:true 는 상태 표시라 점검 문구 없이 현상만 적는다. ref 페이지는 인쇄 페이지 = PDF 페이지. 출처 약어: BOOK=Maintenance,Troubleshooting Book for Crews 국문 3판 / ECS=ECS MANUAL Ver.B3.02 / FL=Alarm_Fault_List 3.4 / PRU=PRU24 AS Manual / TB=Technical Bulletin category: 문제=BWTS 작동 이상으로 보는 코드(전체 안내), 특이=해역·상태·조작 등(한 줄 표기만). 코드 단위이며 여기서만 바꾼다.",
+  "version": "2026-09-07",
+  "maker": "techcross",
+  "common": {
+    "when_unresolved": [
+      "HMI ABNORMAL 화면의 알람 내용을 사진으로 회신",
+      "HMI LOG 버튼에서 해당 기간 Event 로그를 PDF 로 추출하여 회신 (BOOK 5.1 p.44)"
+    ],
+    "log_extract_ref": "BOOK 5.1 p.44 (LOG → 기간 설정 → Event → CREATE → C:/Techcross/ECS/LOG, USB 자동 복사)"
+  },
+  "category": {
+    "CODE100": {
+      "category": "문제",
+      "why": "ECU·PRU 고장 — 전기분해 자체가 안 됨"
+    },
+    "CODE200": {
+      "category": "문제",
+      "why": "TRO 부족 — 처리 미달"
+    },
+    "CODE201": {
+      "category": "문제",
+      "why": "TRO 초과 — 배출 기준·재순환"
+    },
+    "CODE202": {
+      "category": "문제",
+      "why": "CLX 센서 전원 — TRO 측정 불가"
+    },
+    "CODE210": {
+      "category": "문제",
+      "why": "CLX 통신 — TRO 측정 불가"
+    },
+    "CODE220": {
+      "category": "문제",
+      "why": "샘플수 미유입 — TRO 측정 불가"
+    },
+    "CODE240": {
+      "category": "문제",
+      "why": "퍼지 막힘 — TRO 측정 불가"
+    },
+    "CODE250": {
+      "category": "특이",
+      "why": "드레인 탱크 오버플로우 — 처리 성능과 무관"
+    },
+    "CODE301": {
+      "category": "특이",
+      "why": "ANU 중화제 보충 신호 — 소모품 보충, 고장 아님"
+    },
+    "CODE302": {
+      "category": "문제",
+      "why": "ANU 중화제 부족 — 배출 TRO 초과 위험"
+    },
+    "CODE303": {
+      "category": "문제",
+      "why": "ANU 수위 과다"
+    },
+    "CODE400": {
+      "category": "특이",
+      "why": "운전자가 비상정지 누름"
+    },
+    "CODE401": {
+      "category": "문제",
+      "why": "PDE 차단기 트립 — 전원 상실"
+    },
+    "CODE402": {
+      "category": "문제",
+      "why": "440V 마그넷 불량 — 전원 상실"
+    },
+    "CODE405": {
+      "category": "문제",
+      "why": "입력 전류 과다"
+    },
+    "CODE406": {
+      "category": "문제",
+      "why": "입력 저전압 — 정지"
+    },
+    "CODE407": {
+      "category": "문제",
+      "why": "입력 과전압 — 정지"
+    },
+    "CODE500": {
+      "category": "문제",
+      "why": "해수 펌프 이상"
+    },
+    "CODE501": {
+      "category": "문제",
+      "why": "청수 펌프·탱크 이상 — 냉각 불가"
+    },
+    "CODE503": {
+      "category": "문제",
+      "why": "펌프 신호 미확인 — 정지"
+    },
+    "CODE600": {
+      "category": "특이",
+      "why": "저수온 해역 특성"
+    },
+    "CODE601": {
+      "category": "특이",
+      "why": "고수온 해역 특성"
+    },
+    "CODE603": {
+      "category": "문제",
+      "why": "냉각수 고온 — PRU 보호 정지"
+    },
+    "CODE604": {
+      "category": "문제",
+      "why": "유량 부족 — 처리 미달"
+    },
+    "CODE605": {
+      "category": "문제",
+      "why": "유량 과다 — 처리 미달"
+    },
+    "CODE606": {
+      "category": "문제",
+      "why": "수소 가스 — 정지·안전"
+    },
+    "CODE607": {
+      "category": "특이",
+      "why": "저염분 해역 특성 (담수·기수)"
+    },
+    "CODE608": {
+      "category": "특이",
+      "why": "전도도 상한 — 센서 점검 수준"
+    },
+    "CODE701": {
+      "category": "문제",
+      "why": "통신 불량 — 정지"
+    },
+    "CODE702": {
+      "category": "문제",
+      "why": "GPS 미수신 — 운전 조건 미충족"
+    },
+    "CODE703": {
+      "category": "문제",
+      "why": "센서 통신 불량 — 정지"
+    },
+    "CODE704": {
+      "category": "문제",
+      "why": "바이패스 열림 — 미처리 배출"
+    },
+    "CODE706": {
+      "category": "특이",
+      "why": "비상 모드 스위치 상태. tank to tank 이송 중이면 정상 — 발생 상황 확인 필요"
+    },
+    "CODE720": {
+      "category": "특이",
+      "why": "정비 작업 모드 표시"
+    },
+    "CODE721": {
+      "category": "문제",
+      "why": "밸브 신호 이상 — 반복 시 정지"
+    },
+    "CODE727": {
+      "category": "문제",
+      "why": "미처리수 흐름 — 규제 위반 소지"
+    },
+    "CODE731": {
+      "category": "문제",
+      "why": "밸브 원인 비정상 정지"
+    },
+    "CODE734": {
+      "category": "특이",
+      "why": "탄화수소 가스 감지 — 안전 항목"
+    },
+    "CODE773": {
+      "category": "특이",
+      "why": "CPC 제어권 전환 표시"
+    },
+    "CODE774": {
+      "category": "특이",
+      "why": "냉각수 밸브 개폐 상태 표시"
+    }
+  },
+  "codes": {
+    "CODE100": [
+      {
+        "match": "Current Different",
+        "unit": "ECU",
+        "cause": "전극 모듈 간 전류 편차. 전극 오염·마모 또는 EM 배선 접촉 불량",
+        "check": [
+          "HMI STATUS 화면에서 각 EM 전류값 편차 확인",
+          "EM Cleaning 실시 (BOOK 1.1 p.22)",
+          "EPJ·ESJ 케이블 단자 조임 상태"
+        ],
+        "ref": "BOOK 1.1 p.52 · EM Cleaning p.22"
+      },
+      {
+        "match": "P\\.S Pressure",
+        "unit": "ECU",
+        "cause": "ECU 내부 압력 4.5bar 초과. 실제 과압이 아니면 압력 스위치·ESJ 신호보드 불량",
+        "check": [
+          "ECU 압력계 지시값 확인 (4.5bar 이하인지)",
+          "과압이면 ECU 인렛·아웃렛 밸브 개방 여부",
+          "정상 압력인데 알람이면 P.S 단자 1-3 저항 측정 (0Ω → 스위치 교체, O.L → ESJ 보드)"
+        ],
+        "ref": "BOOK 1.2 p.53 · TB 2024Q3"
+      },
+      {
+        "match": "T\\.S Temperature",
+        "unit": "ECU",
+        "cause": "ECU 온도 45℃ 초과. 냉각수 순환 불량이거나 온도 스위치·ESJ 신호보드 불량",
+        "check": [
+          "ECU 온도계 지시값 확인 (45℃ 이하인지)",
+          "냉각수 라인 밸브 개방·순환 상태, 스트레이너 청소",
+          "정상 온도인데 알람이면 T.S 단자 1-3 저항 측정"
+        ],
+        "ref": "BOOK 1.3 p.53 · TB 2024Q3"
+      },
+      {
+        "match": "No Load",
+        "unit": "ECU",
+        "cause": "전원 인가 후 전극에 부하가 걸리지 않음. EM 결선 또는 PRU 출력 문제",
+        "check": [
+          "EPJ 내 배전 단락바·전원 케이블 연결",
+          "PRU 출력 전압 확인"
+        ],
+        "ref": "BOOK 1.4 p.55",
+        "toc_only": true
+      },
+      {
+        "match": "VLS",
+        "unit": "ECU",
+        "cause": "ECU 수위 저하. 배수 밸브 열림 또는 VLS 센서 이상",
+        "check": [
+          "ECU 드레인 밸브 닫힘 확인",
+          "VLS 센서 배선"
+        ],
+        "ref": "BOOK 1.5 p.56 · FL",
+        "toc_only": true
+      },
+      {
+        "match": "Communication",
+        "unit": "ECU/PRU",
+        "cause": "PRU 와 HMI 통신 불량",
+        "check": [
+          "PRU 전원·통신 케이블",
+          "ESJ 점검 (BOOK 1.6.1 p.57), PRU 점검 (1.6.2 p.59)"
+        ],
+        "ref": "BOOK 1.6 p.57~59"
+      },
+      {
+        "match": "EM.CY State",
+        "unit": "ECU",
+        "cause": "비상 정지 상태. 고압(4.5bar)·고온(45℃) 또는 RCM 비상정지 버튼",
+        "check": [
+          "발라스팅 중이면 ECU 인렛·아웃렛 밸브, 정비용 수동 밸브 개방 여부",
+          "운전 중이 아니면 RCM 비상정지 버튼 눌림 여부 (시계 방향으로 해제)",
+          "둘 다 아니면 압력·온도 스위치 및 게이지, 케이블 연결"
+        ],
+        "ref": "ECS p.124 · FL"
+      },
+      {
+        "match": "Current High|Output Current|Input Current",
+        "unit": "ECU",
+        "cause": "전극 전류가 설정 상한(PRU 당 1,125A) 초과. 해수 전도도 급변 또는 PRU 제어 이상",
+        "check": [
+          "HMI STATUS 에서 전류값과 CSU(전도도) 값 확인",
+          "재발 시 PRU 점검"
+        ],
+        "ref": "FL · ECS symptom p.149"
+      },
+      {
+        "match": "Block State",
+        "unit": "ECU",
+        "cause": "VLS/LS 신호로 운전 차단",
+        "check": [
+          "ECU 수위·드레인 밸브 상태"
+        ],
+        "ref": "FL",
+        "toc_only": true
+      },
+      {
+        "match": "Busbar Temperature",
+        "unit": "PRU",
+        "cause": "PRU 출력 부스바 과열. 부스바 접촉면 오염·체결 불량",
+        "check": [
+          "PRU 전원 차단·방전 후 부스바 접촉면 청소 및 재체결 (PRU LED8)",
+          "냉각수 온도·유량"
+        ],
+        "ref": "PRU p.3 (Pulse Trans Heatsink Over Temp)",
+        "review": true
+      },
+      {
+        "match": "PRU|IGBT|Drive|Diode|Insulation|Bridge|Output Voltage|Current Sensor|System Fail|Module",
+        "unit": "PRU",
+        "cause": "PRU 내부 소자·제어보드 이상. 본선 조치 범위가 제한적",
+        "check": [
+          "PRU 제어보드 LED 상태 확인 후 사진 회신 (PRU 매뉴얼 LED 진단표)",
+          "냉각수 온도·유량 정상 여부",
+          "PRU 전원 재투입 후 재발 여부"
+        ],
+        "ref": "PRU AS Manual · BOOK 1.6.2 p.59",
+        "reply": "LED 상태 사진과 재발 여부. 소자 불량이면 메이커 서비스 대상"
+      }
+    ],
+    "CODE200": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "발라스트 TRO 5mg/L 미만. 샘플수가 CLX 로 안 들어오거나(APU·Sol V/V·스트레이너) 시약·큐벳 문제, 드물게 ECU 효율 저하",
+        "check": [
+          "CLX 큐벳 색 확인 — 발라스팅 중 붉게 변하면 시약·센서 문제, 안 변하면 샘플수 미유입",
+          "붉게 변함: Priming → Flushing → Cuvette Cleaning 순 (BOOK 2.1.1 p.66~68)",
+          "안 변함: 샘플링 밸브·Y-스트레이너, APU 에어·220V, TSU Sol V/V 청소 순 (2.1.2 p.69~73)"
+        ],
+        "ref": "BOOK 2.1 p.66~74 · ECS p.118 · FL"
+      }
+    ],
+    "CODE201": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "TRO 상한 초과. 발라스팅 중이면 밸브 라인업 오류·밸브 누설/고착으로 처리수가 ECU 를 재순환, 디발라스팅 중이면 ANU 중화제 미토출",
+        "check": [
+          "발라스팅 중: 발라스팅 밸브 라인업과 밸브 누설·고착 여부 (BOOK 2.2.1 p.75)",
+          "디발라스팅 중: HMI ANU Injection 명령, Metering Pump 작동, 후단 체크밸브 에어 제거 (2.2.2 p.76)",
+          "디발라스팅 반복 시 TB 2025Q2 절차 (배출 Sol V/V·도징펌프 점검)"
+        ],
+        "ref": "BOOK 2.2 p.75~78 · ECS p.118 · FL · TB 2025Q2"
+      }
+    ],
+    "CODE202": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "CLX 센서 전원 이상 또는 TSU PLC-CLX 통신 불량",
+        "check": [
+          "CLX 전원 LED, TSU 내 PLC-CLX 케이블",
+          "Ex-CLX 는 퍼지 컨트롤러 내압 형성 여부"
+        ],
+        "ref": "BOOK 2.3 p.79~80",
+        "toc_only": true
+      }
+    ],
+    "CODE210": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "CLX 통신 불량",
+        "check": [
+          "TSU 내 PLC-CLX 케이블·커넥터"
+        ],
+        "ref": "BOOK 2.3 p.79",
+        "toc_only": true
+      }
+    ],
+    "CODE220": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "샘플수 미유입",
+        "check": [
+          "샘플링 라인 밸브·스트레이너, APU 동작"
+        ],
+        "ref": "BOOK 2.4 p.81",
+        "toc_only": true
+      }
+    ],
+    "CODE240": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "퍼지 라인 막힘",
+        "check": [
+          "퍼지 라인·필터 청소"
+        ],
+        "ref": "BOOK 2.5 p.82",
+        "toc_only": true
+      }
+    ],
+    "CODE250": [
+      {
+        "match": ".",
+        "unit": "TSU",
+        "cause": "TSU 드레인 탱크 오버플로우. 드레인 배출 라인 막힘",
+        "check": [
+          "TSU 드레인 탱크 배출 밸브·라인 막힘 여부",
+          "드레인 펌프 또는 레벨 스위치 작동"
+        ],
+        "ref": "—",
+        "review": true
+      }
+    ],
+    "CODE301": [
+      {
+        "match": ".",
+        "unit": "ANU",
+        "cause": "ANU 탱크 초기 청수 충수 필요 (중화제 보충 신호)",
+        "check": [
+          "ANU 탱크 청수 충수 후 중화제 투입 (BOOK 3.2 p.38)"
+        ],
+        "ref": "BOOK 3.1 p.84 · ECS p.119 · FL"
+      }
+    ],
+    "CODE302": [
+      {
+        "match": ".",
+        "unit": "ANU",
+        "cause": "ANU 탱크 수위 저하. 중화제 소진 또는 레벨 센서 이상",
+        "check": [
+          "탱크 잔량 확인 후 보충",
+          "잔량 있는데 알람이면 수위 레벨 센서 점검 (BOOK 3.3 p.39)"
+        ],
+        "ref": "BOOK 3.2 p.85 · ECS p.120 · FL"
+      }
+    ],
+    "CODE303": [
+      {
+        "match": ".",
+        "unit": "ANU",
+        "cause": "ANU 탱크 수위 과다. 과충수 또는 레벨 센서 이상",
+        "check": [
+          "탱크 수위 육안 확인",
+          "정상인데 알람이면 레벨 센서 점검 (BOOK 3.3 p.39)"
+        ],
+        "ref": "BOOK 3.3 p.86 · ECS p.120 · FL"
+      }
+    ],
+    "CODE400": [
+      {
+        "match": ".",
+        "unit": "PDE",
+        "cause": "운전자가 PDE 비상정지를 눌러 정지",
+        "check": [
+          "비상정지 사유 확인 후 해제"
+        ],
+        "ref": "ECS p.123 · FL",
+        "notice": true
+      }
+    ],
+    "CODE401": [
+      {
+        "match": ".",
+        "unit": "PDE",
+        "cause": "PDE 주차단기(MCCB) 트립. 과전류 또는 단락",
+        "check": [
+          "차단기 트립 원인(과부하·단락) 확인 전 재투입 금지",
+          "PDE 내부 절연저항 측정, 이상 없으면 재투입"
+        ],
+        "ref": "—",
+        "review": true
+      }
+    ],
+    "CODE402": [
+      {
+        "match": ".",
+        "unit": "PDE",
+        "cause": "440V 마그넷 컨택터 동작 불량",
+        "check": [
+          "발라스팅 중 발생: BOOK 4.1.1 p.88",
+          "운전 외 발생: BOOK 4.1.2 p.90"
+        ],
+        "ref": "BOOK 4.1 p.88~90 · ECS p.125",
+        "toc_only": true
+      }
+    ],
+    "CODE405": [
+      {
+        "match": ".",
+        "unit": "PMU",
+        "cause": "입력 전류 과다",
+        "check": [
+          "부하 상태·전원 계통 확인"
+        ],
+        "ref": "ECS p.123",
+        "toc_only": true
+      }
+    ],
+    "CODE406": [
+      {
+        "match": ".",
+        "unit": "PMU",
+        "cause": "입력 전압 440V-15% 미만. 선내 전원 저전압",
+        "check": [
+          "발전기 전압·부하 상태",
+          "PMU 입력 단자 전압 측정"
+        ],
+        "ref": "ECS p.121 · FL"
+      }
+    ],
+    "CODE407": [
+      {
+        "match": ".",
+        "unit": "PMU",
+        "cause": "입력 전압 440V+15% 초과",
+        "check": [
+          "발전기 전압 조정"
+        ],
+        "ref": "ECS p.121 · FL"
+      }
+    ],
+    "CODE500": [
+      {
+        "match": ".",
+        "unit": "FTU",
+        "cause": "해수 펌프 이상",
+        "check": [
+          "펌프 운전·신호 (BOOK 5.1 p.91)"
+        ],
+        "ref": "BOOK 5.1 p.91",
+        "toc_only": true
+      }
+    ],
+    "CODE501": [
+      {
+        "match": ".",
+        "unit": "FTU",
+        "cause": "청수 펌프 이상 또는 FTU 청수 탱크 수위 저하",
+        "check": [
+          "FTU 청수 잔량·보충",
+          "탱크 레벨 스위치 (BOOK 5.2 p.93)"
+        ],
+        "ref": "BOOK 5.1 p.91 / 5.2 p.93",
+        "toc_only": true
+      }
+    ],
+    "CODE503": [
+      {
+        "match": ".",
+        "unit": "PDE",
+        "cause": "해수/청수 펌프 운전 신호 미확인. 1분 지속 시 정지",
+        "check": [
+          "펌프 운전 확인 신호 배선·컨택터"
+        ],
+        "ref": "BOOK 5.1 p.91 · FL",
+        "toc_only": true
+      }
+    ],
+    "CODE600": [
+      {
+        "match": ".",
+        "unit": "Sensor",
+        "cause": "해수 온도 하한 미달. 저수온 해역에서 전기분해 효율 저하",
+        "check": [
+          "해수 온도 지시값 확인 — 실제 저수온이면 운항 해역 특성, 조치 불요",
+          "정상 수온인데 알람이면 STS 센서·배선"
+        ],
+        "ref": "—",
+        "review": true
+      }
+    ],
+    "CODE601": [
+      {
+        "match": ".",
+        "unit": "Sensor",
+        "cause": "해수 온도 36℃ 초과",
+        "check": [
+          "해수 온도 확인, 고수온 해역이면 조치 불요"
+        ],
+        "ref": "FL",
+        "toc_only": true
+      }
+    ],
+    "CODE603": [
+      {
+        "match": ".",
+        "unit": "FTS",
+        "cause": "냉각 청수 출구 온도 43℃ 초과(45℃ 정지). 냉각수 순환 불량·스트레이너 막힘·LT 펌프 미기동",
+        "check": [
+          "공급 청수 온도 36℃ 이하인지, 유량 설계값인지, LT 냉각펌프 운전 여부",
+          "냉각 라인 밸브 개방·스트레이너 청소",
+          "FTU/HEU 설치 선박은 FTU 청수 오염 시 교체 (TB 2024Q3)"
+        ],
+        "ref": "BOOK 6.1 p.96 · ECS p.124 · FL · TB 2024Q3"
+      }
+    ],
+    "CODE604": [
+      {
+        "match": ".",
+        "unit": "FMU",
+        "cause": "유량 설계값 15% 미만 3분 지속. 발라스트 펌프 저유량 또는 FMU 지시 오류",
+        "check": [
+          "HMI Flow Rate 와 발라스트 펌프 실제 운전 상태 비교",
+          "FMU 지시값과 HMI 값이 다르면 BOOK 6.2.2 p.99"
+        ],
+        "ref": "BOOK 6.2 p.98~99 · ECS p.122 · FL"
+      }
+    ],
+    "CODE605": [
+      {
+        "match": ".",
+        "unit": "FMU",
+        "cause": "유량 설계값 110% 초과",
+        "check": [
+          "발라스트 펌프 토출 밸브 개도 조정",
+          "FMU 지시값 확인 (BOOK 6.2 p.98)"
+        ],
+        "ref": "BOOK 6.2 p.98 · ECS p.122 · FL"
+      }
+    ],
+    "CODE606": [
+      {
+        "match": ".",
+        "unit": "GDS",
+        "cause": "수소 가스 25%LEL 초과(50% 정지). ECU 배기 불량 또는 GDS 센서 드리프트",
+        "check": [
+          "ECU 벤트 라인·팬 작동",
+          "GDS Zero Calibration (BOOK 5.2 p.45)"
+        ],
+        "ref": "ECS p.123 · FL · BOOK 5.2 p.45"
+      }
+    ],
+    "CODE607": [
+      {
+        "match": ".",
+        "unit": "CSU",
+        "cause": "전도도 1.0psu 미만. 담수·기수 해역이거나 CSU 센서 오염·영점 이탈",
+        "check": [
+          "운항 해역이 담수·기수면 조치 불요 (저염분 운전 제한)",
+          "해수 해역인데 알람이면 CSU 청소 후 Zero Calibration (BOOK 5.3 p.47)"
+        ],
+        "ref": "FL · BOOK 5.3 p.47"
+      }
+    ],
+    "CODE608": [
+      {
+        "match": ".",
+        "unit": "CSU",
+        "cause": "전도도 상한 초과. CSU 센서 이상 가능성",
+        "check": [
+          "CSU 청소 후 Zero Calibration (BOOK 5.3 p.47)"
+        ],
+        "ref": "—",
+        "review": true
+      }
+    ],
+    "CODE701": [
+      {
+        "match": "FAN",
+        "unit": "PDE",
+        "cause": "PDE 냉각 팬 정지",
+        "check": [
+          "팬 전원·회전 확인"
+        ],
+        "ref": "FL",
+        "toc_only": true
+      },
+      {
+        "match": ".",
+        "unit": "통신",
+        "cause": "HMI 와 장비(RTU·ECU·TSU·ANU·AIM 등) 통신 불량. 1분 지속 시 정지. LAN·커넥터 접속 불량이 대부분",
+        "check": [
+          "HMI 기동 5분 후 COMM 화면에서 해당 장비 통신 상태 확인 (ECU 는 발라스팅 중에만 통신)",
+          "불량 장비의 LAN 케이블·커넥터 재접속, PDE LAN 확인 (BOOK 7.1.2 p.105)",
+          "RTU/CIM/AIM 별 점검은 BOOK 7.1.3~7.1.5 p.107~109"
+        ],
+        "ref": "BOOK 7.1 p.104~111 · ECS p.125 · symptom p.135~146 · FL"
+      }
+    ],
+    "CODE702": [
+      {
+        "match": ".",
+        "unit": "GPS",
+        "cause": "GPS 신호 미수신. 선교 GPS 리피터 출력 또는 배선",
+        "check": [
+          "Hyper Terminal 로 GPS 신호 확인 (BOOK 4.1 p.42)",
+          "선교 GPS 출력 포트·케이블"
+        ],
+        "ref": "BOOK 4.1 p.42 · ECS symptom p.147"
+      }
+    ],
+    "CODE703": [
+      {
+        "match": ".",
+        "unit": "센서 통신",
+        "cause": "GDS 또는 FMU 센서 통신 불량",
+        "check": [
+          "GDS: 센서 통신 점검 (BOOK 7.2 p.112)",
+          "FMU: 알람 메시지·출력 전류 확인 (BOOK 7.3 p.114~115)"
+        ],
+        "ref": "BOOK 7.2 p.112 / 7.3 p.114 · ECS symptom p.142~143"
+      }
+    ],
+    "CODE704": [
+      {
+        "match": ".",
+        "unit": "ECS",
+        "cause": "발라스팅 중 바이패스 밸브 열림 신호",
+        "check": [
+          "VRCS 밸브 신호와 HMI 표시 일치 여부",
+          "불일치 시 케이블 연결"
+        ],
+        "ref": "ECS p.124 · FL"
+      }
+    ],
+    "CODE706": [
+      {
+        "match": ".",
+        "unit": "ECS",
+        "cause": "RCM 셀렉트 스위치가 Emergency 로 전환된 상태. tank to tank 이송 등 의도된 운전이면 정상",
+        "check": [
+          "발생 시각의 운전 상황(tank to tank 이송 여부) 회신"
+        ],
+        "ref": "ECS p.119~123 · FL",
+        "notice": true
+      }
+    ],
+    "CODE720": [
+      {
+        "match": ".",
+        "unit": "ECS",
+        "cause": "Maintenance Work 모드 표시",
+        "ref": "—",
+        "notice": true
+      }
+    ],
+    "CODE721": [
+      {
+        "match": ".",
+        "unit": "밸브",
+        "cause": "지정 밸브의 열림 신호가 운전 조건과 맞지 않게 들어옴. 밸브가 완전 열림·닫힘 위치를 유지하지 못해 리미트 스위치 신호가 반복되는 경우가 대부분",
+        "check": [
+          "HMI STATUS 화면에서 해당 밸브 디지털 신호가 흔들리는지 확인",
+          "해당 밸브 리미트 스위치 접점·배선 상태",
+          "액추에이터 작동 상태 (공압식은 제어 공기압)",
+          "밸브 시트 이물질 고착 여부"
+        ],
+        "ref": "ECS p.39 STATUS 화면",
+        "review": true
+      }
+    ],
+    "CODE727": [
+      {
+        "match": ".",
+        "unit": "ECS",
+        "cause": "발라스트 펌프 기동 후 5분 내 ECS 가 운전되지 않아 미처리수가 흐름. 운전 준비 절차 누락 또는 ECS 기동 지연",
+        "check": [
+          "발라스트 펌프 기동 전 HMI OP MODE 에서 BALLAST 선택·Required Signal 충족 여부",
+          "ECU 드레인 밸브 닫힘, 냉각수 밸브·TSU 샘플링 밸브 개방"
+        ],
+        "ref": "ECS p.44 (Preparation)"
+      }
+    ],
+    "CODE731": [
+      {
+        "match": ".",
+        "unit": "밸브",
+        "cause": "밸브 상태 신호 이상으로 운전이 비정상 정지. CODE721 과 같이 나오면 같은 밸브의 리미트 스위치·액추에이터 문제일 가능성이 높음",
+        "check": [
+          "정지 직전 CODE721 에 표시된 밸브 번호 확인",
+          "해당 밸브 리미트 스위치 접점·배선, 액추에이터 작동, 시트 고착 여부",
+          "밸브를 수동으로 완전 개폐해 STATUS 신호가 안정되는지 확인"
+        ],
+        "ref": "ECS p.39 STATUS 화면",
+        "review": true
+      }
+    ],
+    "CODE734": [
+      {
+        "match": ".",
+        "unit": "GDS",
+        "cause": "탄화수소 가스 감지",
+        "check": [
+          "ECU 구역 환기, 가스 발생원 확인"
+        ],
+        "ref": "FL",
+        "toc_only": true
+      }
+    ],
+    "CODE773": [
+      {
+        "match": ".",
+        "unit": "CPC",
+        "cause": "제어 CPC 전환 표시",
+        "ref": "—",
+        "notice": true
+      }
+    ],
+    "CODE774": [
+      {
+        "match": ".",
+        "unit": "냉각수",
+        "cause": "냉각 청수 인렛 밸브 개폐 상태 표시. 운전 준비 시 인렛·아웃렛 밸브를 열어야 함",
+        "ref": "ECS p.44 (Preparation 2)",
+        "notice": true
+      }
+    ]
+  }
+}
