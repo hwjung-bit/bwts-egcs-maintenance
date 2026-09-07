@@ -289,10 +289,18 @@ async function renderDetail() {
   const sess = (sum.data && sum.data.summary && sum.data.summary.session_summaries) || [];
   const chat = (sum.data && sum.data.summary && sum.data.summary.chattering) || [];
   const rp = (sum.data && sum.data.summary && sum.data.summary.recovery_pattern) || {};
+  // 일자~판정은 붙여서 한 눈에 읽히게 폭을 고정하고, 숫자는 자릿수를 맞춰
+  // 오른쪽 정렬한다. 남는 폭은 비고가 가져가고 거기서만 줄바꿈된다.
+  const NUM = 'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap';
   const sessRows = sess.slice(0, 60).map(x =>
-    `<tr><td>${esc(x.date || '')}</td><td>${esc(x.mode || '')}</td><td style="text-align:right">${x.duration_min != null ? Math.round(x.duration_min) : '—'}</td>` +
-    `<td style="text-align:right">${x.stable_avg != null ? (+x.stable_avg).toFixed(2) : '—'}</td><td style="text-align:right">${x.stable_min != null ? (+x.stable_min).toFixed(2) : '—'}</td><td style="text-align:right">${x.stable_max != null ? (+x.stable_max).toFixed(2) : '—'}</td>` +
-    `<td>${x.in_range === false ? '<span class="lv-expired pill">이탈</span>' : x.in_range ? '<span class="lv-ok pill">OK</span>' : ''}</td><td style="color:#c2410c">${esc(x.issue || '')}</td></tr>`).join('');
+    `<tr><td style="white-space:nowrap">${esc(x.date || '')}</td>` +
+    `<td style="white-space:nowrap">${esc(x.mode || '')}</td>` +
+    `<td style="${NUM}">${x.duration_min != null ? Math.round(x.duration_min) : '—'}</td>` +
+    `<td style="${NUM}">${x.stable_avg != null ? (+x.stable_avg).toFixed(2) : '—'}</td>` +
+    `<td style="${NUM}">${x.stable_min != null ? (+x.stable_min).toFixed(2) : '—'}</td>` +
+    `<td style="${NUM}">${x.stable_max != null ? (+x.stable_max).toFixed(2) : '—'}</td>` +
+    `<td style="text-align:center;white-space:nowrap">${x.in_range === false ? '<span class="lv-expired pill">이탈</span>' : x.in_range ? '<span class="lv-ok pill">OK</span>' : ''}</td>` +
+    `<td style="color:#c2410c">${esc(x.issue || '')}</td></tr>`).join('');
   const thread = (rv.data || []).map(q =>
     `<div class="bl-q"><div><b>Q</b> ${esc(q.question)} <span class="muted" style="font-size:11px">${esc(q.requested_by || '')} ${esc((q.created_at || '').slice(0, 16).replace('T', ' '))}</span></div>` +
     (q.answer ? `<div class="bl-a"><b>A</b> ${esc(q.answer)} <span class="muted" style="font-size:11px">${esc(q.answered_by || '')} ${esc((q.answered_at || '').slice(0, 16).replace('T', ' '))}</span></div>` : '<div class="muted" style="font-size:11px">답변 대기 — 로컬에서 /bwts-review 실행</div>') + '</div>').join('');
@@ -300,7 +308,15 @@ async function renderDetail() {
     (rp.pattern ? `<div style="margin-bottom:6px"><b>회복 패턴:</b> ${esc(rp.pattern)} — ${esc(rp.detail || '')}</div>` : '') +
     chatterDetail(chat) +
     `<h4>세션 (${sess.length}${sess.length > 60 ? ', 60개 표시' : ''})</h4>` +
-    (sessRows ? `<table class="cal-table"><thead><tr><th>일자</th><th>모드</th><th>분</th><th>TRO avg</th><th>min</th><th>max</th><th>판정</th><th>비고</th></tr></thead><tbody>${sessRows}</tbody></table>` : '<div class="muted">세션 없음</div>') +
+    (sessRows ? `<table class="cal-table" style="table-layout:fixed;width:100%">`
+      + `<colgroup><col style="width:88px"><col style="width:64px"><col style="width:46px">`
+      + `<col style="width:66px"><col style="width:58px"><col style="width:58px">`
+      + `<col style="width:56px"><col></colgroup>`
+      + `<thead><tr><th>일자</th><th>모드</th><th style="text-align:right">분</th>`
+      + `<th style="text-align:right">TRO avg</th><th style="text-align:right">min</th>`
+      + `<th style="text-align:right">max</th><th style="text-align:center">판정</th>`
+      + `<th>비고</th></tr></thead><tbody>${sessRows}</tbody></table>`
+      : '<div class="muted">세션 없음</div>') +
     `<h4 style="margin-top:12px">재검토 이력 (${(rv.data || []).length})</h4>${thread || '<div class="muted">없음</div>'}`;
 }
 
