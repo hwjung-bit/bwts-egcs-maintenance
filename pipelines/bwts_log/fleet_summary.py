@@ -133,11 +133,17 @@ def compute_grade(summary):
     # 밸브 채터링: 2026-09-01 부터 등급이 아니라 참고 표시(flags). 밸브가
     # 열고 닫히는 패턴만으로 점검필요를 매기면 정상 운전의 절반이 걸렸다.
     flags = summary.setdefault("flags", [])
-    if chattering:
+    # 표시 대상은 chatter_report_min_events 이상만. 그 미만(한두 번 튄 것)은
+    # 실측 2/3를 차지해 신호가 아니라 소음이었다.
+    worth = [c for c in chattering
+             if c.get("chatter_events", 0) >= BL["chatter_report_min_events"]]
+    if worth:
         if BL.get("chatter_affects_grade", False):
             reasons.append("밸브 채터링 감지")
         else:
-            flags.append(f"밸브 채터링 {len(chattering)}건")
+            severe = sum(1 for c in worth if c.get("severity") == "심각")
+            flags.append(f"밸브 채터링 {len(worth)}건"
+                         + (f" (심각 {severe})" if severe else ""))
 
     if reasons:
         return "점검필요", reasons

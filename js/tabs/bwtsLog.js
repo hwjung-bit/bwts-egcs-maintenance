@@ -8,6 +8,7 @@ import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast } from '../core/dom.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
+import { requireTH } from '../shared/thresholds.js';
 
 export const GRADES = ['운전양호', '점검필요', '수리후정상', '미운전', '미수신', '데이터불량', '판독실패'];
 const STYLE = {
@@ -21,7 +22,7 @@ const STYLE = {
 };
 const REVIEW_MARK = { requested: '❓', reviewed: '✅', overridden: '✎', escalated: '🚩' };
 const COLS = 'ship_code,period,grade,grade_rule,grade_reasons,reception,ballast_count,deballast_count,op_days,' +
-  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,' +
+  'tro_b_avg,tro_b_min,tro_d_max,tro_b_in_range,tro_d_compliant,trip_count,alarm_count,integrity,chattering,' +
   'review_status,final_grade,review_note,reviewed_by,reviewed_at,analyzed_at';
 
 // module state
@@ -32,7 +33,52 @@ let selected = null;        // {ship_code, period}
 let loadedYear = null;
 
 const disp = r => r.final_grade || r.grade;
-const flagsOf = r => (r.integrity && r.integrity.flags) || r.flags || [];
+// 채터링은 ⚙ 참고표시가 아니라 전용 밸브 아이콘으로 따로 그린다. 과거 행의
+// flags 에 남아 있는 옛 문구는 여기서 걸러 이중 표시를 막는다.
+const flagsOf = r => ((r.integrity && r.integrity.flags) || r.flags || [])
+  .filter(f => !String(f).startsWith('밸브 채터링'));
+
+// 등급과 무관한 부수 문제. 임계값은 contracts/thresholds.json 한 곳에서만 온다.
+function chatterOf(r) {
+  const bl = requireTH('bwts_log');
+  const worth = (r.chattering || [])
+    .filter(c => (c.chatter_events || 0) >= bl.chatter_report_min_events);
+  if (!worth.length) return null;
+  const severe = worth.filter(c => (c.chatter_events || 0) >= bl.chatter_severe_min_events);
+  return { level: severe.length ? '심각' : '주의', valves: worth, severe: severe.length };
+}
+
+// 상세 패널: 표시 기준을 넘은 밸브만, 심한 순서로. 기준 미만은 접어서 건수만.
+function chatterDetail(chat) {
+  const bl = requireTH('bwts_log');
+  const list = (chat || []).filter(c => typeof c === 'object');
+  const worth = list.filter(c => (c.chatter_events || 0) >= bl.chatter_report_min_events)
+    .sort((a, b) => (b.chatter_events || 0) - (a.chatter_events || 0));
+  const minor = list.length - worth.length;
+  if (!worth.length) {
+    return minor ? `<div class="muted" style="margin-bottom:6px">밸브 채터링: 경미 ${minor}건 `
+      + `(${bl.chatter_report_min_events}회 미만 — 표시 생략)</div>` : '';
+  }
+  const rows = worth.map(c => {
+    const sev = (c.chatter_events || 0) >= bl.chatter_severe_min_events ? '심각' : '주의';
+    const col = sev === '심각' ? '#dc2626' : '#ea580c';
+    return `<li>${VALVE_SVG(col)} <b>${esc(c.valve || '?')}</b> — ${c.chatter_events}회`
+      + ` <span style="color:${col};font-weight:600">${sev}</span>`
+      + ` · 버스트 ${c.burst_count}회, 최악 ${c.worst_burst_size}회`
+      + ` (${esc(c.worst_burst_start || '')}~${esc(c.worst_burst_end || '')},`
+      + ` 평균 ${c.avg_interval_sec}초 간격)</li>`;
+  }).join('');
+  return `<div style="margin-bottom:6px"><b>밸브 채터링 (등급 무관)</b>`
+    + `<ul style="margin:4px 0 0 16px">${rows}</ul>`
+    + (minor ? `<div class="muted" style="font-size:11px">그 외 경미 ${minor}건 생략`
+      + ` (${bl.chatter_report_min_events}회 미만)</div>` : '') + '</div>';
+}
+
+// P&ID 게이트 밸브 기호 (마주 보는 삼각형 + 스템)
+const VALVE_SVG = color =>
+  `<svg viewBox="0 0 16 12" width="13" height="10" style="vertical-align:-1px" aria-hidden="true">` +
+  `<path d="M2 2 L2 10 L8 6 Z M14 2 L14 10 L8 6 Z" fill="${color}"/>` +
+  `<path d="M8 6 L8 2 M5 1.5 L11 1.5" stroke="${color}" stroke-width="1.4" fill="none"/></svg>`;
 
 function mount(root) {
   root.innerHTML = `
@@ -103,7 +149,11 @@ function renderAll() {
     GRADES.map(g => chip(g, `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STYLE[g].dot};margin-right:3px"></span>${g}`, cnt[g] || 0)).join('') +
     chip('requested', '❓ 재검토 대기', req) + chip('escalated', '🚩 확인요청', esc_) +
     chip('reviewed', '검토·수정됨', rev);
-  $('blCnt').textContent = `${ROWS.length} vessel-months`;
+  const bl = requireTH('bwts_log');
+  $('blCnt').innerHTML = `${ROWS.length} vessel-months`
+    + `<span class="muted" style="margin-left:10px;font-size:11px">`
+    + `${VALVE_SVG('#dc2626')} 채터링 심각(${bl.chatter_severe_min_events}회+) · `
+    + `${VALVE_SVG('#ea580c')} 주의(${bl.chatter_report_min_events}~) · ⚙ 참고표시 · 🚩 확인요청</span>`;
   renderMatrix();
   if (selected) renderDetail();
 }
@@ -140,8 +190,13 @@ function renderMatrix() {
       const sub = g === '미수신' ? '' : (g === '판독실패' ? (r.integrity && r.integrity.hits ? r.integrity.hits.join(' ') : '') : (ops ? `B${r.ballast_count}/D${r.deballast_count}` : ''));
       const fl = flagsOf(r);
       const flag = fl.length ? ` <span class="bl-flag" title="${esc(fl.join(', '))}">⚙</span>` : '';
+      const ch = chatterOf(r);
+      const valve = ch
+        ? ` <span title="밸브 채터링 ${ch.level} — ${esc(ch.valves.map(v => v.valve + ' ' + v.chatter_events + '회').join(', '))}">`
+          + VALVE_SVG(ch.level === '심각' ? '#dc2626' : '#ea580c') + '</span>'
+        : '';
       return `<td class="bl-cell" style="background:${st.bg};color:${st.fg};${dim}${sel}" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')" title="${esc(code)} ${esc(r.period)} ${esc(g)}${r.grade !== g ? ' (자동: ' + esc(r.grade) + ')' : ''}">` +
-        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}</div><div class="bl-sub">${esc(sub)}</div></td>`;
+        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}${valve}</div><div class="bl-sub">${esc(sub)}</div></td>`;
     }).join('');
     return `<tr><td><b>${esc(code)}</b><div style="font-size:10px;color:#94a3b8">${esc(s ? (s.bwts_maker || '') : '')}</div></td>${tds}</tr>`;
   }).join('');
@@ -218,7 +273,7 @@ async function renderDetail() {
     (q.answer ? `<div class="bl-a"><b>A</b> ${esc(q.answer)} <span class="muted" style="font-size:11px">${esc(q.answered_by || '')} ${esc((q.answered_at || '').slice(0, 16).replace('T', ' '))}</span></div>` : '<div class="muted" style="font-size:11px">답변 대기 — 로컬에서 /bwts-review 실행</div>') + '</div>').join('');
   $('blSessions').innerHTML =
     (rp.pattern ? `<div style="margin-bottom:6px"><b>회복 패턴:</b> ${esc(rp.pattern)} — ${esc(rp.detail || '')}</div>` : '') +
-    (chat.length ? `<div style="margin-bottom:6px;color:#c2410c"><b>밸브 채터링:</b> ${chat.map(c => esc(typeof c === 'string' ? c : (c.valve || c.device || JSON.stringify(c)))).join(', ')}</div>` : '') +
+    chatterDetail(chat) +
     `<h4>세션 (${sess.length}${sess.length > 60 ? ', 60개 표시' : ''})</h4>` +
     (sessRows ? `<table class="cal-table"><thead><tr><th>일자</th><th>모드</th><th>분</th><th>TRO avg</th><th>min</th><th>max</th><th>판정</th><th>비고</th></tr></thead><tbody>${sessRows}</tbody></table>` : '<div class="muted">세션 없음</div>') +
     `<h4 style="margin-top:12px">재검토 이력 (${(rv.data || []).length})</h4>${thread || '<div class="muted">없음</div>'}`;

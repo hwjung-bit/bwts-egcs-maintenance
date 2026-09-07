@@ -608,10 +608,13 @@ def detect_valve_chattering(eventlog_path):
             "worst_burst_duration_sec": round(worst_dur),
             "avg_interval_sec": round(
                 worst_dur / max(len(worst_burst) - 1, 1), 1),
+            # 표시 기준은 thresholds.json. 실측상 소량 채터링이 전체의 2/3라
+            # 그대로 올리면 노이즈가 된다 — reportable 인 것만 보고한다.
             "severity": (
-                "심각" if total_chatter_events >= 100
-                else "주의" if total_chatter_events >= 20
+                "심각" if total_chatter_events >= BL["chatter_severe_min_events"]
+                else "주의" if total_chatter_events >= BL["chatter_report_min_events"]
                 else "경미"),
+            "reportable": total_chatter_events >= BL["chatter_report_min_events"],
         })
 
     chattering.sort(key=lambda c: c["chatter_events"],
