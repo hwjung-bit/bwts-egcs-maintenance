@@ -464,10 +464,11 @@ def detect_recovery_pattern(sessions):
 
     if not early_ok and late_ok:
         recovery_date = late[0]["date"] if late else "불명"
+        # 로그만으로는 원인(수리/검교정 등)을 알 수 없다 — 단정하지 않는다
         return {
             "pattern": "recovery",
             "detail": f"월 전반 TRO 이상 -> "
-                      f"{recovery_date} 이후 정상화",
+                      f"{recovery_date} 이후 정상화 (조치 내용은 수리이력·검교정 확인)",
             "recovery_date": recovery_date,
         }
     if early_ok and not late_ok:

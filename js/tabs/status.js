@@ -46,17 +46,18 @@ async function logHistory(code, sys, over) {
   }
 }
 
+/* 이력은 팝업 대신 현황표 아래 전체 폭 패널로 — 잘림·내부 스크롤 없이 전부 표시 */
 async function history(code, sys, ev) {
   ev.stopPropagation();
-  const pop = $('calEdit');
-  pop.innerHTML = '<div class="loading">이력 로딩...</div>';
-  placePopup(pop, ev, 560);
+  const box = $('statusHist');
+  box.style.display = '';
+  box.innerHTML = '<div class="loading"><span class="spin"></span> 이력 로딩...</div>';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   const res = await sb.from('status_history').select('*')
     .eq('ship_code', code).eq('system', sys)
-    .order('id', { ascending: false }).limit(50);
+    .order('id', { ascending: false }).limit(100);
   if (res.error) {
-    pop.innerHTML = `<div style="font-size:12px;color:#be185d">이력 조회 실패 — sql/023 실행 필요<br><code style="font-size:10px">${esc(res.error.message)}</code></div>` +
-      '<button style="margin-top:8px" onclick="statusTab.closeHistory()">닫기</button>';
+    box.innerHTML = `<div style="font-size:12px;color:#be185d">이력 조회 실패 — sql/023 실행 필요 <code style="font-size:10px">${esc(res.error.message)}</code></div>`;
     return;
   }
   const list = res.data || [];
@@ -67,19 +68,20 @@ async function history(code, sys, ev) {
       (h.status === '정상' && prev && prev.status && prev.status !== '정상' && prev.status !== '수리완료');
     return `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
       `<td style="text-align:center;font-weight:700;white-space:nowrap">${esc(h.status || '')}` +
-      (cleared ? '<div style="color:#059669;font-size:10px;font-weight:700">✅ 클리어</div>' : '') + '</td>' +
-      `<td style="min-width:260px;white-space:pre-wrap;word-break:break-word">${esc(h.memo || '')}</td></tr>`;
+      (cleared ? ' <span style="color:#059669;font-size:11px;font-weight:700">✅ 클리어</span>' : '') + '</td>' +
+      `<td style="white-space:pre-wrap;word-break:break-word">${esc(h.memo || '')}</td></tr>`;
   }).join('');
-  pop.innerHTML =
-    `<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())} 이력</div>` +
+  box.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin:4px 0 10px">' +
+      `<h3 style="margin:0;font-size:14px">🕘 ${esc(code)} · ${esc(sys.toUpperCase())} 이력</h3>` +
+      '<span style="font-size:11px;color:#94a3b8">✅ 클리어 = 수리중·문제 → 정상 전환일 · 5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
+      '<div style="flex:1"></div><button onclick="statusTab.hideHist()">✕ 닫기</button></div>' +
     (rows
-      ? `<div style="max-height:420px;overflow-y:auto"><table class="cal-table" style="font-size:12px;width:100%"><thead><tr><th style="width:120px">저장일시</th><th style="width:70px">상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table></div>`
-      : '<div style="font-size:12px;color:#94a3b8">이력 없음 — 다음 저장부터 쌓입니다</div>') +
-    '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">' +
-    '<span style="font-size:10px;color:#94a3b8">5분 내 재수정은 한 건으로 합쳐짐 · ✅ 클리어 = 수리중·문제 → 정상 전환일 · 한국시간</span>' +
-    '<button onclick="statusTab.closeHistory()">닫기</button></div>';
-  placePopup(pop, ev, 560);
+      ? `<table class="cal-table" style="width:100%;font-size:13px"><thead><tr><th style="width:150px">저장일시</th><th style="width:110px">상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div style="font-size:12px;color:#94a3b8">이력 없음 — 다음 저장부터 쌓입니다</div>');
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+function hideHist() { const b = $('statusHist'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
 function closeHistory() { $('calEdit').style.display = 'none'; }
 
 function stColor(st) {
@@ -96,12 +98,13 @@ function stCell(code, field, val, memo, disabled) {
   return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden;cursor:pointer" onclick="statusTab.editCell('${esc(code)}','${sys}',event)" title="클릭 → 상태·메모 수정">` +
     '<div style="display:flex;align-items:center;gap:4px">' +
     `<span style="font-size:11px;font-weight:700;flex-shrink:0">${esc(val)}</span>` +
-    `<span style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0">${esc(memo || '')}</span>` +
+    `<span style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${esc(memo || '')}">${esc(memo || '')}</span>` +
     histBtn + '</div></td>';
 }
 
 function mount(root) {
-  root.innerHTML = '<div class="wrap" id="statusRoot"></div>';
+  root.innerHTML = '<div class="wrap" id="statusRoot"></div>' +
+    '<div class="wrap" id="statusHist" style="display:none"></div>';
 }
 
 function refresh() {
@@ -192,6 +195,6 @@ async function saveCell(code, sys) {
   refresh();
 }
 
-window.statusTab = { editCell, saveCell, history, closeHistory };
+window.statusTab = { editCell, saveCell, history, hideHist, closeHistory };
 
 export default { id: 'status', mount, refresh };
