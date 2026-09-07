@@ -85,8 +85,8 @@ tr.stale:hover{background:#fef3c7 !important}
 .att-badge{background:#eef2ff;border:1px solid #c7d2fe;border-radius:6px;padding:2px 6px;font-size:11px;color:#4f46e5;cursor:pointer}
 #calEdit{display:none;position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px;font-size:12px;width:260px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
 #calEdit label{display:block;margin-bottom:6px;color:#64748b}
-#calEdit input{display:block;width:100%;margin-top:2px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;outline:none}
-#calEdit input:focus{border-color:#3b82f6}
+#calEdit input,#calEdit select{display:block;width:100%;max-width:100%;box-sizing:border-box;margin-top:2px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;outline:none;background:#fff;color:#0f172a}
+#calEdit input:focus,#calEdit select:focus{border-color:#3b82f6}
 #calEdit button{flex:1;padding:5px 0;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
 #calEdit button.pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
 #repairAdd,#repairUpload,#bwtsCalUpload{display:none;position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.35);align-items:center;justify-content:center}

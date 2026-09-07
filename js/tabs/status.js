@@ -156,12 +156,12 @@ function editCell(code, sys, ev) {
   const cur = s[sys + '_status'] || '정상';
   const pop = $('calEdit');
   const opts = STATUS_OPTS.map(o => `<option value="${o}"${cur === o ? ' selected' : ''}>${o}</option>`).join('') +
-    '<option value="수리완료">✅ 수리완료 (클리어 — 이력에 남고 정상으로 복귀)</option>';
+    '<option value="수리완료">✅ 수리완료 (클리어)</option>';
   pop.innerHTML =
     `<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())}</div>` +
     `<label>상태<select id="scStatus">${opts}</select></label>` +
     `<label>메모<input id="scMemo" value="${esc(s[sys + '_memo'] || '')}" placeholder="현상/조치 내용"></label>` +
-    '<div style="font-size:10px;color:#94a3b8;margin-top:4px">상태와 메모가 함께 저장되고 이력 한 건으로 남습니다</div>' +
+    '<div style="font-size:10px;color:#94a3b8;margin-top:4px">상태·메모 동시 저장, 이력 1건 · 수리완료 = 이력에 남기고 정상 복귀</div>' +
     '<div style="display:flex;gap:6px;margin-top:10px">' +
       `<button class="pri" onclick="statusTab.saveCell('${esc(code)}','${esc(sys)}')">저장</button>` +
       '<button onclick="statusTab.closeHistory()">취소</button></div>';
