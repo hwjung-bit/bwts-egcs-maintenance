@@ -303,69 +303,170 @@ async function renderDetail() {
 function close() { selected = null; $('blDetail').style.display = 'none'; renderMatrix(); }
 function filter(k) { F.filter = k; renderAll(); }
 
-/* ===== 채터링 목록 — 선박별로 한눈에, 심한 순 ===== */
+/* ===== 채터링 목록 — 월·선박으로 좁혀 보고, 그대로 메일에 붙인다 ===== */
+const CH = { month: '', ship: '', view: 'detail' };
+
+function chatterItems() {
+  const out = [];
+  ROWS.forEach(r => {
+    if (CH.month && r.period !== CH.month) return;
+    if (CH.ship && r.ship_code !== CH.ship) return;
+    const ch = chatterOf(r);
+    if (ch) ch.valves.forEach(v => out.push({ r, v }));
+  });
+  return out.sort((a, b) => (b.v.chatter_events || 0) - (a.v.chatter_events || 0));
+}
+
+// 선박별 집계 — 몇 달째 반복되는지가 "수리가 안 되고 있다"의 신호다.
+function chatterByShip(items) {
+  const severeMin = requireTH('bwts_log').chatter_severe_min_events;
+  const by = {};
+  items.forEach(({ r, v }) => {
+    const s = by[r.ship_code] || (by[r.ship_code] = {
+      code: r.ship_code, months: new Set(), valves: {}, count: 0, severe: 0,
+      worst: 0, last: '', lastGrade: '',
+    });
+    s.months.add(r.period);
+    s.valves[v.valve] = (s.valves[v.valve] || 0) + (v.chatter_events || 0);
+    s.count++;
+    if ((v.chatter_events || 0) >= severeMin) s.severe++;
+    if ((v.chatter_events || 0) > s.worst) s.worst = v.chatter_events || 0;
+    if (r.period > s.last) { s.last = r.period; s.lastGrade = disp(r); }
+  });
+  return Object.values(by).map(s => ({
+    ...s,
+    monthCount: s.months.size,
+    topValve: Object.entries(s.valves).sort((a, b) => b[1] - a[1])[0][0],
+  })).sort((a, b) => b.monthCount - a.monthCount || b.worst - a.worst);
+}
+
+function chatterSet(k, v) { CH[k] = v; chatterList(); }
+
 function chatterList() {
   const bl = requireTH('bwts_log');
-  const items = [];
-  ROWS.forEach(r => {
-    const ch = chatterOf(r);
-    if (ch) ch.valves.forEach(v => items.push({ r, v }));
-  });
-  items.sort((a, b) => (b.v.chatter_events || 0) - (a.v.chatter_events || 0));
+  const items = chatterItems();
+  const months = [...new Set(ROWS.map(r => r.period))].sort();
+  const ships = [...new Set(ROWS.filter(r => chatterOf(r)).map(r => r.ship_code))].sort();
+
+  const sel = (id, cur, opts, all) =>
+    `<select onchange="bwtsLogTab.chatterSet('${id}', this.value)">`
+    + `<option value=""${cur ? '' : ' selected'}>${all}</option>`
+    + opts.map(o => `<option${o === cur ? ' selected' : ''}>${esc(o)}</option>`).join('')
+    + '</select>';
+
+  const head = `<div class="bl-head" style="flex-wrap:wrap;gap:6px">`
+    + `<b>밸브 채터링 — ${esc(F.year)}년</b>`
+    + sel('month', CH.month, months, '전체 월')
+    + sel('ship', CH.ship, ships, '전체 선박')
+    + `<select onchange="bwtsLogTab.chatterSet('view', this.value)">`
+    + `<option value="detail"${CH.view === 'detail' ? ' selected' : ''}>월별 상세</option>`
+    + `<option value="ship"${CH.view === 'ship' ? ' selected' : ''}>선박별 요약</option></select>`
+    + `<div class="spacer"></div>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📧 메일용</button>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
   box.style.display = 'block';
   if (!items.length) {
-    box.innerHTML = `<div class="bl-head"><b>밸브 채터링 목록 — ${esc(F.year)}년</b>`
-      + `<div class="spacer"></div>`
-      + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`
-      + `<div class="muted" style="padding:10px">${bl.chatter_report_min_events}회 이상 채터링 없음</div>`;
+    box.innerHTML = head + `<div class="muted" style="padding:10px">`
+      + `${bl.chatter_report_min_events}회 이상 채터링 없음</div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     return;
   }
-  const ships = new Set(items.map(i => i.r.ship_code));
-  const severe = items.filter(i => i.v.chatter_events >= bl.chatter_severe_min_events).length;
-  const rows = items.map(({ r, v }) => {
-    const sev = v.chatter_events >= bl.chatter_severe_min_events ? '심각' : '주의';
-    const col = sev === '심각' ? '#dc2626' : '#ea580c';
-    return `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')">`
-      + `<td><b>${esc(r.ship_code)}</b></td><td>${esc(r.period)}</td>`
-      + `<td>${VALVE_SVG(col)} ${esc(v.valve || '?')}</td>`
-      + `<td style="text-align:right">${v.chatter_events.toLocaleString()}</td>`
-      + `<td style="color:${col};font-weight:600">${sev}</td>`
-      + `<td style="text-align:right">${v.burst_count}</td>`
-      + `<td>${esc(v.worst_burst_start || '')}</td>`
-      + `<td>${esc(disp(r))}</td></tr>`;
-  }).join('');
-  box.innerHTML = `<div class="bl-head">`
-    + `<b>밸브 채터링 목록 — ${esc(F.year)}년</b>`
-    + `<span class="muted">${ships.size}척 · ${items.length}건 (심각 ${severe})`
-    + ` · ${bl.chatter_report_min_events}회 이상만</span>`
-    + `<div class="spacer"></div>`
-    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 복사</button>`
-    + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`
-    + `<table class="cal-table"><thead><tr><th>선박</th><th>월</th><th>밸브</th>`
-    + `<th style="text-align:right">횟수</th><th>심각도</th><th style="text-align:right">버스트</th>`
-    + `<th>최악 시각</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`
+
+  let table;
+  if (CH.view === 'ship') {
+    const rows = chatterByShip(items).map(s =>
+      `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(s.code)}','${esc(s.last)}')">`
+      + `<td><b>${esc(s.code)}</b></td>`
+      + `<td style="text-align:right;font-weight:${s.monthCount >= 3 ? '700' : '400'};`
+      + `color:${s.monthCount >= 3 ? '#dc2626' : 'inherit'}">${s.monthCount}개월</td>`
+      + `<td style="text-align:right">${s.count}</td>`
+      + `<td style="text-align:right">${s.severe}</td>`
+      + `<td>${esc(s.topValve)}</td>`
+      + `<td style="text-align:right">${s.worst.toLocaleString()}</td>`
+      + `<td>${esc(s.last)}</td><td>${esc(s.lastGrade)}</td></tr>`).join('');
+    table = `<table class="cal-table"><thead><tr><th>선박</th><th>발생 개월</th>`
+      + `<th>건수</th><th>심각</th><th>최다 밸브</th><th style="text-align:right">최대 횟수</th>`
+      + `<th>최근 발생</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`
+      + `<div class="muted" style="font-size:11px;margin-top:6px">`
+      + `발생 개월 3 이상(빨강) = 여러 달 반복 — 수리가 안 되고 있다는 신호</div>`;
+  } else {
+    const rows = items.map(({ r, v }) => {
+      const sev = (v.chatter_events || 0) >= bl.chatter_severe_min_events ? '심각' : '주의';
+      const col = sev === '심각' ? '#dc2626' : '#ea580c';
+      return `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')">`
+        + `<td><b>${esc(r.ship_code)}</b></td><td>${esc(r.period)}</td>`
+        + `<td>${VALVE_SVG(col)} ${esc(v.valve || '?')}</td>`
+        + `<td style="text-align:right">${(v.chatter_events || 0).toLocaleString()}</td>`
+        + `<td style="color:${col};font-weight:600">${sev}</td>`
+        + `<td style="text-align:right">${v.burst_count}</td>`
+        + `<td>${esc(v.worst_burst_start || '')}</td>`
+        + `<td>${esc(disp(r))}</td></tr>`;
+    }).join('');
+    table = `<table class="cal-table"><thead><tr><th>선박</th><th>월</th><th>밸브</th>`
+      + `<th style="text-align:right">횟수</th><th>심각도</th><th style="text-align:right">버스트</th>`
+      + `<th>최악 시각</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  const shipSet = new Set(items.map(i => i.r.ship_code));
+  const severe = items.filter(i => (i.v.chatter_events || 0) >= bl.chatter_severe_min_events).length;
+  box.innerHTML = head
+    + `<div class="muted" style="margin:4px 0 8px">${shipSet.size}척 · ${items.length}건`
+    + ` (심각 ${severe}) · ${bl.chatter_report_min_events}회 이상만</div>`
+    + table
     + `<div class="muted" style="font-size:11px;margin-top:6px">행을 누르면 그 칸 상세로 이동. `
     + `채터링은 등급에 반영되지 않는다 — BWTS 본체 판정과 별개.</div>`;
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  lastChatterItems = items;
 }
-
-let lastChatterItems = [];
 
 function copyChatter() {
   const bl = requireTH('bwts_log');
-  const text = ['선박\t월\t밸브\t횟수\t심각도\t버스트\t최악시각\t등급']
-    .concat(lastChatterItems.map(({ r, v }) =>
-      [r.ship_code, r.period, v.valve, v.chatter_events,
-        v.chatter_events >= bl.chatter_severe_min_events ? '심각' : '주의',
-        v.burst_count, v.worst_burst_start, disp(r)].join('\t')))
-    .join('\n');
+  const items = chatterItems();
+  let text;
+  if (CH.view === 'ship') {
+    text = ['선박\t발생개월\t건수\t심각\t최다밸브\t최대횟수\t최근발생\t등급']
+      .concat(chatterByShip(items).map(s =>
+        [s.code, s.monthCount, s.count, s.severe, s.topValve, s.worst, s.last, s.lastGrade].join('\t')))
+      .join('\n');
+  } else {
+    text = ['선박\t월\t밸브\t횟수\t심각도\t버스트\t최악시각\t등급']
+      .concat(items.map(({ r, v }) =>
+        [r.ship_code, r.period, v.valve, v.chatter_events,
+          (v.chatter_events || 0) >= bl.chatter_severe_min_events ? '심각' : '주의',
+          v.burst_count, v.worst_burst_start, disp(r)].join('\t')))
+      .join('\n');
+  }
   navigator.clipboard.writeText(text)
-    .then(() => toast(`${lastChatterItems.length}건 복사 — 엑셀에 붙여넣기`))
+    .then(() => toast('표 복사 — 엑셀에 붙여넣기'))
     .catch(() => toast('복사 실패 — 표를 직접 선택해 주세요'));
+}
+
+// 선박별 문장. 본선 통보 메일에 그대로 붙일 수 있는 형태로.
+function copyChatterMail() {
+  const bl = requireTH('bwts_log');
+  const items = chatterItems();
+  if (!items.length) { toast('대상 없음'); return; }
+  const scope = CH.month ? CH.month : `${F.year}년`;
+  const lines = chatterByShip(items).map(s => {
+    const mine = items.filter(i => i.r.ship_code === s.code);
+    const det = mine.map(({ r, v }) =>
+      `   - ${r.period} ${v.valve} ${(v.chatter_events || 0).toLocaleString()}회`
+      + ` (${(v.chatter_events || 0) >= bl.chatter_severe_min_events ? '심각' : '주의'},`
+      + ` 버스트 ${v.burst_count}회, 최악 ${v.worst_burst_start})`).join('\n');
+    return `[${s.code}] ${s.monthCount}개월 ${s.count}건`
+      + (s.monthCount >= 3 ? ' — 반복 발생, 수리 확인 요망' : '')
+      + `\n${det}`;
+  });
+  const text = `BWTS 밸브 채터링 현황 (${scope})\n`
+    + `대상: ${new Set(items.map(i => i.r.ship_code)).size}척 ${items.length}건`
+    + ` (${bl.chatter_report_min_events}회 이상)\n\n`
+    + lines.join('\n\n')
+    + `\n\n※ 채터링은 BWTS 운전 등급과 별개의 부수 항목입니다.`;
+  navigator.clipboard.writeText(text)
+    .then(() => toast('메일용 텍스트 복사 완료'))
+    .catch(() => toast('복사 실패'));
 }
 
 /* ===== 로컬 분석 실행 (kmtcfolder 프로토콜 → 로컬 Claude Code) =====
@@ -449,7 +550,7 @@ async function override() {
 }
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
-  chatterList, copyChatter,
+  chatterList, chatterSet, copyChatter, copyChatterMail,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
