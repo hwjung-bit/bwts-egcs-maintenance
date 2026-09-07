@@ -106,6 +106,9 @@ function mount(root) {
     <button onclick="bwtsLogTab.runAnalysis()"
       style="cursor:pointer;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
       title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</button>
+    <button onclick="bwtsLogTab.chatterList()"
+      style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#c2410c"
+      title="밸브 채터링 걸린 선박·월을 한 번에 목록으로">🔧 채터링 목록</button>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
@@ -154,12 +157,17 @@ function renderAll() {
     if (r.review_status === 'escalated') esc_++;
     if (r.review_status !== 'auto') rev++;
   });
-  const chip = (key, label, n) =>
-    `<span class="chip${F.filter === key ? ' active' : ''}" onclick="bwtsLogTab.filter('${key}')">${label} ${n}</span>`;
-  $('blChips').innerHTML = chip('', '전체', ROWS.length) +
-    GRADES.map(g => chip(g, `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${STYLE[g].dot};margin-right:3px"></span>${g}`, cnt[g] || 0)).join('') +
-    chip('requested', '❓ 재검토 대기', req) + chip('escalated', '🚩 확인요청', esc_) +
-    chip('reviewed', '검토·수정됨', rev);
+  // 등급별 칩을 한 줄로 늘어놓으면 화면 폭을 다 먹는다 — 드롭다운 하나로.
+  const opt = (key, label, n) =>
+    `<option value="${key}"${F.filter === key ? ' selected' : ''}>${label} (${n})</option>`;
+  $('blChips').innerHTML =
+    `<select id="blFilterSel" onchange="bwtsLogTab.filter(this.value)" title="등급·검토 상태로 걸러보기">`
+    + opt('', '전체', ROWS.length)
+    + GRADES.map(g => opt(g, g, cnt[g] || 0)).join('')
+    + opt('requested', '❓ 재검토 대기', req)
+    + opt('escalated', '🚩 확인요청', esc_)
+    + opt('reviewed', '검토·수정됨', rev)
+    + '</select>';
   const bl = requireTH('bwts_log');
   $('blCnt').innerHTML = `${ROWS.length} vessel-months`
     + `<span class="muted" style="margin-left:10px;font-size:11px">`
@@ -295,6 +303,71 @@ async function renderDetail() {
 function close() { selected = null; $('blDetail').style.display = 'none'; renderMatrix(); }
 function filter(k) { F.filter = k; renderAll(); }
 
+/* ===== 채터링 목록 — 선박별로 한눈에, 심한 순 ===== */
+function chatterList() {
+  const bl = requireTH('bwts_log');
+  const items = [];
+  ROWS.forEach(r => {
+    const ch = chatterOf(r);
+    if (ch) ch.valves.forEach(v => items.push({ r, v }));
+  });
+  items.sort((a, b) => (b.v.chatter_events || 0) - (a.v.chatter_events || 0));
+
+  const box = $('blDetail');
+  box.style.display = 'block';
+  if (!items.length) {
+    box.innerHTML = `<div class="bl-head"><b>밸브 채터링 목록 — ${esc(F.year)}년</b>`
+      + `<div class="spacer"></div>`
+      + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`
+      + `<div class="muted" style="padding:10px">${bl.chatter_report_min_events}회 이상 채터링 없음</div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  const ships = new Set(items.map(i => i.r.ship_code));
+  const severe = items.filter(i => i.v.chatter_events >= bl.chatter_severe_min_events).length;
+  const rows = items.map(({ r, v }) => {
+    const sev = v.chatter_events >= bl.chatter_severe_min_events ? '심각' : '주의';
+    const col = sev === '심각' ? '#dc2626' : '#ea580c';
+    return `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')">`
+      + `<td><b>${esc(r.ship_code)}</b></td><td>${esc(r.period)}</td>`
+      + `<td>${VALVE_SVG(col)} ${esc(v.valve || '?')}</td>`
+      + `<td style="text-align:right">${v.chatter_events.toLocaleString()}</td>`
+      + `<td style="color:${col};font-weight:600">${sev}</td>`
+      + `<td style="text-align:right">${v.burst_count}</td>`
+      + `<td>${esc(v.worst_burst_start || '')}</td>`
+      + `<td>${esc(disp(r))}</td></tr>`;
+  }).join('');
+  box.innerHTML = `<div class="bl-head">`
+    + `<b>밸브 채터링 목록 — ${esc(F.year)}년</b>`
+    + `<span class="muted">${ships.size}척 · ${items.length}건 (심각 ${severe})`
+    + ` · ${bl.chatter_report_min_events}회 이상만</span>`
+    + `<div class="spacer"></div>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 복사</button>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`
+    + `<table class="cal-table"><thead><tr><th>선박</th><th>월</th><th>밸브</th>`
+    + `<th style="text-align:right">횟수</th><th>심각도</th><th style="text-align:right">버스트</th>`
+    + `<th>최악 시각</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`
+    + `<div class="muted" style="font-size:11px;margin-top:6px">행을 누르면 그 칸 상세로 이동. `
+    + `채터링은 등급에 반영되지 않는다 — BWTS 본체 판정과 별개.</div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  lastChatterItems = items;
+}
+
+let lastChatterItems = [];
+
+function copyChatter() {
+  const bl = requireTH('bwts_log');
+  const text = ['선박\t월\t밸브\t횟수\t심각도\t버스트\t최악시각\t등급']
+    .concat(lastChatterItems.map(({ r, v }) =>
+      [r.ship_code, r.period, v.valve, v.chatter_events,
+        v.chatter_events >= bl.chatter_severe_min_events ? '심각' : '주의',
+        v.burst_count, v.worst_burst_start, disp(r)].join('\t')))
+    .join('\n');
+  navigator.clipboard.writeText(text)
+    .then(() => toast(`${lastChatterItems.length}건 복사 — 엑셀에 붙여넣기`))
+    .catch(() => toast('복사 실패 — 표를 직접 선택해 주세요'));
+}
+
 /* ===== 로컬 분석 실행 (kmtcfolder 프로토콜 → 로컬 Claude Code) =====
    핸들러(scripts/open_local_folder.ps1)가 period/ships 를 화이트리스트로
    검사한다. 형식이 어긋나면 파라미터를 버리고 전체 분석으로 떨어진다. */
@@ -376,6 +449,7 @@ async function override() {
 }
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
+  chatterList, copyChatter,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
