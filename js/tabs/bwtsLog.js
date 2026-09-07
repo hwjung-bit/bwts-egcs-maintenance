@@ -258,6 +258,10 @@ async function renderDetail() {
     ${r.grade_rule && r.grade_rule !== r.grade ? `<span class="muted">룰 판정: ${esc(r.grade_rule)}</span>` : ''}
     <span class="muted" style="font-size:11px">분석 ${esc((r.analyzed_at || '').slice(0, 16).replace('T', ' '))}</span>
     <div class="spacer"></div>
+    <button class="add-btn" onclick="bwtsLogTab.issueMail('ko')"
+      title="이 달 등급 사유로 본선에 확인 요청 메일">✉ 본선 메일</button>
+    <button class="add-btn" onclick="bwtsLogTab.issueMail('ko_en')"
+      title="한글+영문 병기">✉ 한/영</button>
     <button class="refresh-btn" onclick="bwtsLogTab.reanalyze()"
       title="이 선박·월만 다시 분석 — 로컬 Claude Code 가 열린다">🔄 재분석</button>
     <button class="add-btn" onclick="bwtsLogTab.requestReview()">❓ 재검토 요청</button>
@@ -304,7 +308,7 @@ function close() { selected = null; $('blDetail').style.display = 'none'; render
 function filter(k) { F.filter = k; renderAll(); }
 
 /* ===== 채터링 목록 — 월·선박으로 좁혀 보고, 그대로 메일에 붙인다 ===== */
-const CH = { month: '', ship: '', view: 'detail' };
+const CH = { month: '', ship: '', view: 'detail', lang: 'ko' };
 
 function chatterItems() {
   const out = [];
@@ -361,9 +365,12 @@ function chatterList() {
     + `<select onchange="bwtsLogTab.chatterSet('view', this.value)">`
     + `<option value="detail"${CH.view === 'detail' ? ' selected' : ''}>월별 상세</option>`
     + `<option value="ship"${CH.view === 'ship' ? ' selected' : ''}>선박별 요약</option></select>`
+    + `<select onchange="bwtsLogTab.chatterSet('lang', this.value)" title="본선 메일 언어">`
+    + `<option value="ko"${CH.lang === 'ko' ? ' selected' : ''}>한글</option>`
+    + `<option value="ko_en"${CH.lang === 'ko_en' ? ' selected' : ''}>한글+영문</option></select>`
     + `<div class="spacer"></div>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
-    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📧 메일용</button>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📄 전체 텍스트</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
@@ -386,10 +393,13 @@ function chatterList() {
       + `<td style="text-align:right">${s.severe}</td>`
       + `<td>${esc(s.topValve)}</td>`
       + `<td style="text-align:right">${s.worst.toLocaleString()}</td>`
-      + `<td>${esc(s.last)}</td><td>${esc(s.lastGrade)}</td></tr>`).join('');
+      + `<td>${esc(s.last)}</td><td>${esc(s.lastGrade)}</td>`
+      + `<td><button class="refresh-btn" style="padding:2px 8px"`
+      + ` onclick="event.stopPropagation();bwtsLogTab.chatterMail('${esc(s.code)}')"`
+      + ` title="${esc(vesselMail(s.code))}로 메일 작성">✉ 메일</button></td></tr>`).join('');
     table = `<table class="cal-table"><thead><tr><th>선박</th><th>발생 개월</th>`
       + `<th>건수</th><th>심각</th><th>최다 밸브</th><th style="text-align:right">최대 횟수</th>`
-      + `<th>최근 발생</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`
+      + `<th>최근 발생</th><th>그 달 등급</th><th>본선 통보</th></tr></thead><tbody>${rows}</tbody></table>`
       + `<div class="muted" style="font-size:11px;margin-top:6px">`
       + `발생 개월 3 이상(빨강) = 여러 달 반복 — 수리가 안 되고 있다는 신호</div>`;
   } else {
@@ -467,6 +477,148 @@ function copyChatterMail() {
   navigator.clipboard.writeText(text)
     .then(() => toast('메일용 텍스트 복사 완료'))
     .catch(() => toast('복사 실패'));
+}
+
+/* ===== 본선 메일 =====
+   주소는 mail_log 에서 확인된 규칙: kmtc<코드>@sea-one.com (21척 전부 일치).
+   Gmail 작성창을 열면 Gmail 이 곧바로 임시보관함에 저장한다.
+   본선이 읽는 글이므로 버스트·평균간격 같은 분석 용어는 넣지 않는다 —
+   밸브 번호와 횟수, 그리고 그게 무슨 현상인지만. */
+const vesselMail = code => `kmtc${String(code).toLowerCase()}@sea-one.com`;
+
+function gmailCompose(to, subject, body) {
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&to=' + encodeURIComponent(to)
+    + '&su=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  window.open(url, '_blank', 'noopener');
+  toast(`${to} 메일 작성창 — 그대로 두면 임시보관함에 저장됨`);
+}
+
+// 등급 사유는 한국어 문구로 저장된다. 자주 나오는 것만 영문을 붙인다.
+function reasonEn(s) {
+  const m = [
+    [/^주입 TRO 범위 이탈.*/, 'Injection TRO out of the required range'],
+    [/^배출 TRO 기준 초과.*/, 'Discharge TRO above the allowed limit'],
+    [/^Trip (\d+)건/, (x, n) => `Trip occurred ${n} time(s)`],
+    [/^밸브 채터링.*/, 'Valve open/close signal repeating'],
+  ];
+  for (const [re, en] of m) {
+    const g = s.match(re);
+    if (g) return typeof en === 'function' ? en(...g) : en;
+  }
+  return null;
+}
+
+function periodLabel() {
+  return CH.month ? `${CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
+}
+
+// 채터링 통보 — 밸브 번호와 횟수만. lang: 'ko' | 'ko_en'
+function chatterMailBody(code, lang) {
+  const items = chatterItems().filter(i => i.r.ship_code === code);
+  const byValve = {};
+  items.forEach(({ v }) => {
+    byValve[v.valve] = (byValve[v.valve] || 0) + (v.chatter_events || 0);
+  });
+  const lines = Object.entries(byValve).sort((a, b) => b[1] - a[1])
+    .map(([valve, n]) => `  - ${valve} : ${n.toLocaleString()}회`);
+  const linesEn = Object.entries(byValve).sort((a, b) => b[1] - a[1])
+    .map(([valve, n]) => `  - ${valve} : ${n.toLocaleString()} times`);
+  const months = [...new Set(items.map(i => i.r.period))].sort();
+  const repeat = months.length >= 3;
+
+  const ko = [
+    `${periodLabel()} BWTS 로그 확인 결과, 아래 밸브에서 열림/닫힘 신호가`,
+    `짧은 간격으로 반복되는 현상이 확인되었습니다.`,
+    ``,
+    ...lines,
+    ``,
+    `이 현상은 밸브가 정상적으로 열리거나 닫힌 상태를 유지하지 못하고`,
+    `신호만 반복되는 것으로, 계속되면 밸브 구동부와 시트 손상으로`,
+    `이어질 수 있습니다.`,
+    ``,
+    `아래 사항을 확인 후 회신해 주시기 바랍니다.`,
+    `  1. 해당 밸브의 리미트 스위치 및 배선 접점 상태`,
+    `  2. 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)`,
+    `  3. 밸브 시트 이물질 고착 여부`,
+    ...(repeat ? ['', `※ ${months.length}개월 연속 확인된 건입니다. 기 조치 내역이 있으면 함께 회신 바랍니다.`] : []),
+    ``,
+    `※ 본 건은 BWTS 운전 등급과는 별개의 점검 항목입니다.`,
+  ].join('\n');
+
+  if (lang === 'ko') return ko;
+
+  const en = [
+    ``,
+    `----------------------------------------`,
+    ``,
+    `Our review of the ${periodLabel().replace('년', '')} BWTS log shows the following valves`,
+    `repeating their open/close signal at short intervals.`,
+    ``,
+    ...linesEn,
+    ``,
+    `This means the valve is not holding a fully open or closed position`,
+    `and only the signal repeats. Left as is, it can damage the valve`,
+    `actuator and seat.`,
+    ``,
+    `Please check and reply:`,
+    `  1. Limit switch and wiring contacts of the valve`,
+    `  2. Actuator operation (including control air pressure if pneumatic)`,
+    `  3. Any foreign material stuck on the valve seat`,
+    ...(repeat ? ['', `* Found in ${months.length} consecutive months. Please advise any action already taken.`] : []),
+    ``,
+    `* This item is separate from the BWTS operation grade.`,
+  ].join('\n');
+  return ko + '\n' + en;
+}
+
+function chatterMail(code) {
+  const lang = CH.lang || 'ko';
+  const subject = CH.month
+    ? `[${code}] BWTS 밸브 작동 확인 요청 (${CH.month})`
+    : `[${code}] BWTS 밸브 작동 확인 요청 (${F.year})`;
+  gmailCompose(vesselMail(code), subject, chatterMailBody(code, lang));
+}
+
+// BWTS 본체 문제 통보 — 등급을 가른 사유만
+function issueMail(lang) {
+  if (!selected) return;
+  const r = ROWS.find(x => x.ship_code === selected.ship_code && x.period === selected.period);
+  if (!r) return;
+  const reasons = r.grade_reasons || [];
+  if (!reasons.length) { toast('이 달은 등급 사유가 없음 — 보낼 내용이 없습니다'); return; }
+  const per = `${r.period.slice(0, 4)}년 ${+r.period.slice(5)}월`;
+
+  const ko = [
+    `${per} BWTS 로그 확인 결과, 아래 사항이 확인되었습니다.`,
+    ``,
+    ...reasons.map(x => `  - ${x}`),
+    ``,
+    `해당 기간 판정: ${disp(r)}`,
+    ``,
+    `원인 확인 후 조치 내역을 회신해 주시기 바랍니다.`,
+    `조치가 어려운 경우 필요한 자재·지원 사항을 함께 알려 주십시오.`,
+  ].join('\n');
+
+  let body = ko;
+  if (lang === 'ko_en') {
+    const en = reasons.map(x => `  - ${reasonEn(x) || x}`);
+    body += '\n\n' + [
+      `----------------------------------------`,
+      ``,
+      `Our review of the BWTS log for ${r.period} found the following.`,
+      ``,
+      ...en,
+      ``,
+      `Assessment for the period: ${disp(r)}`,
+      ``,
+      `Please check the cause and reply with the action taken.`,
+      `If it cannot be resolved onboard, advise the parts or support required.`,
+    ].join('\n');
+  }
+  gmailCompose(vesselMail(r.ship_code),
+    `[${r.ship_code}] BWTS 운전 상태 확인 요청 (${r.period})`, body);
 }
 
 /* ===== 로컬 분석 실행 (kmtcfolder 프로토콜 → 로컬 Claude Code) =====
@@ -550,7 +702,7 @@ async function override() {
 }
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
-  chatterList, chatterSet, copyChatter, copyChatterMail,
+  chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, issueMail,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
