@@ -22,6 +22,31 @@ export function sortByShipOrder(codes) {
   });
 }
 
+/* Combo(수기+선택) 입력용 공유 datalist. 등록 폼의 선박/시스템 select 를
+   <input list="dlShips"> 로 바꿔 타이핑 자동완성과 목록 선택을 둘 다 지원한다.
+   모달 열 때마다 호출해 최신 선박 목록으로 갱신. */
+export function ensureDatalists() {
+  let dl = document.getElementById('dlShips');
+  if (!dl) { dl = document.createElement('datalist'); dl.id = 'dlShips'; document.body.appendChild(dl); }
+  dl.innerHTML = getShipOrder().map(c => {
+    const s = shipByCode(c);
+    return `<option value="${esc(c)}">${esc(s && s.name ? s.name : '')}</option>`;
+  }).join('');
+  let ds = document.getElementById('dlSystems');
+  if (!ds) {
+    ds = document.createElement('datalist');
+    ds.id = 'dlSystems';
+    ds.innerHTML = '<option value="BWTS"></option><option value="EGCS"></option>';
+    document.body.appendChild(ds);
+  }
+}
+
+/** 대문자 보정 + 등록 여부 확인. 미등록 코드면 null (등록은 선박관리에서). */
+export function normalizeShipCode(raw) {
+  const code = String(raw || '').trim().toUpperCase();
+  return getShipOrder().includes(code) ? code : null;
+}
+
 /** <option> list for ship codes present in rows (rows[].ship_code) */
 export function shipOptions(rows, allLabel) {
   const set = {};

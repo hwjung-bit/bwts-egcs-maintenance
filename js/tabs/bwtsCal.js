@@ -4,7 +4,7 @@ import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, fmtDate, inlineEdit, toast, todayStr } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
-import { getShipOrder, shipByCode } from '../shared/ships.js';
+import { getShipOrder, shipByCode, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
@@ -34,7 +34,7 @@ function mount(root) {
     '<h3>📥 검교정 파일 저장</h3>' +
     '<div class="row">' +
       `<label>날짜 *<input id="cuDate" type="date"></label>` +
-      '<label>선박 *<select id="cuShip"></select></label></div>' +
+      '<label>선박 *<input id="cuShip" list="dlShips" placeholder="입력 또는 선택" maxlength="3" style="text-transform:uppercase" autocomplete="off"></label></div>' +
     '<div id="cuPreview" style="font-size:11px;color:#2563eb;font-weight:600;margin-bottom:8px;min-height:14px"></div>' +
     '<div id="cuDrop" class="dropzone">파일을 여기로 드래그 (또는 클릭하여 선택) — 여러 개 가능, 파일마다 종류 지정' +
       '<input id="cuFiles" type="file" multiple style="display:none"></div>' +
@@ -49,7 +49,7 @@ function mount(root) {
   drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
   drop.ondragleave = () => drop.classList.remove('over');
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); addFiles(e.dataTransfer.files); };
-  ['cuDate', 'cuShip'].forEach(id => { $(id).onchange = renderPreview; });
+  ['cuDate', 'cuShip'].forEach(id => { $(id).onchange = renderPreview; $(id).oninput = renderPreview; });
 }
 
 /* ===== calibration file upload (queue target, no repair row) =====
@@ -94,8 +94,8 @@ function openUpload() {
   if (!S.USER) { toast('로그인 후 사용할 수 있습니다'); return; }
   pickedFiles = [];
   renderFileList();
-  $('cuShip').innerHTML = '<option value=""></option>' +
-    getShipOrder().map(c => `<option value="${c}">${c}</option>`).join('');
+  ensureDatalists();
+  $('cuShip').value = '';
   $('cuDate').value = todayStr();
   renderPreview();
   $('bwtsCalUpload').classList.add('open');
@@ -104,8 +104,11 @@ function closeUpload() { $('bwtsCalUpload').classList.remove('open'); pickedFile
 
 async function submitUpload() {
   const picked = pickedFiles.slice();
-  const date = $('cuDate').value, ship = $('cuShip').value;
-  if (!date || !ship) { toast('날짜·선박은 필수'); return; }
+  const date = $('cuDate').value;
+  const ship = normalizeShipCode($('cuShip').value);
+  if (!date || !$('cuShip').value.trim()) { toast('날짜·선박은 필수'); return; }
+  if (!ship) { toast('선박 코드 확인: "' + $('cuShip').value + '" — 미등록 코드 (선박관리에서 추가)'); return; }
+  $('cuShip').value = ship;
   if (!picked.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
   if (picked.some(p => p.file.size > 50 * 1024 * 1024)) { toast('50MB 초과 파일이 있습니다'); return; }
   $('cuSave').disabled = true; $('cuSave').textContent = '업로드 중...';

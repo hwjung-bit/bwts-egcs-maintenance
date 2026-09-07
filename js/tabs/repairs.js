@@ -4,7 +4,7 @@ import { matchQuery } from '../shared/search.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, todayStr, freezeCell } from '../core/dom.js';
 import { STATUS_LIST, STATUS_COLOR, ORIGIN_LIST, ORIGIN_ICON, YEARS } from '../shared/constants.js';
-import { getShipOrder, shipByCode, shipOptions } from '../shared/ships.js';
+import { getShipOrder, shipByCode, shipOptions, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
 import { findDriveFolder, shipFolderUrl, requestDriveFolder, knownFolderId, repairAtts } from '../shared/drive.js';
 
 const F = { year: '', ship: '', system: '', stage: '', hideDone: true, q: '' };
@@ -23,8 +23,8 @@ function ensureModal() {
     <h3>🔧 수리이력 직접 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 카톡·전화 등 메일 없이 처리된 건</span></h3>
     <div class="row">
       <label>일자<input id="raDate" type="date"></label>
-      <label>선박<select id="raShip"></select></label>
-      <label>시스템<select id="raSys"><option>BWTS</option><option>EGCS</option></select></label>
+      <label>선박<input id="raShip" list="dlShips" placeholder="입력 또는 선택" maxlength="3" style="text-transform:uppercase" autocomplete="off"></label>
+      <label>시스템<input id="raSys" list="dlSystems" placeholder="BWTS/EGCS" autocomplete="off"></label>
     </div>
     <div class="row">
       <label>접수 경로<select id="raOrigin"></select></label>
@@ -255,17 +255,12 @@ async function deleteRepair(id) {
 
 /* ===== Manual entry (메일 없이 처리된 건) ===== */
 function openRepairAdd() {
-  const order = getShipOrder();
-  $('raShip').innerHTML = order.map(c => {
-    const s = shipByCode(c);
-    const nm = s && s.name ? ' — ' + s.name : '';
-    return `<option value="${esc(c)}">${esc(c + nm)}</option>`;
-  }).join('');
+  ensureDatalists();
   $('raOrigin').innerHTML = ORIGIN_LIST.map(o => `<option>${o}</option>`).join('');
   $('raStage').innerHTML = STATUS_LIST.map(st => `<option${st === '완료' ? ' selected' : ''}>${st}</option>`).join('');
   $('raDate').value = todayStr();
-  if (F.ship) $('raShip').value = F.ship;
-  if (F.system) $('raSys').value = F.system;
+  $('raShip').value = F.ship || '';
+  $('raSys').value = F.system || 'BWTS';
   ['raEquip', 'raSymptom', 'raAction'].forEach(id => { $(id).value = ''; });
   $('repairAdd').classList.add('open');
   $('raSymptom').focus();
@@ -277,10 +272,13 @@ async function saveNewRepair() {
   const v = id => $(id).value.trim();
   const symptom = v('raSymptom');
   if (!symptom) { toast('증상/요청 내용을 입력하세요'); return; }
+  const shipCode = normalizeShipCode(v('raShip'));
+  if (!shipCode) { toast('선박 코드 확인: "' + v('raShip') + '" — 미등록 코드 (선박관리에서 추가)'); return; }
+  const sys = v('raSys').toUpperCase();
   const origin = v('raOrigin');
   const newR = {
     id: 'MN_' + Date.now(),
-    ship_code: v('raShip'), system: v('raSys'), date: v('raDate') || null,
+    ship_code: shipCode, system: sys, date: v('raDate') || null,
     equip: v('raEquip'), stage: v('raStage'), symptom, action: v('raAction'),
     parts: '', cost: '', attachments: '[]', history: '[]',
     email_subject: '', email_link: '', needs_review: false, source_msg_id: '',
@@ -322,8 +320,8 @@ function ensureUploadModal() {
     <div id="ruMeta">
       <div class="row">
         <label>날짜<input id="ruDate" type="date"></label>
-        <label>선박<select id="ruShip"></select></label>
-        <label>시스템<select id="ruSys"><option>BWTS</option><option>EGCS</option></select></label>
+        <label>선박<input id="ruShip" list="dlShips" placeholder="입력 또는 선택" maxlength="3" style="text-transform:uppercase" autocomplete="off"></label>
+        <label>시스템<input id="ruSys" list="dlSystems" placeholder="BWTS/EGCS" autocomplete="off"></label>
       </div>
       <div class="row">
         <label>장비<input id="ruEquip" placeholder="예: CEMS, TRO 센서, WMS1"></label>
@@ -395,11 +393,11 @@ function openUpload(id) {
     $('ruMeta').style.display = '';
     $('ruHead').firstChild.textContent = '📥 파일 저장 ';
     $('ruTitle').textContent = '— 날짜·선박·시스템·장비·내용으로 폴더/파일명 자동 생성';
-    $('ruShip').innerHTML = getShipOrder().map(c => { const sh = shipByCode(c); return `<option value="${esc(c)}">${esc(c + (sh && sh.name ? ' — ' + sh.name : ''))}</option>`; }).join('');
+    ensureDatalists();
     $('ruStage').innerHTML = STATUS_LIST.map(st => `<option${st === '완료' ? ' selected' : ''}>${st}</option>`).join('');
     $('ruDate').value = todayStr(); $('ruEquip').value = ''; $('ruDesc').value = '';
-    if (F.ship) $('ruShip').value = F.ship;
-    if (F.system) $('ruSys').value = F.system;
+    $('ruShip').value = F.ship || '';
+    $('ruSys').value = F.system || 'BWTS';
   }
   $('repairUpload').classList.add('open');
   if (!r) $('ruEquip').focus();
@@ -415,13 +413,19 @@ async function submitUpload() {
   let base = null;                       // 신규 모드: 파일명/폴더명 공통 앞머리
   if (!r) {
     const v = id => ($(id).value || '').trim();
-    if (!v('ruShip') || !v('ruDate')) { toast('날짜·선박은 필수'); return; }
+    const shipCode = normalizeShipCode(v('ruShip'));
+    if (!shipCode || !v('ruDate')) {
+      toast(!v('ruDate') ? '날짜·선박은 필수'
+        : '선박 코드 확인: "' + v('ruShip') + '" — 미등록 코드 (선박관리에서 추가)');
+      return;
+    }
     if (!v('ruEquip') && !v('ruDesc')) { toast('장비 또는 내용을 적어주세요'); return; }
     if (!files.length) { toast('저장할 파일을 드래그하거나 선택하세요'); return; }
+    $('ruShip').value = shipCode;
     base = baseName();
-    const title = [v('ruShip'), v('ruSys'), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ');
+    const title = [shipCode, v('ruSys').toUpperCase(), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ');
     const rec = {
-      id: 'FL_' + Date.now(), ship_code: v('ruShip'), system: v('ruSys'), date: v('ruDate'),
+      id: 'FL_' + Date.now(), ship_code: shipCode, system: v('ruSys').toUpperCase(), date: v('ruDate'),
       equip: v('ruEquip'), stage: v('ruStage') || '완료', symptom: title, action: '',
       parts: '', cost: '', attachments: '[]', history: '[]', email_subject: '', email_link: '',
       needs_review: false, source_msg_id: '', origin: '파일',
