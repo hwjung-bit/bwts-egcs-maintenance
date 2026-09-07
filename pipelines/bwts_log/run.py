@@ -53,7 +53,7 @@ def diff_against_db(rows):
         return [], []
     cur = {}
     got = sb.table("bwts_log_analysis") \
-        .select("ship_code,period,grade,review_status") \
+        .select("ship_code,period,grade,final_grade,review_status") \
         .gte("period", periods[0]).lte("period", periods[-1]) \
         .execute().data or []
     for r in got:
@@ -65,8 +65,15 @@ def diff_against_db(rows):
             continue
         rec = (s["code"], f"{s['year']}-{s['month']:02d}",
                old["grade"], s["grade"], old["review_status"])
-        (reviewed_changed if old["review_status"] != "auto"
-         else auto_changed).append(rec)
+        if old["review_status"] == "auto":
+            auto_changed.append(rec)
+        elif old.get("final_grade") == s["grade"]:
+            # 자동 판정이 검토자의 결론을 뒤늦게 따라잡은 경우 — 뒤집는 게
+            # 아니라 수렴이므로 막지 않는다. 화면은 final_grade 를 쓰므로
+            # 보이는 등급도 그대로다.
+            auto_changed.append(rec)
+        else:
+            reviewed_changed.append(rec)
     return auto_changed, reviewed_changed
 
 

@@ -48,6 +48,17 @@ function chatterOf(r) {
   return { level: severe.length ? '심각' : '주의', valves: worth, severe: severe.length };
 }
 
+// reception 은 파이프라인 내부 코드라 화면용 한글로 옮긴다.
+const RECV = {
+  full: '수신', pdf_only: 'PDF만', zip: 'ZIP만', null: '빈파일',
+  folder_only: '폴더만', missing: '미수신',
+};
+const recvOf = r => RECV[r.reception] || (r.reception ? '수신' : '');
+
+// 칸에 세는 「문제」는 BWTS 본체 문제만 — 등급을 가른 사유 개수.
+// 밸브 채터링·참고표시 같은 부수 문제는 등급과 무관하므로 세지 않는다.
+const issueCount = r => (r.grade_reasons || []).length;
+
 // 상세 패널: 표시 기준을 넘은 밸브만, 심한 순서로. 기준 미만은 접어서 건수만.
 function chatterDetail(chat) {
   const bl = requireTH('bwts_log');
@@ -186,8 +197,10 @@ function renderMatrix() {
       const dim = matches(r) ? '' : 'opacity:.18;';
       const sel = selected && selected.ship_code === r.ship_code && selected.period === r.period ? 'outline:2px solid #2563eb;' : '';
       const mark = REVIEW_MARK[r.review_status] || '';
-      const ops = (r.ballast_count || 0) + (r.deballast_count || 0);
-      const sub = g === '미수신' ? '' : (g === '판독실패' ? (r.integrity && r.integrity.hits ? r.integrity.hits.join(' ') : '') : (ops ? `B${r.ballast_count}/D${r.deballast_count}` : ''));
+      // 칸에는 등급 · 수신 여부 · BWTS 본체 문제 개수만. 밸브 채터링 같은
+      // 부수 문제는 숫자에 넣지 않는다 — 세부는 칸을 눌러 상세에서 본다.
+      const sub = g === '미수신' ? '' :
+        [recvOf(r), issueCount(r) ? `문제 ${issueCount(r)}` : ''].filter(Boolean).join(' · ');
       const fl = flagsOf(r);
       const flag = fl.length ? ` <span class="bl-flag" title="${esc(fl.join(', '))}">⚙</span>` : '';
       const ch = chatterOf(r);
