@@ -49,28 +49,34 @@ async function history(code, sys, ev) {
   ev.stopPropagation();
   const pop = $('calEdit');
   pop.innerHTML = '<div class="loading">이력 로딩...</div>';
-  placePopup(pop, ev, 320);
+  placePopup(pop, ev, 560);
   const res = await sb.from('status_history').select('*')
     .eq('ship_code', code).eq('system', sys)
-    .order('id', { ascending: false }).limit(30);
+    .order('id', { ascending: false }).limit(50);
   if (res.error) {
-    pop.innerHTML = `<div style="font-size:12px;color:#be185d">이력 조회 실패 — sql/022 실행 필요<br><code style="font-size:10px">${esc(res.error.message)}</code></div>` +
+    pop.innerHTML = `<div style="font-size:12px;color:#be185d">이력 조회 실패 — sql/023 실행 필요<br><code style="font-size:10px">${esc(res.error.message)}</code></div>` +
       '<button style="margin-top:8px" onclick="statusTab.closeHistory()">닫기</button>';
     return;
   }
-  const rows = (res.data || []).map(h =>
-    `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
-    `<td style="text-align:center;font-weight:700">${esc(h.status || '')}</td>` +
-    `<td>${esc(h.memo || '')}</td></tr>`).join('');
+  const list = res.data || [];
+  // 클리어 = 직전(더 오래된) 이력이 수리중/문제였다가 정상으로 저장된 행
+  const rows = list.map((h, i) => {
+    const prev = list[i + 1];
+    const cleared = h.status === '정상' && prev && prev.status && prev.status !== '정상';
+    return `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
+      `<td style="text-align:center;font-weight:700;white-space:nowrap">${esc(h.status || '')}` +
+      (cleared ? '<div style="color:#059669;font-size:10px;font-weight:700">✅ 클리어</div>' : '') + '</td>' +
+      `<td style="min-width:260px;white-space:pre-wrap;word-break:break-word">${esc(h.memo || '')}</td></tr>`;
+  }).join('');
   pop.innerHTML =
-    `<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())} 이력</div>` +
+    `<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())} 이력</div>` +
     (rows
-      ? `<div style="max-height:280px;overflow-y:auto"><table class="cal-table" style="font-size:11px"><thead><tr><th>저장일시</th><th>상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ? `<div style="max-height:420px;overflow-y:auto"><table class="cal-table" style="font-size:12px;width:100%"><thead><tr><th style="width:120px">저장일시</th><th style="width:70px">상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : '<div style="font-size:12px;color:#94a3b8">이력 없음 — 다음 저장부터 쌓입니다</div>') +
     '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">' +
-    '<span style="font-size:10px;color:#94a3b8">5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
+    '<span style="font-size:10px;color:#94a3b8">5분 내 재수정은 한 건으로 합쳐짐 · ✅ 클리어 = 수리중·문제 → 정상 전환일 · 한국시간</span>' +
     '<button onclick="statusTab.closeHistory()">닫기</button></div>';
-  placePopup(pop, ev, 320);
+  placePopup(pop, ev, 560);
 }
 function closeHistory() { $('calEdit').style.display = 'none'; }
 
