@@ -324,7 +324,7 @@ function close() { selected = null; $('blDetail').style.display = 'none'; render
 function filter(k) { F.filter = k; renderAll(); }
 
 /* ===== 채터링 목록 — 월·선박으로 좁혀 보고, 그대로 메일에 붙인다 ===== */
-const CH = { month: '', ship: '', view: 'detail', lang: 'ko' };
+const CH = { month: '', ship: '', view: 'detail', lang: 'ko', picked: new Set() };
 
 function chatterItems() {
   const out = [];
@@ -388,7 +388,8 @@ function chatterList() {
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📄 전체 텍스트</button>`
     + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected()"`
-    + ` title="선박 드롭다운에서 고른 선박으로 메일 작성 — 받는 사람 자동">✉ 메일 작성</button>`
+    + ` title="체크한 선박 전부를 받는 사람으로 한 통 작성 — 체크 없으면 드롭다운 선박">`
+    + `✉ 선택 선박 메일${CH.picked.size ? ' (' + CH.picked.size + '척)' : ''}</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
@@ -404,6 +405,8 @@ function chatterList() {
   if (CH.view === 'ship') {
     const rows = chatterByShip(items).map(s =>
       `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(s.code)}','${esc(s.last)}')">`
+      + `<td onclick="event.stopPropagation()"><input type="checkbox"${CH.picked.has(s.code) ? ' checked' : ''}`
+      + ` onchange="bwtsLogTab.chatterPick('${esc(s.code)}', this.checked)" title="메일 대상"></td>`
       + `<td><b>${esc(s.code)}</b></td>`
       + `<td style="text-align:right;font-weight:${s.monthCount >= 3 ? '700' : '400'};`
       + `color:${s.monthCount >= 3 ? '#dc2626' : 'inherit'}">${s.monthCount}개월</td>`
@@ -415,7 +418,11 @@ function chatterList() {
       + `<td><button class="refresh-btn" style="padding:2px 8px"`
       + ` onclick="event.stopPropagation();bwtsLogTab.chatterMail('${esc(s.code)}')"`
       + ` title="${esc(vesselMail(s.code))}로 메일 작성">✉ 메일</button></td></tr>`).join('');
-    table = `<table class="cal-table"><thead><tr><th>선박</th><th>발생 개월</th>`
+    const allPicked = ships.length && ships.every(c => CH.picked.has(c));
+    table = `<table class="cal-table"><thead><tr>`
+      + `<th><input type="checkbox"${allPicked ? ' checked' : ''}`
+      + ` onchange="bwtsLogTab.chatterPick('*', this.checked)" title="전체 선택"></th>`
+      + `<th>선박</th><th>발생 개월</th>`
       + `<th>건수</th><th>심각</th><th>최다 밸브</th><th style="text-align:right">최대 횟수</th>`
       + `<th>최근 발생</th><th>그 달 등급</th><th>본선 통보</th></tr></thead><tbody>${rows}</tbody></table>`
       + `<div class="muted" style="font-size:11px;margin-top:6px">`
@@ -535,57 +542,68 @@ function periodLabel() {
   return CH.month ? `${CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
 }
 
-// 채터링 통보 — /mail 지침 양식. 밸브 이름·횟수·정도만, 버스트 같은 분석 용어 없음.
+// 채터링 통보 — /mail 지침 양식. 여러 척을 체크해 한 통으로 보낸다: 받는 사람은
+// 체크한 선박 전부, 본문은 "VRCS 신호 검토 요청" + 선박별 밸브 이름·횟수·정도만.
+// 버스트·최악시각 같은 분석 용어는 화면 표에만 두고 메일엔 넣지 않는다.
 const SENDER_KO = 'KMTC SM ETP / 정현우 과장';
 const SENDER_EN = 'KMTC SM ETP / Hyunwoo Jung';
 const shipName = code => { const s = shipByCode(code); return (s && s.name) || code; };
 const replyBy = () => { const d = new Date(); d.setDate(d.getDate() + 5); return d; };
 const koDate = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 
-function chatterMailBody(code, lang) {
-  const bl = requireTH('bwts_log');
-  const items = chatterItems().filter(i => i.r.ship_code === code);
-  const byValve = {};
-  items.forEach(({ v }) => {
-    const b = byValve[v.valve] || (byValve[v.valve] = { n: 0, months: new Set() });
+// code → [{valve, n, months}] 심한 순
+function valvesByShip(codes) {
+  const out = {};
+  chatterItems().forEach(({ r, v }) => {
+    if (!codes.includes(r.ship_code)) return;
+    const s = out[r.ship_code] || (out[r.ship_code] = {});
+    const b = s[v.valve] || (s[v.valve] = { n: 0, months: new Set() });
     b.n += v.chatter_events || 0;
+    b.months.add(r.period);
   });
-  items.forEach(({ r, v }) => byValve[v.valve].months.add(r.period));
-  const valves = Object.entries(byValve).sort((a, b) => b[1].n - a[1].n);
+  const res = {};
+  Object.entries(out).forEach(([code, vs]) => {
+    res[code] = Object.entries(vs).map(([valve, b]) => ({ valve, n: b.n, months: b.months.size }))
+      .sort((a, b) => b.n - a.n);
+  });
+  return res;
+}
+
+function chatterMailBody(codes, lang) {
+  const bl = requireTH('bwts_log');
   const sev = n => n >= bl.chatter_severe_min_events ? '심각' : '주의';
   const sevEn = n => n >= bl.chatter_severe_min_events ? 'severe' : 'caution';
-  const months = [...new Set(items.map(i => i.r.period))].sort();
-  const repeat = months.length >= 3;
-  const name = shipName(code);
+  const by = valvesByShip(codes);
+  const ships = codes.filter(c => by[c]);
   const per = CH.month ? `${+CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
   const due = replyBy();
-  const names = valves.map(([v]) => v).join(', ');
+  const multi = ships.length > 1;
+  const recv = multi ? '하기 선박 / 선장님, 기관장님' : `${shipName(ships[0])} / 선장님, 기관장님`;
+  const line = (c, ko) => `${shipName(c)} : ` + by[c].map(x =>
+    `${x.valve} ${x.n.toLocaleString()}${ko ? '회' : ''} (${ko ? sev(x.n) : sevEn(x.n)}${x.months > 1 ? (ko ? `, ${x.months}개월` : `, ${x.months} months`) : ''})`).join(' / ');
 
   const L = [];
-  L.push(`수신 : ${name} / 선장님, 기관장님`);
+  L.push(`수신 : ${recv}`);
   L.push(`발신 : ${SENDER_KO}`);
   L.push('');
-  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 밸브에서 열림·닫힘 신호가 짧은 간격으로 반복되는 현상이 확인되어 점검을 요청드립니다.`);
+  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 선박의 밸브에서 열림·닫힘 신호가 짧은 간격으로 반복되는 현상이 확인되었습니다. VRCS(밸브 원격제어) 신호 계통 문제 가능성이 있어 검토를 요청드립니다.`);
   L.push('');
   L.push('■ 요청 사항');
-  L.push(`1) 밸브 ${names} 개폐 신호 반복 원인 확인 및 수정`);
+  L.push('1) 하기 밸브의 VRCS 신호와 HMI 표시 일치 여부 및 리미트 스위치 점검');
   L.push('2) 점검 결과와 조치 내역 회신');
   L.push(`3) 회신 희망일 : ${koDate(due)}`);
   L.push('');
-  L.push(`■ ${per} 로그에서 확인된 현상`);
-  valves.forEach(([v, b], i) => {
-    const m = b.months.size > 1 ? `, ${b.months.size}개월` : '';
-    L.push(`${i + 1}) ${v} : 개폐 신호 ${b.n.toLocaleString()}회 (${sev(b.n)}${m})`);
-  });
+  L.push(`■ ${per} 선박별 확인 현상 (밸브 : 개폐 신호 횟수)`);
+  ships.forEach((c, i) => L.push(`${i + 1}) ${line(c, true)}`));
   L.push('');
   L.push('■ 추정 원인 및 점검 방법');
   L.push('   현상 : 같은 밸브의 열림·닫힘 신호가 짧은 간격으로 반복됩니다.');
-  L.push('   추정 : 밸브가 완전히 열리거나 닫힌 위치를 유지하지 못하고 있는 것으로 보입니다. 계속되면 밸브 구동부와 시트 손상으로 이어질 수 있습니다.');
-  L.push('   점검1 : 해당 밸브의 리미트 스위치 접점과 배선 상태');
-  L.push('   점검2 : 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)');
-  L.push('   점검3 : 밸브 시트 이물질 고착 여부');
-  L.push('   점검4 : 수동으로 완전 개폐 후 HMI STATUS 화면에서 해당 밸브 신호가 안정되는지 확인');
-  L.push('   참조 : ECS MANUAL p.39 STATUS 화면');
+  L.push('   추정 : 밸브가 완전히 열리거나 닫힌 위치를 유지하지 못하거나, VRCS 신호가 HMI 로 불안정하게 전달되고 있는 것으로 보입니다.');
+  L.push('   점검1 : HMI STATUS 화면의 해당 밸브 신호와 VRCS 실제 밸브 상태 일치 여부');
+  L.push('   점검2 : 해당 밸브의 리미트 스위치 접점과 배선 상태');
+  L.push('   점검3 : 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)');
+  L.push('   점검4 : 밸브 시트 이물질 고착 여부');
+  L.push('   참조 : ECS MANUAL p.39 STATUS 화면, p.124 VRCS 신호 확인');
   L.push('');
   L.push('■ 점검 후에도 해결되지 않을 때');
   L.push('1) HMI ABNORMAL 화면의 알람 내용을 사진으로 회신');
@@ -594,49 +612,67 @@ function chatterMailBody(code, lang) {
   L.push('');
   L.push('■ 참고 사항');
   L.push('1) 밸브 개폐 신호 반복은 BWTS 운전 등급과는 별개의 점검 항목입니다.');
-  if (repeat) L.push(`2) ${months.length}개월 연속 확인된 건입니다. 기 조치 내역이 있으면 함께 회신 바랍니다.`);
+  if (multi) L.push('2) 본 메일은 해당 선박에 일괄 발송되었습니다. 자선 항목만 확인해 주시기 바랍니다.');
   const ko = L.join('\n');
   if (lang === 'ko') return ko;
 
   const E = ['', '----------------------------------------', '',
-    `TO : ${name} / Master, Chief Engineer`,
+    `TO : ${multi ? 'Vessels below' : shipName(ships[0])} / Master, Chief Engineer`,
     `FR : ${SENDER_EN}`, '',
     'Dear Master and Chief Engineer,', '',
-    `Our review of the ${CH.month || F.year} BWTS log shows the valves below repeating their open/close signal at short intervals. Please check and reply.`, '',
+    `Our review of the ${CH.month || F.year} BWTS log shows the valves below repeating their open/close signal at short intervals. A VRCS (valve remote control) signal issue is suspected. Please check and reply.`, '',
     '■ Request',
-    `1) Valve ${names}: find and fix the cause of the repeating open/close signal`,
+    '1) Check that the VRCS signal and the HMI indication agree for the valves below, and check the limit switches',
     '2) Reply with the check result and action taken',
     `3) Reply requested by ${due.toISOString().slice(0, 10)}`, '',
-    '■ What the log shows'];
-  valves.forEach(([v, b], i) => E.push(`${i + 1}) ${v}: ${b.n.toLocaleString()} open/close signals (${sevEn(b.n)})`));
+    '■ What the log shows (valve : open/close signal count)'];
+  ships.forEach((c, i) => E.push(`${i + 1}) ${line(c, false)}`));
   E.push('', '■ Likely cause and what to check',
-    '   The valve does not seem to hold a fully open or closed position, so the limit-switch signal keeps repeating. Left as is, it can damage the actuator and seat.',
-    '   1) Limit switch contacts and wiring of the valve',
-    '   2) Actuator operation (control air if pneumatic)',
-    '   3) Foreign matter on the valve seat',
-    '   4) Operate the valve fully by hand and confirm the signal settles on the HMI STATUS screen (ECS MANUAL p.39)', '',
+    '   The valve does not seem to hold a fully open or closed position, or the VRCS signal reaches the HMI unstably.',
+    '   1) HMI STATUS screen signal vs actual valve position at the VRCS',
+    '   2) Limit switch contacts and wiring of the valve',
+    '   3) Actuator operation (control air if pneumatic)',
+    '   4) Foreign matter on the valve seat',
+    '   Ref: ECS MANUAL p.39 STATUS screen, p.124 VRCS signal check', '',
     '■ If the problem remains after checking',
     '1) Photo of the alarm list on the HMI ABNORMAL screen',
     '2) Event log PDF for the period from the HMI LOG button (Troubleshooting Book 5.1 p.44)', '',
     '* This item is separate from the BWTS operation grade.');
-  if (repeat) E.push(`* Found in ${months.length} consecutive months. Please advise any action already taken.`);
+  if (multi) E.push('* Sent to all vessels listed. Please check your own vessel\'s item only.');
   E.push('', 'Best regards,');
   return ko + '\n' + E.join('\n');
 }
 
-// 헤더 버튼: 드롭다운 선박 → 그 선박. 미선택인데 목록에 한 척뿐이면 그 척.
+function chatterMailMulti(codes) {
+  const by = valvesByShip(codes);
+  const ships = codes.filter(c => by[c]);
+  if (!ships.length) { toast('선택한 선박에 표시할 채터링이 없음'); return; }
+  const lang = CH.lang || 'ko';
+  const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
+  const who = ships.length === 1 ? shipName(ships[0]) : `${ships.length}척`;
+  const subject = `[KMTC SM][ETP] ${who} BWTS 밸브 개폐 신호 반복 확인 요청 (${per})`;
+  gmailCompose(ships.map(vesselMail).join(','), subject, chatterMailBody(ships, lang));
+}
+
+function chatterMail(code) { chatterMailMulti([code]); }
+
+// 헤더 버튼: 체크한 선박 → 한 통. 체크 없으면 드롭다운 선박, 그것도 없고 한 척뿐이면 그 척.
 function chatterMailSelected() {
+  if (CH.picked.size) { chatterMailMulti([...CH.picked]); return; }
   const ships = [...new Set(chatterItems().map(i => i.r.ship_code))];
   const code = CH.ship || (ships.length === 1 ? ships[0] : '');
-  if (!code) { toast('선박 드롭다운에서 선박을 먼저 고르세요'); return; }
+  if (!code) { toast('선박을 체크하거나 드롭다운에서 고르세요'); return; }
   chatterMail(code);
 }
 
-function chatterMail(code) {
-  const lang = CH.lang || 'ko';
-  const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
-  const subject = `[KMTC SM][ETP] ${shipName(code)} BWTS 밸브 개폐 신호 반복 확인 요청 (${per})`;
-  gmailCompose(vesselMail(code), subject, chatterMailBody(code, lang));
+function chatterPick(code, on) {
+  if (code === '*') {
+    const all = [...new Set(chatterItems().map(i => i.r.ship_code))];
+    on ? all.forEach(c => CH.picked.add(c)) : CH.picked.clear();
+  } else {
+    on ? CH.picked.add(code) : CH.picked.delete(code);
+  }
+  chatterList();
 }
 
 // BWTS 본체 문제 통보 — 등급을 가른 사유만
@@ -760,7 +796,8 @@ async function override() {
 }
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
-  chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailSelected, issueMail,
+  chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailMulti,
+  chatterMailSelected, chatterPick, issueMail,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
