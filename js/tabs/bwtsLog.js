@@ -522,28 +522,19 @@ const vesselMail = code => `kmtc${String(code).toLowerCase()}@sea-one.com`;
 
 // Gmail 작성창. 반드시 클릭 핸들러 안에서 동기적으로 열어야 팝업 차단을 안 맞는다 —
 // 그 앞에 prompt() 같은 모달을 두면 웨일은 제스처가 끝난 것으로 보고 막는다.
-// 본문이 길면(여러 척 한/영) Gmail 이 빈 창을 띄우므로, 그때는 본문을 클립보드로
-// 넘기고 받는 사람·제목만 채운다.
-const GMAIL_URL_MAX = 6000;
+// 본문은 항상 URL 에 싣는다. 본문을 짧게 유지하는 게 전제 — 6척 한/영 기준 ~4,000자로
+// Gmail 한도 안. 길어져 400 이 나면 문구를 줄이지 클립보드로 우회하지 않는다.
 function gmailCompose(to, subject, body) {
-  const base = 'https://mail.google.com/mail/?view=cm&fs=1'
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&to=' + encodeURIComponent(to)
-    + '&su=' + encodeURIComponent(subject);
-  const full = base + '&body=' + encodeURIComponent(body);
-  const useClip = full.length > GMAIL_URL_MAX;
-  const w = window.open(useClip ? base : full, '_blank');
+    + '&su=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  const w = window.open(url, '_blank');
   if (!w) {
-    navigator.clipboard.writeText(subject + '\n\n' + body).catch(() => {});
-    toast('팝업이 차단됨 — 주소창 오른쪽 차단 아이콘에서 허용. 본문은 클립보드에 복사됨');
+    toast('팝업이 차단됨 — 주소창 오른쪽 차단 아이콘에서 허용 후 다시');
     return;
   }
-  if (useClip) {
-    navigator.clipboard.writeText(body)
-      .then(() => toast('본문이 길어 클립보드에 복사됨 — 작성창 본문에 붙여넣기(Ctrl+V)'))
-      .catch(() => toast('본문 복사 실패 — 📄 전체 텍스트로 복사해 붙여넣기'));
-  } else {
-    toast(`${to.split(',').length}명 작성창 — 그대로 두면 임시보관함에 저장됨`);
-  }
+  toast(`${to.split(',').length}명 작성창 — 그대로 두면 임시보관함에 저장됨`);
 }
 
 // 등급 사유는 한국어 문구로 저장된다. 자주 나오는 것만 영문을 붙인다.
@@ -609,29 +600,15 @@ function chatterMailBody(codes, lang) {
   L.push(`수신 : ${recv}`);
   L.push(`발신 : ${SENDER_KO}`);
   L.push('');
-  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 선박의 밸브에서 열림·닫힘 신호가 짧은 간격으로 반복되는 현상이 확인되었습니다. VRCS(밸브 원격제어) 신호 계통 문제 가능성이 있어 검토를 요청드립니다.`);
+  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 선박의 밸브에서 채터링(열림·닫힘 신호 반복)이 확인되어 밸브 및 VRCS 시스템 점검을 요청드립니다.`);
   L.push('');
   L.push('■ 요청 사항');
-  L.push('1) 하기 밸브의 VRCS 신호와 HMI 표시 일치 여부 및 리미트 스위치 점검');
-  L.push('2) 점검 결과와 조치 내역 회신');
+  L.push('1) 하기 밸브 채터링 및 VRCS 시스템 점검');
+  L.push('2) 작업 예정일 회신. 이미 수리한 경우 수리 완료 및 조치 내역 회신');
   L.push(`3) 회신 희망일 : ${koDate(due)}`);
   L.push('');
   L.push(`■ ${per} 선박별 확인 현상 (밸브 : 개폐 신호 횟수)`);
   ships.forEach((c, i) => L.push(`${i + 1}) ${line(c, true)}`));
-  L.push('');
-  L.push('■ 추정 원인 및 점검 방법');
-  L.push('   현상 : 같은 밸브의 열림·닫힘 신호가 짧은 간격으로 반복됩니다.');
-  L.push('   추정 : 밸브가 완전히 열리거나 닫힌 위치를 유지하지 못하거나, VRCS 신호가 HMI 로 불안정하게 전달되고 있는 것으로 보입니다.');
-  L.push('   점검1 : HMI STATUS 화면의 해당 밸브 신호와 VRCS 실제 밸브 상태 일치 여부');
-  L.push('   점검2 : 해당 밸브의 리미트 스위치 접점과 배선 상태');
-  L.push('   점검3 : 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)');
-  L.push('   점검4 : 밸브 시트 이물질 고착 여부');
-  L.push('   참조 : ECS MANUAL p.39 STATUS 화면, p.124 VRCS 신호 확인');
-  L.push('');
-  L.push('■ 점검 후에도 해결되지 않을 때');
-  L.push('1) HMI ABNORMAL 화면의 알람 내용을 사진으로 회신');
-  L.push('2) HMI LOG 버튼에서 해당 기간 Event 로그를 PDF 로 추출하여 회신 (Troubleshooting Book 5.1 p.44)');
-  L.push('3) 위 자료 확인 후 메이커 서비스 필요 여부를 판단하여 안내드리겠습니다.');
   L.push('');
   L.push('■ 참고 사항');
   L.push('1) 밸브 개폐 신호 반복은 BWTS 운전 등급과는 별개의 점검 항목입니다.');
@@ -643,24 +620,14 @@ function chatterMailBody(codes, lang) {
     `TO : ${multi ? 'Vessels below' : shipName(ships[0])} / Master, Chief Engineer`,
     `FR : ${SENDER_EN}`, '',
     'Dear Master and Chief Engineer,', '',
-    `Our review of the ${CH.month || F.year} BWTS log shows the valves below repeating their open/close signal at short intervals. A VRCS (valve remote control) signal issue is suspected. Please check and reply.`, '',
+    `Our review of the ${CH.month || F.year} BWTS log shows valve chattering (repeating open/close signal) on the valves below. Please check the valves and the VRCS system.`, '',
     '■ Request',
-    '1) Check that the VRCS signal and the HMI indication agree for the valves below, and check the limit switches',
-    '2) Reply with the check result and action taken',
+    '1) Check the valves below and the VRCS (valve remote control) system',
+    '2) Reply with the planned work date. If already repaired, reply that it is done and what was done',
     `3) Reply requested by ${due.toISOString().slice(0, 10)}`, '',
     '■ What the log shows (valve : open/close signal count)'];
   ships.forEach((c, i) => E.push(`${i + 1}) ${line(c, false)}`));
-  E.push('', '■ Likely cause and what to check',
-    '   The valve does not seem to hold a fully open or closed position, or the VRCS signal reaches the HMI unstably.',
-    '   1) HMI STATUS screen signal vs actual valve position at the VRCS',
-    '   2) Limit switch contacts and wiring of the valve',
-    '   3) Actuator operation (control air if pneumatic)',
-    '   4) Foreign matter on the valve seat',
-    '   Ref: ECS MANUAL p.39 STATUS screen, p.124 VRCS signal check', '',
-    '■ If the problem remains after checking',
-    '1) Photo of the alarm list on the HMI ABNORMAL screen',
-    '2) Event log PDF for the period from the HMI LOG button (Troubleshooting Book 5.1 p.44)', '',
-    '* This item is separate from the BWTS operation grade.');
+  E.push('', '* This item is separate from the BWTS operation grade.');
   if (multi) E.push('* Sent to all vessels listed. Please check your own vessel\'s item only.');
   E.push('', 'Best regards,');
   return ko + '\n' + E.join('\n');
