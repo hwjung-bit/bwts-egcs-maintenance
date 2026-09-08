@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Tab icon: ballast-water drop over a wave. Pure shapes so every browser
+       (Whale included) renders it; emoji glyphs in SVG favicons do not. -->
+  <rect width="64" height="64" rx="14" fill="#1d4ed8"/>
+  <path d="M32 10 C32 10 18 26 18 36 a14 14 0 0 0 28 0 C46 26 32 10 32 10 Z" fill="#ffffff"/>
+  <path d="M25 37 a7 7 0 0 0 14 0" fill="none" stroke="#1d4ed8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M8 52 q6 -5 12 0 t12 0 t12 0 t12 0" fill="none" stroke="#93c5fd" stroke-width="4" stroke-linecap="round"/>
+</svg>
