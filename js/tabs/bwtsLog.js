@@ -381,15 +381,12 @@ function chatterList() {
     + `<select onchange="bwtsLogTab.chatterSet('view', this.value)">`
     + `<option value="detail"${CH.view === 'detail' ? ' selected' : ''}>월별 상세</option>`
     + `<option value="ship"${CH.view === 'ship' ? ' selected' : ''}>선박별 요약</option></select>`
-    + `<select onchange="bwtsLogTab.chatterSet('lang', this.value)" title="본선 메일 언어">`
-    + `<option value="ko"${CH.lang === 'ko' ? ' selected' : ''}>한글</option>`
-    + `<option value="ko_en"${CH.lang === 'ko_en' ? ' selected' : ''}>한글+영문</option></select>`
     + `<div class="spacer"></div>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📄 전체 텍스트</button>`
     + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected()"`
-    + ` title="체크한 선박 전부를 받는 사람으로 한 통 작성 — 체크 없으면 드롭다운 선박">`
-    + `✉ 선택 선박 메일${CH.picked.size ? ' (' + CH.picked.size + '척)' : ''}</button>`
+    + ` title="체크한 선박 전부를 받는 사람으로 한 통 작성 — 누르면 한글/한글+영문 선택">`
+    + `✉ 선박 메일${CH.picked.size ? ' (' + CH.picked.size + '척)' : ''}</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
@@ -432,6 +429,8 @@ function chatterList() {
       const sev = (v.chatter_events || 0) >= bl.chatter_severe_min_events ? '심각' : '주의';
       const col = sev === '심각' ? '#dc2626' : '#ea580c';
       return `<tr style="cursor:pointer" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')">`
+        + `<td onclick="event.stopPropagation()"><input type="checkbox"${CH.picked.has(r.ship_code) ? ' checked' : ''}`
+        + ` onchange="bwtsLogTab.chatterPick('${esc(r.ship_code)}', this.checked)" title="메일 대상"></td>`
         + `<td><b>${esc(r.ship_code)}</b></td><td>${esc(r.period)}</td>`
         + `<td>${VALVE_SVG(col)} ${esc(v.valve || '?')}</td>`
         + `<td style="text-align:right">${(v.chatter_events || 0).toLocaleString()}</td>`
@@ -443,7 +442,12 @@ function chatterList() {
         + ` onclick="event.stopPropagation();bwtsLogTab.chatterMail('${esc(r.ship_code)}')"`
         + ` title="${esc(vesselMail(r.ship_code))}로 메일 작성">✉</button></td></tr>`;
     }).join('');
-    table = `<table class="cal-table"><thead><tr><th>선박</th><th>월</th><th>밸브</th>`
+    const shipsInView = [...new Set(items.map(i => i.r.ship_code))];
+    const allPickedD = shipsInView.length && shipsInView.every(c => CH.picked.has(c));
+    table = `<table class="cal-table"><thead><tr>`
+      + `<th><input type="checkbox"${allPickedD ? ' checked' : ''}`
+      + ` onchange="bwtsLogTab.chatterPick('*', this.checked)" title="전체 선택"></th>`
+      + `<th>선박</th><th>월</th><th>밸브</th>`
       + `<th style="text-align:right">횟수</th><th>심각도</th><th style="text-align:right">버스트</th>`
       + `<th>최악 시각</th><th>그 달 등급</th><th>메일</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
@@ -647,7 +651,12 @@ function chatterMailMulti(codes) {
   const by = valvesByShip(codes);
   const ships = codes.filter(c => by[c]);
   if (!ships.length) { toast('선택한 선박에 표시할 채터링이 없음'); return; }
-  const lang = CH.lang || 'ko';
+  // 언어는 보낼 때 고른다 — 헤더 토글보다 잊을 일이 없다.
+  const pick = prompt(`${ships.length}척 메일 — 언어 번호 입력\n1. 한글\n2. 한글+영문`,
+    CH.lang === 'ko_en' ? '2' : '1');
+  if (pick === null) return;
+  const lang = pick.trim() === '2' ? 'ko_en' : 'ko';
+  CH.lang = lang;
   const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
   const who = ships.length === 1 ? shipName(ships[0]) : `${ships.length}척`;
   const subject = `[KMTC SM][ETP] ${who} BWTS 밸브 개폐 신호 반복 확인 요청 (${per})`;
