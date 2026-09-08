@@ -384,9 +384,11 @@ function chatterList() {
     + `<div class="spacer"></div>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📄 전체 텍스트</button>`
-    + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected()"`
-    + ` title="체크한 선박 전부를 받는 사람으로 한 통 작성 — 누르면 한글/한글+영문 선택">`
+    + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected('ko')"`
+    + ` title="체크한 선박 전부를 받는 사람으로 한 통 작성 — 한글">`
     + `✉ 선박 메일${CH.picked.size ? ' (' + CH.picked.size + '척)' : ''}</button>`
+    + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected('ko_en')"`
+    + ` title="같은 메일을 한글+영문으로">✉ 한/영</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
@@ -518,13 +520,30 @@ function copyChatterMail() {
    밸브 번호와 횟수, 그리고 그게 무슨 현상인지만. */
 const vesselMail = code => `kmtc${String(code).toLowerCase()}@sea-one.com`;
 
+// Gmail 작성창. 반드시 클릭 핸들러 안에서 동기적으로 열어야 팝업 차단을 안 맞는다 —
+// 그 앞에 prompt() 같은 모달을 두면 웨일은 제스처가 끝난 것으로 보고 막는다.
+// 본문이 길면(여러 척 한/영) Gmail 이 빈 창을 띄우므로, 그때는 본문을 클립보드로
+// 넘기고 받는 사람·제목만 채운다.
+const GMAIL_URL_MAX = 6000;
 function gmailCompose(to, subject, body) {
-  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
+  const base = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&to=' + encodeURIComponent(to)
-    + '&su=' + encodeURIComponent(subject)
-    + '&body=' + encodeURIComponent(body);
-  window.open(url, '_blank', 'noopener');
-  toast(`${to} 메일 작성창 — 그대로 두면 임시보관함에 저장됨`);
+    + '&su=' + encodeURIComponent(subject);
+  const full = base + '&body=' + encodeURIComponent(body);
+  const useClip = full.length > GMAIL_URL_MAX;
+  const w = window.open(useClip ? base : full, '_blank');
+  if (!w) {
+    navigator.clipboard.writeText(subject + '\n\n' + body).catch(() => {});
+    toast('팝업이 차단됨 — 주소창 오른쪽 차단 아이콘에서 허용. 본문은 클립보드에 복사됨');
+    return;
+  }
+  if (useClip) {
+    navigator.clipboard.writeText(body)
+      .then(() => toast('본문이 길어 클립보드에 복사됨 — 작성창 본문에 붙여넣기(Ctrl+V)'))
+      .catch(() => toast('본문 복사 실패 — 📄 전체 텍스트로 복사해 붙여넣기'));
+  } else {
+    toast(`${to.split(',').length}명 작성창 — 그대로 두면 임시보관함에 저장됨`);
+  }
 }
 
 // 등급 사유는 한국어 문구로 저장된다. 자주 나오는 것만 영문을 붙인다.
@@ -647,15 +666,11 @@ function chatterMailBody(codes, lang) {
   return ko + '\n' + E.join('\n');
 }
 
-function chatterMailMulti(codes) {
+function chatterMailMulti(codes, lang) {
   const by = valvesByShip(codes);
   const ships = codes.filter(c => by[c]);
   if (!ships.length) { toast('선택한 선박에 표시할 채터링이 없음'); return; }
-  // 언어는 보낼 때 고른다 — 헤더 토글보다 잊을 일이 없다.
-  const pick = prompt(`${ships.length}척 메일 — 언어 번호 입력\n1. 한글\n2. 한글+영문`,
-    CH.lang === 'ko_en' ? '2' : '1');
-  if (pick === null) return;
-  const lang = pick.trim() === '2' ? 'ko_en' : 'ko';
+  lang = lang || 'ko';
   CH.lang = lang;
   const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
   const who = ships.length === 1 ? shipName(ships[0]) : `${ships.length}척`;
@@ -663,15 +678,16 @@ function chatterMailMulti(codes) {
   gmailCompose(ships.map(vesselMail).join(','), subject, chatterMailBody(ships, lang));
 }
 
-function chatterMail(code) { chatterMailMulti([code]); }
+function chatterMail(code) { chatterMailMulti([code], 'ko'); }
 
 // 헤더 버튼: 체크한 선박 → 한 통. 체크 없으면 드롭다운 선박, 그것도 없고 한 척뿐이면 그 척.
-function chatterMailSelected() {
-  if (CH.picked.size) { chatterMailMulti([...CH.picked]); return; }
+// 언어는 버튼으로 받는다 — 여기서 prompt() 를 띄우면 그 뒤의 window.open 이 팝업 차단에 걸린다.
+function chatterMailSelected(lang) {
+  if (CH.picked.size) { chatterMailMulti([...CH.picked], lang); return; }
   const ships = [...new Set(chatterItems().map(i => i.r.ship_code))];
   const code = CH.ship || (ships.length === 1 ? ships[0] : '');
   if (!code) { toast('선박을 체크하거나 드롭다운에서 고르세요'); return; }
-  chatterMail(code);
+  chatterMailMulti([code], lang);
 }
 
 function chatterPick(code, on) {
