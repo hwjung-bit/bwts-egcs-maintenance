@@ -387,6 +387,8 @@ function chatterList() {
     + `<div class="spacer"></div>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatter()">📋 표 복사</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.copyChatterMail()">📄 전체 텍스트</button>`
+    + `<button class="add-btn" onclick="bwtsLogTab.chatterMailSelected()"`
+    + ` title="선박 드롭다운에서 고른 선박으로 메일 작성 — 받는 사람 자동">✉ 메일 작성</button>`
     + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
 
   const box = $('blDetail');
@@ -429,11 +431,14 @@ function chatterList() {
         + `<td style="color:${col};font-weight:600">${sev}</td>`
         + `<td style="text-align:right">${v.burst_count}</td>`
         + `<td>${esc(v.worst_burst_start || '')}</td>`
-        + `<td>${esc(disp(r))}</td></tr>`;
+        + `<td>${esc(disp(r))}</td>`
+        + `<td><button class="refresh-btn" style="padding:2px 8px"`
+        + ` onclick="event.stopPropagation();bwtsLogTab.chatterMail('${esc(r.ship_code)}')"`
+        + ` title="${esc(vesselMail(r.ship_code))}로 메일 작성">✉</button></td></tr>`;
     }).join('');
     table = `<table class="cal-table"><thead><tr><th>선박</th><th>월</th><th>밸브</th>`
       + `<th style="text-align:right">횟수</th><th>심각도</th><th style="text-align:right">버스트</th>`
-      + `<th>최악 시각</th><th>그 달 등급</th></tr></thead><tbody>${rows}</tbody></table>`;
+      + `<th>최악 시각</th><th>그 달 등급</th><th>메일</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   const shipSet = new Set(items.map(i => i.r.ship_code));
@@ -530,70 +535,107 @@ function periodLabel() {
   return CH.month ? `${CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
 }
 
-// 채터링 통보 — 밸브 번호와 횟수만. lang: 'ko' | 'ko_en'
+// 채터링 통보 — /mail 지침 양식. 밸브 이름·횟수·정도만, 버스트 같은 분석 용어 없음.
+const SENDER_KO = 'KMTC SM ETP / 정현우 과장';
+const SENDER_EN = 'KMTC SM ETP / Hyunwoo Jung';
+const shipName = code => { const s = shipByCode(code); return (s && s.name) || code; };
+const replyBy = () => { const d = new Date(); d.setDate(d.getDate() + 5); return d; };
+const koDate = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+
 function chatterMailBody(code, lang) {
+  const bl = requireTH('bwts_log');
   const items = chatterItems().filter(i => i.r.ship_code === code);
   const byValve = {};
   items.forEach(({ v }) => {
-    byValve[v.valve] = (byValve[v.valve] || 0) + (v.chatter_events || 0);
+    const b = byValve[v.valve] || (byValve[v.valve] = { n: 0, months: new Set() });
+    b.n += v.chatter_events || 0;
   });
-  const lines = Object.entries(byValve).sort((a, b) => b[1] - a[1])
-    .map(([valve, n]) => `  - ${valve} : ${n.toLocaleString()}회`);
-  const linesEn = Object.entries(byValve).sort((a, b) => b[1] - a[1])
-    .map(([valve, n]) => `  - ${valve} : ${n.toLocaleString()} times`);
+  items.forEach(({ r, v }) => byValve[v.valve].months.add(r.period));
+  const valves = Object.entries(byValve).sort((a, b) => b[1].n - a[1].n);
+  const sev = n => n >= bl.chatter_severe_min_events ? '심각' : '주의';
+  const sevEn = n => n >= bl.chatter_severe_min_events ? 'severe' : 'caution';
   const months = [...new Set(items.map(i => i.r.period))].sort();
   const repeat = months.length >= 3;
+  const name = shipName(code);
+  const per = CH.month ? `${+CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
+  const due = replyBy();
+  const names = valves.map(([v]) => v).join(', ');
 
-  const ko = [
-    `${periodLabel()} BWTS 로그 확인 결과, 아래 밸브에서 열림/닫힘 신호가`,
-    `짧은 간격으로 반복되는 현상이 확인되었습니다.`,
-    ``,
-    ...lines,
-    ``,
-    `이 현상은 밸브가 정상적으로 열리거나 닫힌 상태를 유지하지 못하고`,
-    `신호만 반복되는 것으로, 계속되면 밸브 구동부와 시트 손상으로`,
-    `이어질 수 있습니다.`,
-    ``,
-    `아래 사항을 확인 후 회신해 주시기 바랍니다.`,
-    `  1. 해당 밸브의 리미트 스위치 및 배선 접점 상태`,
-    `  2. 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)`,
-    `  3. 밸브 시트 이물질 고착 여부`,
-    ...(repeat ? ['', `※ ${months.length}개월 연속 확인된 건입니다. 기 조치 내역이 있으면 함께 회신 바랍니다.`] : []),
-    ``,
-    `※ 본 건은 BWTS 운전 등급과는 별개의 점검 항목입니다.`,
-  ].join('\n');
-
+  const L = [];
+  L.push(`수신 : ${name} / 선장님, 기관장님`);
+  L.push(`발신 : ${SENDER_KO}`);
+  L.push('');
+  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 밸브에서 열림·닫힘 신호가 짧은 간격으로 반복되는 현상이 확인되어 점검을 요청드립니다.`);
+  L.push('');
+  L.push('■ 요청 사항');
+  L.push(`1) 밸브 ${names} 개폐 신호 반복 원인 확인 및 수정`);
+  L.push('2) 점검 결과와 조치 내역 회신');
+  L.push(`3) 회신 희망일 : ${koDate(due)}`);
+  L.push('');
+  L.push(`■ ${per} 로그에서 확인된 현상`);
+  valves.forEach(([v, b], i) => {
+    const m = b.months.size > 1 ? `, ${b.months.size}개월` : '';
+    L.push(`${i + 1}) ${v} : 개폐 신호 ${b.n.toLocaleString()}회 (${sev(b.n)}${m})`);
+  });
+  L.push('');
+  L.push('■ 추정 원인 및 점검 방법');
+  L.push('   현상 : 같은 밸브의 열림·닫힘 신호가 짧은 간격으로 반복됩니다.');
+  L.push('   추정 : 밸브가 완전히 열리거나 닫힌 위치를 유지하지 못하고 있는 것으로 보입니다. 계속되면 밸브 구동부와 시트 손상으로 이어질 수 있습니다.');
+  L.push('   점검1 : 해당 밸브의 리미트 스위치 접점과 배선 상태');
+  L.push('   점검2 : 액추에이터 작동 상태 (공압식인 경우 제어 공기압 포함)');
+  L.push('   점검3 : 밸브 시트 이물질 고착 여부');
+  L.push('   점검4 : 수동으로 완전 개폐 후 HMI STATUS 화면에서 해당 밸브 신호가 안정되는지 확인');
+  L.push('   참조 : ECS MANUAL p.39 STATUS 화면');
+  L.push('');
+  L.push('■ 점검 후에도 해결되지 않을 때');
+  L.push('1) HMI ABNORMAL 화면의 알람 내용을 사진으로 회신');
+  L.push('2) HMI LOG 버튼에서 해당 기간 Event 로그를 PDF 로 추출하여 회신 (Troubleshooting Book 5.1 p.44)');
+  L.push('3) 위 자료 확인 후 메이커 서비스 필요 여부를 판단하여 안내드리겠습니다.');
+  L.push('');
+  L.push('■ 참고 사항');
+  L.push('1) 밸브 개폐 신호 반복은 BWTS 운전 등급과는 별개의 점검 항목입니다.');
+  if (repeat) L.push(`2) ${months.length}개월 연속 확인된 건입니다. 기 조치 내역이 있으면 함께 회신 바랍니다.`);
+  const ko = L.join('\n');
   if (lang === 'ko') return ko;
 
-  const en = [
-    ``,
-    `----------------------------------------`,
-    ``,
-    `Our review of the ${periodLabel().replace('년', '')} BWTS log shows the following valves`,
-    `repeating their open/close signal at short intervals.`,
-    ``,
-    ...linesEn,
-    ``,
-    `This means the valve is not holding a fully open or closed position`,
-    `and only the signal repeats. Left as is, it can damage the valve`,
-    `actuator and seat.`,
-    ``,
-    `Please check and reply:`,
-    `  1. Limit switch and wiring contacts of the valve`,
-    `  2. Actuator operation (including control air pressure if pneumatic)`,
-    `  3. Any foreign material stuck on the valve seat`,
-    ...(repeat ? ['', `* Found in ${months.length} consecutive months. Please advise any action already taken.`] : []),
-    ``,
-    `* This item is separate from the BWTS operation grade.`,
-  ].join('\n');
-  return ko + '\n' + en;
+  const E = ['', '----------------------------------------', '',
+    `TO : ${name} / Master, Chief Engineer`,
+    `FR : ${SENDER_EN}`, '',
+    'Dear Master and Chief Engineer,', '',
+    `Our review of the ${CH.month || F.year} BWTS log shows the valves below repeating their open/close signal at short intervals. Please check and reply.`, '',
+    '■ Request',
+    `1) Valve ${names}: find and fix the cause of the repeating open/close signal`,
+    '2) Reply with the check result and action taken',
+    `3) Reply requested by ${due.toISOString().slice(0, 10)}`, '',
+    '■ What the log shows'];
+  valves.forEach(([v, b], i) => E.push(`${i + 1}) ${v}: ${b.n.toLocaleString()} open/close signals (${sevEn(b.n)})`));
+  E.push('', '■ Likely cause and what to check',
+    '   The valve does not seem to hold a fully open or closed position, so the limit-switch signal keeps repeating. Left as is, it can damage the actuator and seat.',
+    '   1) Limit switch contacts and wiring of the valve',
+    '   2) Actuator operation (control air if pneumatic)',
+    '   3) Foreign matter on the valve seat',
+    '   4) Operate the valve fully by hand and confirm the signal settles on the HMI STATUS screen (ECS MANUAL p.39)', '',
+    '■ If the problem remains after checking',
+    '1) Photo of the alarm list on the HMI ABNORMAL screen',
+    '2) Event log PDF for the period from the HMI LOG button (Troubleshooting Book 5.1 p.44)', '',
+    '* This item is separate from the BWTS operation grade.');
+  if (repeat) E.push(`* Found in ${months.length} consecutive months. Please advise any action already taken.`);
+  E.push('', 'Best regards,');
+  return ko + '\n' + E.join('\n');
+}
+
+// 헤더 버튼: 드롭다운 선박 → 그 선박. 미선택인데 목록에 한 척뿐이면 그 척.
+function chatterMailSelected() {
+  const ships = [...new Set(chatterItems().map(i => i.r.ship_code))];
+  const code = CH.ship || (ships.length === 1 ? ships[0] : '');
+  if (!code) { toast('선박 드롭다운에서 선박을 먼저 고르세요'); return; }
+  chatterMail(code);
 }
 
 function chatterMail(code) {
   const lang = CH.lang || 'ko';
-  const subject = CH.month
-    ? `[${code}] BWTS 밸브 작동 확인 요청 (${CH.month})`
-    : `[${code}] BWTS 밸브 작동 확인 요청 (${F.year})`;
+  const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
+  const subject = `[KMTC SM][ETP] ${shipName(code)} BWTS 밸브 개폐 신호 반복 확인 요청 (${per})`;
   gmailCompose(vesselMail(code), subject, chatterMailBody(code, lang));
 }
 
@@ -718,7 +760,7 @@ async function override() {
 }
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
-  chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, issueMail,
+  chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailSelected, issueMail,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
