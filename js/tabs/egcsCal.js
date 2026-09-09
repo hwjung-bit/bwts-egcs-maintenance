@@ -136,17 +136,17 @@ function makerTable(g, equipSet, map, CYCLE, WARN) {
       const ed = ` onclick="egcsCalTab.edit('${esc(d.id)}',event)"`;
       const info = [d.model, d.serial ? 'S/N ' + d.serial : '', d.note].filter(Boolean).join(' / ');
       const base = 'text-align:center;font-size:13px;padding:5px 3px;cursor:pointer;white-space:nowrap';
-      // 산정 불가 칸은 회색(lv-unknown)으로 뚜렷이 묶어 뭐가 빠졌는지 적는다 —
-      // 흰칸로 두면 정상으로 오독된다.
+      // 산정 불가 칸은 회색(lv-unknown)으로만 구분한다 — 이유는 툴팁에.
+      // 흰칸으로 두면 정상으로 오독된다.
       if (!d.last_date) {
         return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 미기재${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">` +
-          `${esc(d.note || '기록 없음')}<div style="font-size:10px;line-height:1.15">일자 미기재</div></td>`;
+          `${esc(d.note || '—')}</td>`;
       }
       const sm = sensorModel(s, o.key, d.model, CYCLE);
       const cyc = sm ? CYCLE[sm] : null;
       if (!cyc) {
         return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 ${esc(d.last_date)} / 센서 모델을 몰라 주기를 산정하지 못함${info ? ' / ' + esc(info) : ''} — 클릭하여 모델 입력">` +
-          `${esc(d.last_date)}<div style="font-size:10px;line-height:1.15">모델 미기재</div></td>`;
+          `${esc(d.last_date)}</td>`;
       }
       // 한 줄 요약: 먼저 도래하는 만료일만. 상세(남은 일수·신환·모델·S/N)는 툴팁으로.
       const calDue = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : null;
@@ -175,8 +175,8 @@ function legendHtml(WARN) {
     `<span class="lv-expired" style="${cell}">만료</span>` +
     `<span class="lv-soon" style="${cell}">${Math.round(WARN / 30)}개월 이내</span>` +
     `<span class="lv-ok" style="${cell}">여유</span>` +
-    `<span class="lv-unknown" style="${cell}">산정 불가 (일자·모델 미기재)</span>` +
-    '<span style="color:#94a3b8;font-size:11px">표시는 만료일. 남은 일수는 셀 위에 마우스를 올리면 나온다</span></div>';
+    `<span class="lv-unknown" style="${cell}">산정 불가</span>` +
+    '<span style="color:#94a3b8;font-size:11px">표시는 만료일. 상세는 셀 위에 마우스를 올리면 나온다</span></div>';
 }
 
 /* ===== cycle reference (collapsible, copyable) ===== */
