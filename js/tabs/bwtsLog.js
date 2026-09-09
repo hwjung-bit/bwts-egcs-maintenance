@@ -640,8 +640,9 @@ function chatterMailMulti(codes, lang) {
   lang = lang || 'ko';
   CH.lang = lang;
   const per = CH.month ? `${+CH.month.slice(5)}월` : `${F.year}년`;
-  const who = ships.length === 1 ? shipName(ships[0]) : `${ships.length}척`;
-  const subject = `[KMTC SM][ETP] ${who} BWTS 밸브 개폐 신호 반복 확인 요청 (${per})`;
+  // 제목은 한글·영문 병기 — 본선에서 영문만 읽는 경우가 있다.
+  const subject = `[KMTC SM][ETP] BWTS 밸브 채터링 및 VRCS 점검 요청의 건 (${per})`
+    + ` / BWTS Valve Chattering & VRCS Inspection Request (${CH.month || F.year})`;
   gmailCompose(ships.map(vesselMail).join(','), subject, chatterMailBody(ships, lang));
 }
 
