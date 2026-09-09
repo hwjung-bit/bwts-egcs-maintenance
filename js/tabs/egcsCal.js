@@ -122,7 +122,10 @@ function makerTable(g, equipSet, map, CYCLE, WARN) {
     ships.map(s => {
       const sh = shipByCode(s) || {};
       const gear = [sh.wms, sh.cems].filter(Boolean).join('·');
-      return `<th style="text-align:center;cursor:pointer;padding:5px 4px;font-size:13px" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}">${esc(s)}` +
+      // WMS 특이사항(선박관리 탭 wms_note)은 주기 판정을 흔든다 —
+      // 예: KDE 는 WMS 가 GI 인데 초기 제품이라 센서는 TRI-OS. 📝 로 알리고 본문은 툴팁에.
+      const memo = (sh.wms_note || '').trim();
+      return `<th style="text-align:center;cursor:pointer;padding:5px 4px;font-size:13px" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}${memo ? '\n메모: ' + esc(memo) : ''}">${esc(s)}${memo ? ' 📝' : ''}` +
         (gear ? `<div style="font-size:10px;font-weight:400;color:#64748b;line-height:1.1">${esc(gear)}</div>` : '') + '</th>';
     }).join('') + '</tr>';
   let body = '';
@@ -265,9 +268,11 @@ function copyShip(code) {
   });
   const sh = shipByCode(code) || {};
   const gear = [sh.wms ? 'WMS ' + sh.wms : '', sh.cems ? 'CEMS ' + sh.cems : ''].filter(Boolean).join(' / ');
+  const memo = (sh.wms_note || '').trim();
   const title = `${code} EGCS 검교정 만료일 (${fmtD(new Date())} 기준${gear ? ' / ' + gear : ''})`;
   const text = title + '\n' +
-    rows.map(r => `- ${r.equip}: ${r.due} (${r.st})`).join('\n');
+    rows.map(r => `- ${r.equip}: ${r.due} (${r.st})`).join('\n') +
+    (memo ? `\n※ ${memo}` : '');
   const html = `<b>${esc(title)}</b>` +
     '<table border="1" style="border-collapse:collapse;font-size:13px">' +
     '<tr><th style="padding:3px 10px;background:#eef2ff">장비</th>' +
@@ -276,7 +281,7 @@ function copyShip(code) {
     rows.map(r => `<tr><td style="padding:3px 10px">${esc(r.equip)}</td>` +
       `<td style="padding:3px 10px;text-align:center">${esc(r.due)}</td>` +
       `<td style="padding:3px 10px">${esc(r.st)}</td></tr>`).join('') +
-    '</table>';
+    '</table>' + (memo ? `<div style="font-size:12px;color:#475569">※ ${esc(memo)}</div>` : '');
   copyRich(html, text, code + ' 만료일 복사됨 (엑셀·메일 = 표)');
 }
 

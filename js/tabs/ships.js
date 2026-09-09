@@ -39,12 +39,12 @@ function refresh() {
     return '<tr>' +
       `<td style="text-align:center;color:#94a3b8;font-size:11px">${idx + 1}</td>` +
       `<td title="코드는 기본키 — mail_log·repairs·calibrations 가 참조하므로 수정 불가"><b>${c}</b></td>` +
-      cell('name') + cell('teu') + cell('bwts_maker') + cell('egcs_maker') + cell('wms') + cell('cems') +
+      cell('name') + cell('teu') + cell('bwts_maker') + cell('egcs_maker') + cell('wms') + cell('cems') + cell('wms_note') +
       `<td style="text-align:center"><button onclick="shipsTab.toggleHidden('${c}')" style="background:none;border:none;cursor:pointer;font-size:14px" title="${s.hidden ? '복원' : '숨김'}">${s.hidden ? '👁️' : '🙈'}</button></td></tr>`;
   }).join('');
   $('shipsRoot').innerHTML = head('<span style="font-size:12px;color:#64748b">셀 클릭 수정</span>') + tabs +
     '<table><thead><tr><th style="width:40px">#</th><th style="width:50px">코드</th><th style="width:150px">선명</th><th style="width:80px">TEU</th>' +
-    '<th style="width:80px">BWTS</th><th style="width:80px">EGCS</th><th style="width:70px">WMS</th><th style="width:70px">CEMS</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<th style="width:80px">BWTS</th><th style="width:80px">EGCS</th><th style="width:70px">WMS</th><th style="width:70px">CEMS</th><th style="width:220px">WMS 비고</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function sub(id) { SUB = id; refresh(); }
