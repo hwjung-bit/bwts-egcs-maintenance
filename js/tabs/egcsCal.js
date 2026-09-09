@@ -26,8 +26,8 @@ export function sensorModel(code, equip, model, CYCLE) {
   }
   return null;
 }
-function level(days, soon) {
-  return days <= 0 ? 'expired' : (days <= soon ? 'soon' : 'ok');
+function level(days, warn) {
+  return days <= 0 ? 'expired' : (days <= warn ? 'soon' : 'ok');
 }
 function fmtD(d) {
   const p = n => String(n).padStart(2, '0');
@@ -71,7 +71,7 @@ function mount(root) {
 function refresh() {
   const th = requireTH('egcs_calibration');
   const CYCLE = th.sensor_cycle_months;
-  const SOON = th.soon_days;
+  const WARN = th.warn_days;
   if (!S.EGCS_CAL.length) {
     $('egcsCalRoot').innerHTML = '<div class="loading">EGCS 검교정 없음</div>';
     return;
@@ -103,13 +103,14 @@ function refresh() {
   if (rest.length) groups.push({ label: '기타', ships: rest });
 
   $('egcsCalRoot').innerHTML =
-    cycleBoxHtml(CYCLE, SOON) +
+    cycleBoxHtml(CYCLE, WARN) +
     groups.filter(g => g.ships.length)
-      .map(g => makerTable(g, equipSet, map, CYCLE, SOON)).join('') +
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정 · 선박 코드 클릭 → 이력 복사 · WMS·CEMS 장비는 선박관리 탭에서 수정</div>';
+      .map(g => makerTable(g, equipSet, map, CYCLE, WARN)).join('') +
+    legendHtml(WARN) +
+    '<div style="margin-top:6px;color:#94a3b8;font-size:11px">셀 클릭 → 검교정일·모델·S/N·비고 수정 · 선박 코드 클릭 → 이력 복사 · WMS·CEMS 장비는 선박관리 탭에서 수정</div>';
 }
 
-function makerTable(g, equipSet, map, CYCLE, SOON) {
+function makerTable(g, equipSet, map, CYCLE, WARN) {
   const ships = g.ships;
   const usedEquips = {};
   Object.keys(equipSet).forEach(eq => {
@@ -134,36 +135,48 @@ function makerTable(g, equipSet, map, CYCLE, SOON) {
       if (!d) return '<td style="text-align:center;font-size:13px;color:#cbd5e1;padding:5px 3px">—</td>';
       const ed = ` onclick="egcsCalTab.edit('${esc(d.id)}',event)"`;
       const info = [d.model, d.serial ? 'S/N ' + d.serial : '', d.note].filter(Boolean).join(' / ');
+      const base = 'text-align:center;font-size:13px;padding:5px 3px;cursor:pointer;white-space:nowrap';
+      // 산정 불가 칸은 회색(lv-unknown)으로 뚜렷이 묶어 뭐가 빠졌는지 적는다 —
+      // 흰칸로 두면 정상으로 오독된다.
       if (!d.last_date) {
-        return `<td${ed} style="text-align:center;font-size:13px;cursor:pointer;padding:5px 3px;color:#94a3b8" title="${esc(info || '기록 없음')} — 클릭하여 수정">${esc(d.note || '—')}</td>`;
+        return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 미기재${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">` +
+          `${esc(d.note || '기록 없음')}<div style="font-size:10px;line-height:1.15">일자 미기재</div></td>`;
       }
       const sm = sensorModel(s, o.key, d.model, CYCLE);
       const cyc = sm ? CYCLE[sm] : null;
       if (!cyc) {
-        return `<td${ed} style="text-align:center;font-size:13px;cursor:pointer;padding:5px 3px" title="검교정일 ${esc(d.last_date)}${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">${esc(d.last_date)}</td>`;
+        return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 ${esc(d.last_date)} / 센서 모델을 몰라 주기를 산정하지 못함${info ? ' / ' + esc(info) : ''} — 클릭하여 모델 입력">` +
+          `${esc(d.last_date)}<div style="font-size:10px;line-height:1.15">모델 미기재</div></td>`;
       }
-      // 한 줄 요약: 먼저 도래하는 만료일만. 상세(검·신환·모델·S/N)는 툴팁으로.
-      const calDays = cyc.cal != null ? daysUntil(addMonths(d.last_date, cyc.cal)) : null;
-      const replDays = daysUntil(addMonths(d.last_date, cyc.repl));
-      const calBad = calDays != null && level(calDays, SOON) !== 'ok';
-      const replBad = level(replDays, SOON) !== 'ok';
-      const bad = calBad || replBad;
-      const due = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : addMonths(d.last_date, cyc.repl);
-      const dueDays = cyc.cal != null ? calDays : replDays;
-      const tag = (!calBad && replBad) ? ' 신환' : (cyc.cal == null ? ' 신환' : '');
+      // 한 줄 요약: 먼저 도래하는 만료일만. 상세(남은 일수·신환·모델·S/N)는 툴팁으로.
+      const calDue = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : null;
+      const replDue = addMonths(d.last_date, cyc.repl);
+      const due = calDue || replDue;
+      const dueDays = daysUntil(due);
+      const lv = level(dueDays, WARN);
+      const tag = cyc.cal == null ? ' 신환' : '';
       const tip = `검교정일 ${d.last_date}` +
-        (cyc.cal != null ? ` / 다음 검교정 ${fmtD(addMonths(d.last_date, cyc.cal))} (${dLabel(calDays)})` : '') +
-        ` / 신환 ${fmtD(addMonths(d.last_date, cyc.repl))} (${dLabel(replDays)})` +
+        (calDue ? ` / 다음 검교정 ${fmtD(calDue)} (${dLabel(daysUntil(calDue))})` : '') +
+        ` / 신환 ${fmtD(replDue)} (${dLabel(daysUntil(replDue))})` +
         (info ? ' / ' + info : '') + ' — 클릭하여 수정';
-      return `<td class="lv-${bad ? 'expired' : 'ok'}"${ed} title="${esc(tip)}" ` +
-        `style="text-align:center;font-size:13px;padding:5px 3px;cursor:pointer;white-space:nowrap;font-weight:${bad ? 700 : 400}">` +
-        `${fmtD(due)}${tag}` +
-        (bad ? `<div style="font-size:11px;line-height:1.15">${dLabel(dueDays)}</div>` : '') + '</td>';
+      return `<td class="lv-${lv}"${ed} title="${esc(tip)}" ` +
+        `style="${base};font-weight:${lv === 'ok' ? 400 : 700}">${fmtD(due)}${tag}</td>`;
     }).join('');
     body += `<tr>${groupTh}<th style="text-align:center;background:#f8fafc;font-weight:700;font-size:13px;padding:5px 3px">${esc(o.sensor)}</th>${tds}</tr>`;
   });
   return `<div style="margin:8px 0 3px;font-weight:800;font-size:12px;color:#0f172a">🏭 ${esc(g.label)} <span style="font-weight:400;color:#94a3b8;font-size:10px">${ships.length}척</span></div>` +
     '<div style="overflow-x:auto"><table class="cal-table" style="width:auto;table-layout:fixed">' + colg + '<thead>' + thead + '</thead><tbody>' + body + '</tbody></table></div>';
+}
+
+/* 색 의미를 표 아래에 못박아 둔다 — 흰칸(주기 산정 불가)과 초록을 헷갈리지 않게 */
+function legendHtml(WARN) {
+  const cell = 'display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700';
+  return '<div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+    `<span class="lv-expired" style="${cell}">만료</span>` +
+    `<span class="lv-soon" style="${cell}">${Math.round(WARN / 30)}개월 이내</span>` +
+    `<span class="lv-ok" style="${cell}">여유</span>` +
+    `<span class="lv-unknown" style="${cell}">산정 불가 (일자·모델 미기재)</span>` +
+    '<span style="color:#94a3b8;font-size:11px">표시는 만료일. 남은 일수는 셀 위에 마우스를 올리면 나온다</span></div>';
 }
 
 /* ===== cycle reference (collapsible, copyable) ===== */
@@ -174,7 +187,7 @@ function cycleCells(cyc) {
     ? fmtMonths(cyc.repl) + ' (검교정=교환)' : fmtMonths(cyc.repl);
   return [cal, repl];
 }
-function cycleBoxHtml(CYCLE, SOON) {
+function cycleBoxHtml(CYCLE, WARN) {
   const rows = CYCLE_ROWS.map(r => {
     const [cal, repl] = cycleCells(CYCLE[r.model]);
     return `<tr><td style="text-align:center;font-weight:700">${r.maker}</td>` +
@@ -183,7 +196,7 @@ function cycleBoxHtml(CYCLE, SOON) {
       `<td style="text-align:center;color:#64748b">${r.note || ''}</td></tr>`;
   }).join('');
   return '<details style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;background:#f8fafc">' +
-    `<summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1d4ed8">📘 검교정 주기 <span style="font-weight:400;color:#64748b;font-size:11px">— 클릭하여 펼치기 · 임박 알림 D-${SOON}</span></summary>` +
+    `<summary style="cursor:pointer;font-weight:700;font-size:13px;color:#1d4ed8">📘 검교정 주기 <span style="font-weight:400;color:#64748b;font-size:11px">— 클릭하여 펼치기 · 만료 ${Math.round(WARN / 30)}개월 전부터 주황</span></summary>` +
     '<div style="margin-top:8px;overflow-x:auto"><table class="cal-table" style="width:auto">' +
     '<thead><tr><th>제조사</th><th>센서</th><th>모델</th><th>검교정</th><th>신품교환</th><th>비고</th></tr></thead>' +
     `<tbody>${rows}</tbody></table>` +
@@ -199,7 +212,7 @@ function copyCycles() {
     const [cal, repl] = cycleCells(CYCLE[r.model]);
     txt += `- ${r.sensor} (${r.model}): 검교정 ${cal} / 신품교환 ${repl}${r.note ? ' (' + r.note + ')' : ''}\n`;
   });
-  txt += `※ 임박 알림: 만료 ${th.soon_days}일 전부터`;
+  txt += `※ 임박 표기: 만료 ${Math.round(th.warn_days / 30)}개월 전부터 (메일 알림은 만료 ${th.soon_days}일 전부터)`;
   copyText(txt, '주기표 복사됨');
 }
 
@@ -219,7 +232,7 @@ async function copyRich(html, text, msg) {
 function copyShip(code) {
   const th = requireTH('egcs_calibration');
   const CYCLE = th.sensor_cycle_months;
-  const SOON = th.soon_days;
+  const WARN = th.warn_days;
   const recs = S.EGCS_CAL.filter(c => c.ship_code === code);
   if (!recs.length) { toast(code + ' 기록 없음'); return; }
   const equipSet = {}, map = {};
@@ -236,16 +249,17 @@ function copyShip(code) {
     const sm = sensorModel(code, o.key, d.model, CYCLE);
     const cyc = sm ? CYCLE[sm] : null;
     if (!d.last_date || !cyc) {
-      rows.push({ equip: o.key, due: '-', st: d.note || '기록 없음' });
+      const why = !d.last_date ? '검교정일 미기재' : '센서 모델 미기재 — 주기 산정 불가';
+      rows.push({ equip: o.key, due: '-', st: (d.note ? d.note + ' / ' : '') + why });
       return;
     }
     const kind = cyc.cal != null ? '검교정' : '신품교환';
     const months = cyc.cal != null ? cyc.cal : cyc.repl;
     const days = daysUntil(addMonths(d.last_date, months));
-    const lv = level(days, SOON);
+    const lv = level(days, WARN);
     rows.push({
       equip: o.key, due: fmtD(addMonths(d.last_date, months)),
-      st: (lv === 'expired' ? '⚠ 만료 ' : lv === 'soon' ? '⚠ 임박 ' : '') + dLabel(days) +
+      st: (lv === 'expired' ? '⚠ 만료' : lv === 'soon' ? '⚠ 임박' : '정상') +
         (kind === '신품교환' ? ' (신환)' : ''),
     });
   });

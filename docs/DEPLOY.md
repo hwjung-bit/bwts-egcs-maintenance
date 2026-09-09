@@ -260,6 +260,18 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   update 로 병합(저장 직후 재수정 = 이력 1건). 셀의 🕘 → 이력 팝업(KST, 최근 30건).
   E2E: KPS bwts 2회 저장 → 1행 병합 확인.
 
+## 2026-09-09 EGCS 검교정 표기 정리 (v20260909a)
+
+- 셀은 **만료일만** 표기. 남은 일수(D-, N일 경과) 줄은 삭제 — 상세는 툴팁으로.
+- 색 기준: 만료(빨강) · `warn_days` 이내(주황, 6개월=183일) · 그 외 여유(초록).
+  `contracts/thresholds.json > egcs_calibration.warn_days` 신설.
+  **`soon_days`(30) 는 주간 알림 메일 기준이라 그대로** — 표만 6개월로 넓힌 것.
+- 흰칸으로 나오던 산정 불가 셀을 회색(`lv-unknown`)으로 묶고 이유를 적음:
+  KJA WMS2/PAH = 검교정일 없음(`일자 미기재`), KDB·KSL WMS2/PAH = GI PAH 인데 모델 공란이라
+  주기 산정 불가(`모델 미기재`). GI PAH 는 G6110(24/48)·G6111(36/36) 로 주기가 달라
+  모델 없이는 계산 불가 — 셀 클릭해서 모델을 넣어야 색이 붙는다.
+- 표 아래 색 범례 추가. 선박 코드 클릭 복사본도 '만료/임박/정상' 로 통일(일수 제거).
+
 ## 2026-09-01 Gmail 자동수집에서 본선 BWTS LOG 메일 제외 (GAS Code.js)
 
 - 증상: `autoCollectGmail`(bwts_general 쿼리)이 본선 월간 BWTS LOG/BWRB 송부 메일까지 수리이력으로 잡아

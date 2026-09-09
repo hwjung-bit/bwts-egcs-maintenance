@@ -1,6 +1,6 @@
 {
   "_doc": "판정 임계값의 단일 출처. 프론트(js/shared/thresholds.js), 알림(scripts/weekly_cal_alert.py), 분석(pipelines/bwts_log)이 전부 이 파일을 읽는다. 값을 바꾸면 세 곳이 동시에 바뀐다.",
-  "version": "2026-09-01",
+  "version": "2026-09-09",
   "bwts_calibration": {
     "interval_months": 12,
     "soon_days": 60,
@@ -9,6 +9,7 @@
   },
   "egcs_calibration": {
     "soon_days": 30,
+    "warn_days": 183,
     "sensor_cycle_months": {
       "enviroFlu": {
         "cal": 48,
@@ -39,7 +40,7 @@
         "repl": 12
       }
     },
-    "_doc": "WMS 센서 모델별 검교정(cal)/신환(repl) 주기. WMS 매뉴얼 2026.06.18. cal null = 검교정 없음(신환만) stale_after_days: 만료 후 이 일수를 넘긴 기록은 실제 만료가 아니라 '기록 미갱신'으로 분류(알림 메일 별도 섹션).",
+    "_doc": "WMS 센서 모델별 검교정(cal)/교환(repl) 주기. WMS 매뉴얼 2026.06.18. cal null = 검교정 없음(교환만). soon_days: 주간 알림 메일 발송 기준. warn_days: 관리대장 웹 표에서 주황(임박) 표기 기준 = 6개월. stale_after_days: 만료 후 이 일수를 넘긴 기록은 실제 만료가 아니라 '기록 미갱신'으로 분류(알림 메일 별도 섹션).",
     "stale_after_days": 365
   },
   "bwts_log": {
