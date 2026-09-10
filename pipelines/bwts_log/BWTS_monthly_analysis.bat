@@ -17,5 +17,5 @@ set LOG=pipelines\bwts_log\out\monthly_%P%.log
 echo ==== %DATE% %TIME% period=%P% >> "%LOG%"
 claude "/bwts-analysis period=%P% auto=monthly" >> "%LOG%" 2>&1
 echo exit code %ERRORLEVEL% >> "%LOG%"
-powershell -NoProfile -File "C:\Users\user\.claude\claude_alarm.ps1" "BWTS %P% monthly log analysis done - check dashboard" "BWTS"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0monthly_alarm.ps1" "%P%" "%ERRORLEVEL%"
 endlocal

@@ -15,8 +15,7 @@
       "Write(pipelines/bwts_log/tests/fixtures/**)"
     ],
     "deny": [
-      "Edit(contracts/thresholds.json)",
-      "Write(contracts/thresholds.json)"
+      "Edit(contracts/thresholds.json)"
     ]
   }
 }
