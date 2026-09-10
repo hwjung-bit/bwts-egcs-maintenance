@@ -100,21 +100,18 @@ function mount(root) {
     <a href="https://drive.google.com/drive/folders/1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE" target="_blank"
       style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d"
       title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
-    <a href="kmtcfolder:bwtslog"
-      style="text-decoration:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
-      title="내 PC 탐색기로 열기 — kmtcfolder 프로토콜 등록된 PC에서만 작동 (scripts/register_kmtcfolder.reg)">💻 PC 폴더</a>
+    <button onclick="bwtsLogTab.recheck()"
+      style="cursor:pointer;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
+      title="최신 분석월을 다시 분석해 도착한 로그를 반영 — kmtcfolder 등록된 PC에서만 작동">📥 수신 재확인</button>
     <button onclick="bwtsLogTab.runAnalysis()"
       style="cursor:pointer;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
       title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</button>
     <button onclick="bwtsLogTab.chatterList()"
       style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#c2410c"
       title="밸브 채터링 걸린 선박·월을 한 번에 목록으로">🔧 채터링 목록</button>
-    <button onclick="bwtsLogTab.missingMail('ko')"
+    <button onclick="bwtsLogTab.missingPanel()"
       style="cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#b91c1c"
-      title="최신 분석월 미수신 선박에 로그 제출 요청 메일 — 한글">✉ 미수신 요청</button>
-    <button onclick="bwtsLogTab.missingMail('ko_en')"
-      style="cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:#b91c1c"
-      title="같은 메일을 한글+영문으로">한/영</button>
+      title="최신 분석월 미수신 선박에 로그 제출 요청 메일">✉ 미수신 요청</button>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
@@ -823,9 +820,57 @@ function missingMailBody(period, codes, lang) {
   return ko + '\n' + E.join('\n');
 }
 
+const latestPeriod = () => {
+  const ps = [...new Set(ROWS.map(r => r.period))].sort();
+  return ps.length ? ps[ps.length - 1] : '';
+};
+
+// 최신 분석월을 다시 돌려 그 사이 도착한 로그를 반영 — 미수신이 실제로 남았는지 확인.
+function recheck() {
+  const period = latestPeriod();
+  if (!period) { toast('데이터 없음'); return; }
+  toast(`${period} 수신 재확인 — 터미널 확인`);
+  launch(period, '');
+}
+
+// 언어는 아래 패널에서 고른다 — 대상 선박을 눈으로 보고 보내게.
+function missingPanel() {
+  const period = latestPeriod();
+  if (!period) { toast('데이터 없음'); return; }
+  const codes = missingShips(period);
+  const box = $('blDetail');
+  box.style.display = 'block';
+  const head = `<div class="bl-head"><b>미수신 로그 제출 요청 — ${esc(period)}</b>`
+    + `<div class="spacer"></div>`
+    + `<button class="refresh-btn" onclick="bwtsLogTab.close()">✕</button></div>`;
+  if (!codes.length) {
+    box.innerHTML = head + `<div class="muted" style="padding:10px">`
+      + `${esc(period)} 미수신 선박 없음</div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  const rows = codes.map(c => {
+    const mk = makerOf(c);
+    const what = mk === 'ermafirst'
+      ? '<span style="color:#b91c1c">제출 형식 미확정 — 추출 가능한 로그 전부와 형식 회신 요청</span>'
+      : esc(MAKER_FILES[mk].join(', '));
+    return `<tr><td><b>${esc(c)}</b></td><td>${esc(shipName(c))}</td>`
+      + `<td>${esc((shipByCode(c) || {}).bwts_maker || '')}</td><td>${what}</td></tr>`;
+  }).join('');
+  box.innerHTML = head
+    + `<div class="muted" style="margin:4px 0 8px">받는 사람 ${codes.length}척 · `
+    + `${esc(codes.map(vesselMail).join(', '))}</div>`
+    + `<table class="cal-table"><thead><tr><th>코드</th><th>선박</th><th>메이커</th>`
+    + `<th>요청 자료</th></tr></thead><tbody>${rows}</tbody></table>`
+    + `<div style="margin-top:10px;display:flex;gap:6px">`
+    + `<button class="add-btn" onclick="bwtsLogTab.missingMail('ko')">✉ 한글로 작성</button>`
+    + `<button class="add-btn" onclick="bwtsLogTab.missingMail('ko_en')">✉ 한글+영문으로 작성</button>`
+    + `</div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function missingMail(lang) {
-  const periods = [...new Set(ROWS.map(r => r.period))].sort();
-  const period = periods.length ? periods[periods.length - 1] : '';
+  const period = latestPeriod();
   if (!period) { toast('데이터 없음'); return; }
   const codes = missingShips(period);
   if (!codes.length) { toast(`${period} 미수신 선박 없음`); return; }
@@ -918,7 +963,7 @@ async function override() {
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
   chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailMulti,
-  chatterMailSelected, chatterPick, issueMail, missingMail,
+  chatterMailSelected, chatterPick, issueMail, missingMail, missingPanel, recheck,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
