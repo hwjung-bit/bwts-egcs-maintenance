@@ -736,9 +736,13 @@ function issueMail(lang) {
    다르므로 선박별로 적는다. KDE 는 ERMA FIRST 리트로핏이라 우리도 제출 형식을
    확정하지 못했으므로 파일 목록을 지정하지 않고 생성 가능한 로그와 형식을 묻는다. */
 const MISSING_GRADES = ['미수신'];
+// 제출 표준 형식 v3 (2026년 7월 기록분부터) 그대로. 안내문 원본:
+// 011 BWTS/4. BWTS LOG DATA/…/_안내문(로그아님)
 const MAKER_FILES = {
-  techcross: ['DATALOG', 'EVENTLOG', 'OPERATIONTIMELOG', 'TOTALLOG'],
-  alfalaval: ['PureBallast 운전 로그 (csv 또는 xlsx)'],
+  techcross: ['DATALOG', 'EVENTLOG', 'OPERATIONTIMELOG', 'TOTALLOG', 'BWRB',
+    '— 각각 개별 PDF, 파일명 코드_YYYY_MM_LOGTYPE.pdf'],
+  alfalaval: ['A_/E_/IE_ CSV 3종', 'Tabular Report(PDF)', 'Tabular Export(XLSX)',
+    '— 추출 원본 파일명 그대로', 'BWRB 스캔본 (코드_YYYY_MM_BWRB.pdf)'],
 };
 
 function makerOf(code) {
@@ -783,14 +787,17 @@ function missingMailBody(period, codes, lang) {
     if (mk === 'ermafirst') {
       L.push(`${i + 1}) ${shipName(c)} : BWTS 교체 이후 제출 형식이 확정되지 않았습니다.`);
       L.push('   본선 시스템에서 추출 가능한 운전 로그 전부와, 추출 화면·파일 형식을 함께 회신해 주시기 바랍니다.');
+      L.push('   BWRB 스캔본은 동일하게 코드_YYYY_MM_BWRB.pdf 로 첨부해 주십시오.');
     } else {
       L.push(`${i + 1}) ${shipName(c)} : ${MAKER_FILES[mk].join(', ')}`);
     }
   });
   L.push('');
   L.push('■ 참고 사항');
-  L.push('1) 이미 송부하셨다면 송부 일자와 수신처를 회신해 주시기 바랍니다.');
-  if (multi) L.push('2) 본 메일은 해당 선박에 일괄 발송되었습니다. 각 호선 항목만 확인해 주시기 바랍니다.');
+  L.push('1) 첨부 규칙 (제출 표준 형식 v3) : 압축(zip) 금지, 한 선박·한 달은 한 통에 모두 첨부, 해당 월 파일만 첨부');
+  L.push('2) 용량 과다로 전송이 안 되면 압축하지 마시고 ETP 로 유선 연락 주시기 바랍니다.');
+  L.push('3) 이미 송부하셨다면 송부 일자와 수신처를 회신해 주시기 바랍니다.');
+  if (multi) L.push('4) 본 메일은 해당 선박에 일괄 발송되었습니다. 각 호선 항목만 확인해 주시기 바랍니다.');
   const ko = L.join('\n');
   if (lang === 'ko') return ko;
 
@@ -813,8 +820,10 @@ function missingMailBody(period, codes, lang) {
     }
   });
   E.push('', '■ Note',
-    '1) If already sent, advise the date sent and the recipient.');
-  if (multi) E.push('2) Sent to all vessels listed. Please check the item for your own vessel only.');
+    '1) Attachment rules (Submission Standard v3): no zip, one mail per vessel-month with all files, that month only',
+    '2) If the mail is too large to send, do not zip it - call ETP',
+    '3) If already sent, advise the date sent and the recipient.');
+  if (multi) E.push('4) Sent to all vessels listed. Please check the item for your own vessel only.');
   return ko + '\n' + E.join('\n');
 }
 
