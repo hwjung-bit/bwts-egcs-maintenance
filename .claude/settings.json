@@ -11,8 +11,7 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git checkout --:*)",
-      "Edit(pipelines/bwts_log/**)",
-      "Write(pipelines/bwts_log/tests/fixtures/**)"
+      "Edit(pipelines/bwts_log/**)"
     ],
     "deny": [
       "Edit(contracts/thresholds.json)"
