@@ -109,6 +109,12 @@ function mount(root) {
     <button onclick="bwtsLogTab.chatterList()"
       style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#c2410c"
       title="밸브 채터링 걸린 선박·월을 한 번에 목록으로">🔧 채터링 목록</button>
+    <button onclick="bwtsLogTab.missingMail('ko')"
+      style="cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#b91c1c"
+      title="최신 분석월 미수신 선박에 로그 제출 요청 메일 — 한글">✉ 미수신 요청</button>
+    <button onclick="bwtsLogTab.missingMail('ko_en')"
+      style="cursor:pointer;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;color:#b91c1c"
+      title="같은 메일을 한글+영문으로">한/영</button>
     <span class="count" id="blCnt"></span>
   </div>
   <div class="wrap">
@@ -561,6 +567,20 @@ function periodLabel() {
 // 버스트·최악시각 같은 분석 용어는 화면 표에만 두고 메일엔 넣지 않는다.
 const SENDER_KO = 'KMTC SM ETP / 정현우 과장';
 const SENDER_EN = 'KMTC SM ETP / Hyunwoo Jung';
+
+// Gmail 작성 URL 로 여는 메일에는 계정 서명이 안 붙는다 — 본문 끝에 직접 넣는다.
+const SIGN = [
+  '',
+  '감사합니다. thanks,',
+  '==========================================================',
+  '정 현 우 (H.W. JUNG 鄭 泫 禹 / 과장 (Manager)',
+  'Environment Tech. Part / Repair & Supply Team',
+  'KMTC Ship Management Co.,Ltd. (KMTC SM)',
+  'E-mail : hwjung@ekmtc.com',
+  'Office : TEL : +82-51-790-2473 / FAX : +82-51-466-5217',
+  'M.P : +82-10-7930-3820',
+  '==========================================================',
+].join('\n');
 const shipName = code => { const s = shipByCode(code); return (s && s.name) || code; };
 const replyBy = () => { const d = new Date(); d.setDate(d.getDate() + 5); return d; };
 const koDate = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
@@ -634,7 +654,7 @@ function chatterMailBody(codes, lang) {
   ships.forEach((c, i) => E.push(`${i + 1}) ${line(c, false)}`));
   E.push('', '* This item is separate from the BWTS operation grade.');
   if (multi) E.push('* Sent to all vessels listed. Please check your own vessel\'s item only.');
-  E.push('', 'Best regards,');
+  // 맺음 인사는 SIGN 이 대신한다 ('감사합니다. thanks,')
   return ko + '\n' + E.join('\n');
 }
 
@@ -648,7 +668,8 @@ function chatterMailMulti(codes, lang) {
   // 제목은 한글·영문 병기 — 본선에서 영문만 읽는 경우가 있다.
   const subject = `[KMTC SM][ETP] BWTS 밸브 채터링 및 VRCS 점검 요청의 건 (${per})`
     + ` / BWTS Valve Chattering & VRCS Inspection Request (${CH.month || F.year})`;
-  gmailCompose(ships.map(vesselMail).join(','), subject, chatterMailBody(ships, lang));
+  gmailCompose(ships.map(vesselMail).join(','), subject,
+    chatterMailBody(ships, lang) + '\n' + SIGN);
 }
 
 function chatterMail(code) { chatterMailMulti([code], 'ko'); }
@@ -710,7 +731,109 @@ function issueMail(lang) {
     ].join('\n');
   }
   gmailCompose(vesselMail(r.ship_code),
-    `[${r.ship_code}] BWTS 운전 상태 확인 요청 (${r.period})`, body);
+    `[${r.ship_code}] BWTS 운전 상태 확인 요청 (${r.period})`, body + '\n' + SIGN);
+}
+
+/* ===== 미수신 로그 제출 요청 =====
+   그 달 판정이 미수신(또는 폴더만/빈파일)인 선박에 한 통. 요청 파일은 메이커마다
+   다르므로 선박별로 적는다. KDE 는 ERMA FIRST 리트로핏이라 우리도 제출 형식을
+   확정하지 못했으므로 파일 목록을 지정하지 않고 생성 가능한 로그와 형식을 묻는다. */
+const MISSING_GRADES = ['미수신'];
+const MAKER_FILES = {
+  techcross: ['DATALOG', 'EVENTLOG', 'OPERATIONTIMELOG', 'TOTALLOG'],
+  alfalaval: ['PureBallast 운전 로그 (csv 또는 xlsx)'],
+};
+
+function makerOf(code) {
+  const s = shipByCode(code);
+  const m = String((s && s.bwts_maker) || '').toUpperCase();
+  if (m.includes('ERMA')) return 'ermafirst';
+  if (m.includes('ALFA')) return 'alfalaval';
+  if (m.includes('TECHCROSS') || m.includes('테크로스')) return 'techcross';
+  return 'techcross';
+}
+
+function missingShips(period) {
+  return ROWS.filter(r => r.period === period && MISSING_GRADES.includes(disp(r)))
+    .map(r => r.ship_code).sort();
+}
+
+function missingMailBody(period, codes, lang) {
+  const [y, m] = [period.slice(0, 4), +period.slice(5)];
+  const per = `${y}년 ${m}월`;
+  const due = replyBy();
+  const multi = codes.length > 1;
+  const recv = multi ? '하기 선박 / 선장님, 기관장님'
+    : `${shipName(codes[0])} / 선장님, 기관장님`;
+  const subj = `[CODE]_BWTS_LOG_DATA_(${y}.${String(m).padStart(2, '0')})`;
+
+  const L = [];
+  L.push(`수신 : ${recv}`);
+  L.push(`발신 : ${SENDER_KO}`);
+  L.push('');
+  L.push('업무에 수고가 많으십니다.');
+  L.push('');
+  L.push(`${per} BWTS LOG DATA 가 아직 접수되지 않아 제출을 요청드립니다. BWTS 운전 기록은 규제 대응 자료로 매월 취합되고 있어, 미제출 시 해당 월 운전 상태를 확인할 수 없습니다.`);
+  L.push('');
+  L.push('■ 요청 사항');
+  L.push(`1) ${per} BWTS LOG DATA 송부`);
+  L.push(`2) 메일 제목 : ${subj} (CODE = 자선 3자리 코드)`);
+  L.push(`3) 회신 희망일 : ${koDate(due)}`);
+  L.push('');
+  L.push('■ 선박별 요청 자료');
+  codes.forEach((c, i) => {
+    const mk = makerOf(c);
+    if (mk === 'ermafirst') {
+      L.push(`${i + 1}) ${shipName(c)} : BWTS 교체 이후 제출 형식이 확정되지 않았습니다.`);
+      L.push('   본선 시스템에서 추출 가능한 운전 로그 전부와, 추출 화면·파일 형식을 함께 회신해 주시기 바랍니다.');
+    } else {
+      L.push(`${i + 1}) ${shipName(c)} : ${MAKER_FILES[mk].join(', ')}`);
+    }
+  });
+  L.push('');
+  L.push('■ 참고 사항');
+  L.push('1) 로그 추출 방법 : HMI LOG 버튼 → 기간 설정 → 자료 선택 → CREATE (Troubleshooting Book 5.1 p.44)');
+  L.push('2) 이미 송부하셨다면 송부 일자와 수신처를 회신해 주시기 바랍니다.');
+  if (multi) L.push('3) 본 메일은 해당 선박에 일괄 발송되었습니다. 자선 항목만 확인해 주시기 바랍니다.');
+  const ko = L.join('\n');
+  if (lang === 'ko') return ko;
+
+  const E = ['', '----------------------------------------', '',
+    `TO : ${multi ? 'Vessels below' : shipName(codes[0])} / Master, Chief Engineer`,
+    `FR : ${SENDER_EN}`, '',
+    'Dear Master and Chief Engineer,', '',
+    `We have not received the BWTS LOG DATA for ${y}-${String(m).padStart(2, '0')}. The BWTS operation record is collected monthly for regulatory reporting, and without it we cannot confirm the month's operation.`, '',
+    '■ Request',
+    `1) Send the BWTS LOG DATA for ${y}-${String(m).padStart(2, '0')}`,
+    `2) Mail subject : ${subj} (CODE = your 3-letter ship code)`,
+    `3) Reply requested by ${due.toISOString().slice(0, 10)}`, '',
+    '■ Files required, per vessel'];
+  codes.forEach((c, i) => {
+    if (makerOf(c) === 'ermafirst') {
+      E.push(`${i + 1}) ${shipName(c)} : the submission format has not been fixed since the BWTS was replaced.`);
+      E.push('   Please send every operation log the system can export, and advise the export screen and file format.');
+    } else {
+      E.push(`${i + 1}) ${shipName(c)} : ${MAKER_FILES[makerOf(c)].join(', ')}`);
+    }
+  });
+  E.push('', '■ Note',
+    '1) Export: HMI LOG button - set the period - select the data - CREATE (Troubleshooting Book 5.1 p.44)',
+    '2) If already sent, advise the date sent and the recipient.');
+  if (multi) E.push('3) Sent to all vessels listed. Please check your own vessel\'s item only.');
+  return ko + '\n' + E.join('\n');
+}
+
+function missingMail(lang) {
+  const periods = [...new Set(ROWS.map(r => r.period))].sort();
+  const period = periods.length ? periods[periods.length - 1] : '';
+  if (!period) { toast('데이터 없음'); return; }
+  const codes = missingShips(period);
+  if (!codes.length) { toast(`${period} 미수신 선박 없음`); return; }
+  const m = +period.slice(5);
+  const subject = `[KMTC SM][ETP] ${m}월 BWTS LOG DATA 제출 요청의 건`
+    + ` / Request for BWTS LOG DATA (${period})`;
+  gmailCompose(codes.map(vesselMail).join(','), subject,
+    missingMailBody(period, codes, lang) + '\n' + SIGN);
 }
 
 /* ===== 로컬 분석 실행 (kmtcfolder 프로토콜 → 로컬 Claude Code) =====
@@ -795,7 +918,7 @@ async function override() {
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
   chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailMulti,
-  chatterMailSelected, chatterPick, issueMail,
+  chatterMailSelected, chatterPick, issueMail, missingMail,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };
