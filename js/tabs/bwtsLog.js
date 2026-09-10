@@ -609,7 +609,7 @@ function chatterMailBody(codes, lang) {
   const per = CH.month ? `${+CH.month.slice(0, 4)}년 ${+CH.month.slice(5)}월` : `${F.year}년`;
   const due = replyBy();
   const multi = ships.length > 1;
-  const recv = multi ? '하기 선박 / 선장님, 기관장님' : `${shipName(ships[0])} / 선장님, 기관장님`;
+  const recv = multi ? '수신처 제위 / 선장님, 기관장님' : `${shipName(ships[0])} / 선장님, 기관장님`;
   const line = (c, ko) => `${shipName(c)} : ` + by[c].map(x =>
     `${x.valve} ${x.n.toLocaleString()}${ko ? '회' : ''} (${ko ? sev(x.n) : sevEn(x.n)}${x.months > 1 ? (ko ? `, ${x.months}개월` : `, ${x.months} months`) : ''})`).join(' / ');
 
@@ -633,7 +633,7 @@ function chatterMailBody(codes, lang) {
   L.push('');
   L.push('■ 참고 사항');
   L.push('1) 밸브 개폐 신호 반복은 BWTS 운전 등급과는 별개의 점검 항목입니다.');
-  if (multi) L.push('2) 본 메일은 해당 선박에 일괄 발송되었습니다. 자선 항목만 확인해 주시기 바랍니다.');
+  if (multi) L.push('2) 본 메일은 해당 선박에 일괄 발송되었습니다. 각 호선 항목만 확인해 주시기 바랍니다.');
   const ko = L.join('\n');
   if (lang === 'ko') return ko;
 
@@ -760,7 +760,7 @@ function missingMailBody(period, codes, lang) {
   const per = `${y}년 ${m}월`;
   const due = replyBy();
   const multi = codes.length > 1;
-  const recv = multi ? '하기 선박 / 선장님, 기관장님'
+  const recv = multi ? '수신처 제위 / 선장님, 기관장님'
     : `${shipName(codes[0])} / 선장님, 기관장님`;
   const subj = `[CODE]_BWTS_LOG_DATA_(${y}.${String(m).padStart(2, '0')})`;
 
@@ -774,7 +774,7 @@ function missingMailBody(period, codes, lang) {
   L.push('');
   L.push('■ 요청 사항');
   L.push(`1) ${per} BWTS LOG DATA 송부`);
-  L.push(`2) 메일 제목 : ${subj} (CODE = 자선 3자리 코드)`);
+  L.push(`2) 메일 제목 : ${subj} (CODE = 각 호선 3자리 코드)`);
   L.push(`3) 회신 희망일 : ${koDate(due)}`);
   L.push('');
   L.push('■ 선박별 요청 자료');
@@ -789,9 +789,8 @@ function missingMailBody(period, codes, lang) {
   });
   L.push('');
   L.push('■ 참고 사항');
-  L.push('1) 로그 추출 방법 : HMI LOG 버튼 → 기간 설정 → 자료 선택 → CREATE (Troubleshooting Book 5.1 p.44)');
-  L.push('2) 이미 송부하셨다면 송부 일자와 수신처를 회신해 주시기 바랍니다.');
-  if (multi) L.push('3) 본 메일은 해당 선박에 일괄 발송되었습니다. 자선 항목만 확인해 주시기 바랍니다.');
+  L.push('1) 이미 송부하셨다면 송부 일자와 수신처를 회신해 주시기 바랍니다.');
+  if (multi) L.push('2) 본 메일은 해당 선박에 일괄 발송되었습니다. 각 호선 항목만 확인해 주시기 바랍니다.');
   const ko = L.join('\n');
   if (lang === 'ko') return ko;
 
@@ -814,9 +813,8 @@ function missingMailBody(period, codes, lang) {
     }
   });
   E.push('', '■ Note',
-    '1) Export: HMI LOG button - set the period - select the data - CREATE (Troubleshooting Book 5.1 p.44)',
-    '2) If already sent, advise the date sent and the recipient.');
-  if (multi) E.push('3) Sent to all vessels listed. Please check your own vessel\'s item only.');
+    '1) If already sent, advise the date sent and the recipient.');
+  if (multi) E.push('2) Sent to all vessels listed. Please check the item for your own vessel only.');
   return ko + '\n' + E.join('\n');
 }
 
