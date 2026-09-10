@@ -600,7 +600,11 @@ function chatterMailBody(codes, lang) {
   L.push(`수신 : ${recv}`);
   L.push(`발신 : ${SENDER_KO}`);
   L.push('');
-  L.push(`업무에 수고가 많으십니다. ${per} BWTS 로그 확인 결과 하기 선박의 밸브에서 채터링(열림·닫힘 신호 반복)이 확인되어 밸브 및 VRCS 시스템 점검을 요청드립니다.`);
+  L.push('업무에 수고가 많으십니다.');
+  L.push('');
+  L.push('밸브 채터링 과다로 BWTS 로그가 과다 기록되며, BWTS 시스템에 DATA LOG 가 과도하게 쌓여 성능이 저하되는 문제가 발생합니다.');
+  L.push('');
+  L.push(`${per} BWTS 로그 확인 결과 하기 선박의 밸브에서 채터링(열림·닫힘 신호 반복)이 확인되어 밸브 및 VRCS 시스템 점검을 요청드립니다.`);
   L.push('');
   L.push('■ 요청 사항');
   L.push('1) 하기 밸브 채터링 및 VRCS 시스템 점검');
@@ -620,6 +624,7 @@ function chatterMailBody(codes, lang) {
     `TO : ${multi ? 'Vessels below' : shipName(ships[0])} / Master, Chief Engineer`,
     `FR : ${SENDER_EN}`, '',
     'Dear Master and Chief Engineer,', '',
+    'Excessive valve chattering floods the BWTS log, and the DATA LOG built up in the BWTS system degrades its performance.', '',
     `Our review of the ${CH.month || F.year} BWTS log shows valve chattering (repeating open/close signal) on the valves below. Please check the valves and the VRCS system.`, '',
     '■ Request',
     '1) Check the valves below and the VRCS (valve remote control) system',
