@@ -8,7 +8,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 
 from config import (
-    VESSELS, VESSEL_BY_CODE, LOCAL_CACHE_DIR,
+    VESSELS, VESSEL_BY_CODE, LOCAL_CACHE_DIR, maker_at,
     get_vessel_folder, get_csv_files, scan_reception_matrix,
 )
 from csv_parser import combine_csv_results
@@ -78,6 +78,42 @@ def _classify_reception(folder, csv_files):
     return "folder_only", "폴더만 존재 (파일 없음)"
 
 
+def _last_session(summary, mode):
+    sess = [s for s in (summary.get("session_summaries") or [])
+            if s.get("mode") == mode and s.get("date")]
+    if not sess:
+        return None
+    sess.sort(key=lambda s: (s["date"], s.get("id") or 0))
+    return sess[-1]
+
+
+def last_ops_clean(summary, need_ballast, need_deballast):
+    """Were the month's last ballasting / deballasting sessions clean?
+
+    Returns True only if every mode we were asked about has a last session
+    and that session is within limits. Checks the modes separately: an
+    injection problem is answered by the last BALLAST, a discharge problem
+    by the last DEBALLAST. Judging a discharge violation by the last
+    ballasting would clear a month whose final discharge was 2.8 ppm
+    (KCB 2026-08).
+
+    Reads session_summaries, which the cache already holds — so a re-grade
+    needs no G: access.
+    """
+    if need_ballast:
+        last = _last_session(summary, "BALLAST")
+        if not last or last.get("in_range") is not True:
+            return False
+    if need_deballast:
+        last = _last_session(summary, "DEBALLAST")
+        if not last:
+            return False
+        mx = last.get("stable_max")
+        if mx is None or mx > BL["tro_deballast_max_ppm"]:
+            return False
+    return True
+
+
 def compute_grade(summary):
     """
     Returns (grade_label, [reasons]).
@@ -123,7 +159,21 @@ def compute_grade(summary):
     trip_count = summary.get("trip_count", 0)
     chattering = summary.get("chattering", [])
 
-    if not no_tro:
+    flags = summary.setdefault("flags", [])
+
+    # 그 달 TRO 이상이 있었어도 마지막 운전이 정상이면 조치된 것으로 본다.
+    # 주입 이상은 마지막 밸러스팅이, 배출 이상은 마지막 디밸러스팅이 답한다.
+    tro_bad = (not no_tro) and (tro_b_ok is False or tro_d_ok is False)
+    cleared = False
+    if tro_bad and BL.get("last_ballast_clears_tro", False):
+        if last_ops_clean(summary, tro_b_ok is False, tro_d_ok is False):
+            cleared = True
+            what = "밸러스팅" if tro_b_ok is False else ""
+            what += ("·" if what and tro_d_ok is False else "")
+            what += "디밸러스팅" if tro_d_ok is False else ""
+            flags.append(f"! 월 중 TRO 이상 → 마지막 {what} 정상")
+
+    if not no_tro and not cleared:
         if tro_b_ok is False:
             reasons.append(f"주입 TRO 범위 이탈 (정상 세션 {summary.get('tro_b_session_ok', '?')})")
         if tro_d_ok is False:
@@ -132,7 +182,6 @@ def compute_grade(summary):
         reasons.append(f"Trip {trip_count}건")
     # 밸브 채터링: 2026-09-01 부터 등급이 아니라 참고 표시(flags). 밸브가
     # 열고 닫히는 패턴만으로 점검필요를 매기면 정상 운전의 절반이 걸렸다.
-    flags = summary.setdefault("flags", [])
     # 표시 대상은 chatter_report_min_events 이상만. 그 미만(한두 번 튄 것)은
     # 실측 2/3를 차지해 신호가 아니라 소음이었다.
     worth = [c for c in chattering
@@ -144,6 +193,9 @@ def compute_grade(summary):
             severe = sum(1 for c in worth if c.get("severity") == "심각")
             flags.append(f"밸브 채터링 {len(worth)}건"
                          + (f" (심각 {severe})" if severe else ""))
+
+    # 같은 표시가 두 번 붙지 않게 (재판정 시 기존 flags 위에 덧붙는 경우)
+    summary["flags"] = list(dict.fromkeys(flags))
 
     if reasons:
         return "점검필요", reasons
@@ -188,8 +240,9 @@ def compute_vessel_summary(code, year, month, verbose=False):
         "gps_areas": [],
     }
 
-    # 0. Check BWTS type first — non-Techcross skip TRO
-    bwts_type = v.get("bwts_type", "techcross")
+    # 0. Check BWTS type first — non-Techcross skip TRO.
+    #    교체 이력이 있으면 그 달 기준 메이커를 쓴다 (KDE 2026-08 부터 테크로스).
+    bwts_type = maker_at(v, year, month)
 
     if bwts_type != "techcross":
         folder = get_vessel_folder(year, month, code)

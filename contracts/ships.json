@@ -148,7 +148,15 @@
       "code": "KDE",
       "name": "KMTC DELHI",
       "bwts": "erma_first",
-      "log_format": "EF"
+      "log_format": "EF",
+      "bwts_history": [
+        {
+          "from": "2026-08",
+          "bwts": "techcross",
+          "log_format": "B",
+          "note": "ERMA FIRST -> Techcross 교체. 2026-06 까지 ERMA(AH*.CSV, zip), 2026-08 부터 표준 5종(코드_YYYY_MM_LOGTYPE). 2026-07 은 미수신이라 전환 시점 미확인 — 07 수신되면 확인 후 조정"
+        }
+      ]
     }
   ]
 }

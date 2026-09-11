@@ -34,7 +34,24 @@ for _s in _SHIPS_JSON:
           "log_format": _s.get("log_format", "")}
     if _s.get("bwts") and _s["bwts"] != "techcross":
         _v["bwts_type"] = _s["bwts"]
+    if _s.get("bwts_history"):
+        _v["bwts_history"] = _s["bwts_history"]
     VESSELS.append(_v)
+
+
+def maker_at(v, year: int, month: int) -> str:
+    """BWTS maker for this vessel in this month.
+
+    A retrofit changes the log format mid-history, so the maker cannot be a
+    single field: KDE ran ERMA FIRST through 2026-06 and Techcross from
+    2026-08. bwts_history entries apply from their "from" month onward.
+    """
+    maker = v.get("bwts_type", "techcross")
+    period = f"{year}-{month:02d}"
+    for h in v.get("bwts_history") or []:
+        if period >= h["from"]:
+            maker = h.get("bwts", maker)
+    return maker
 
 # Vessel lookup helpers
 VESSEL_BY_CODE = {v["code"]: v for v in VESSELS}

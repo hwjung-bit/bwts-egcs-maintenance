@@ -20,7 +20,7 @@ import argparse
 from datetime import datetime
 from collections import Counter
 
-from config import LOCAL_CACHE_DIR, OUTPUT_DIR, VESSELS
+from config import LOCAL_CACHE_DIR, OUTPUT_DIR, VESSELS, maker_at
 import fleet_summary
 from fleet_summary import build_fleet_matrix
 import integrity
@@ -77,6 +77,59 @@ def diff_against_db(rows):
     return auto_changed, reviewed_changed
 
 
+def regrade_from_cache(sy, sm, ey, em, ship_codes, verbose=False):
+    """Re-grade stored summaries without touching G:.
+
+    The cache holds the parsed month (sessions, TRO, counts); only the
+    verdict is recomputed. Use when a grading rule changed but parsing did
+    not — a full re-parse of 672 vessel-months takes minutes and would read
+    the same bytes back.
+    """
+    matrix = {}
+    n_read = n_changed = 0
+    for year in range(sy, ey + 1):
+        m_start = sm if year == sy else 1
+        m_end = em if year == ey else 12
+        for month in range(m_start, m_end + 1):
+            key = (year, month)
+            matrix[key] = []
+            for v in VESSELS:
+                code = v["code"]
+                if ship_codes and code not in ship_codes:
+                    continue
+                cp = fleet_summary._cache_path(code, year, month)
+                if not cp.exists():
+                    continue
+                try:
+                    with open(cp, "r", encoding="utf-8") as f:
+                        s = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    continue
+                # 테크로스만 compute_grade 로 판정한다. 알파라발·ERMA 는
+                # compute_vessel_summary 안의 별도 분기에서 등급이 정해지므로
+                # 여기서 compute_grade 를 돌리면 엉뚱한 값이 나온다.
+                if maker_at(v, year, month) != "techcross":
+                    matrix[key].append(s)
+                    continue
+                n_read += 1
+                before = s.get("grade")
+                # 이전 판정이 남긴 표시는 지우고 다시 만든다
+                s["flags"] = [x for x in (s.get("flags") or [])
+                              if not str(x).startswith("!")
+                              and not str(x).startswith("밸브 채터링")]
+                grade, reasons = fleet_summary.compute_grade(s)
+                s["grade"] = grade
+                s["grade_reasons"] = reasons
+                s.pop("grade_rule", None)
+                if before != grade:
+                    n_changed += 1
+                    if verbose:
+                        print(f"[{code}] {year}-{month:02d}  {before} -> {grade}")
+                matrix[key].append(s)
+    print(f"캐시 재판정: {n_read}개월 읽음, 규칙 판정 변경 {n_changed}건")
+    return matrix
+
+
 def clamp_to_last_month(start_year, start_month, end_year, end_month):
     """로그는 익월 초에 도착 — 당월/미래월은 미수신 오탐이므로 전월까지만."""
     now = datetime.now()
@@ -106,6 +159,9 @@ def main():
     ap.add_argument("--ships", type=str,
                     help="선박 코드 일부만 예: KCB,KSG (미지정=전체). "
                          "이력 판정 때문에 시작월은 1월로 두는 것이 안전")
+    ap.add_argument("--regrade", action="store_true",
+                    help="캐시의 기존 분석 결과로 등급만 다시 매긴다 "
+                         "(G드라이브 재파싱 없음 — 판정 규칙만 바뀌었을 때)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -129,7 +185,9 @@ def main():
         else:
             shutil.rmtree(LOCAL_CACHE_DIR)
             print("캐시 삭제")
-    _stamp_cache_version()
+    # 재판정은 캐시를 그대로 쓴다 — 여기서 버전 스탬프를 찍으면 캐시가 지워진다.
+    if not args.regrade:
+        _stamp_cache_version()
 
     if args.years:
         p = args.years.split("-")
@@ -143,8 +201,11 @@ def main():
               f"부분 재분석은 '{sy} 1 {em} --ships …' 로 돌릴 것")
     scope = f"{len(ship_codes)}척 {','.join(ship_codes)}" if ship_codes else f"{len(VESSELS)}척"
     print(f"BWTS log pipeline  {sy}-{sm:02d} ~ {ey}-{em:02d}  ({scope})  {ANALYZER_VERSION}")
-    matrix = build_fleet_matrix(sy, sm, ey, em, verbose=args.verbose,
-                                ship_codes=ship_codes)
+    if args.regrade:
+        matrix = regrade_from_cache(sy, sm, ey, em, ship_codes, args.verbose)
+    else:
+        matrix = build_fleet_matrix(sy, sm, ey, em, verbose=args.verbose,
+                                    ship_codes=ship_codes)
     rows = [s for key in sorted(matrix) for s in matrix[key]]
     # cached months already carry the integrity re-grade; report the rule grade
     before = Counter(s.get("grade_rule") or s["grade"] for s in rows)
@@ -152,8 +213,10 @@ def main():
     regraded = 0
     if not args.no_integrity:
         regraded = integrity.apply_matrix(matrix)
-        # persist integrity result into cache so the web/skill see the same thing
-        for s in rows:
+        # persist integrity result into cache so the web/skill see the same thing.
+        # 재판정 모드에서는 쓰지 않는다 — 캐시는 파싱 결과의 보관본이고, 판정만
+        # 다시 한 값을 되쓰면 잘못된 판정이 그대로 굳는다 (2026-09-11 실제로 겪음).
+        for s in ([] if args.regrade else rows):
             cp = fleet_summary._cache_path(s["code"], s["year"], s["month"])
             try:
                 with open(cp, "w", encoding="utf-8") as f:
