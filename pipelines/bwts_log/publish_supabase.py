@@ -9,11 +9,20 @@ import sys
 import json
 from datetime import datetime, timezone
 
-from thresholds import VERSION as TH_VERSION
+import hashlib
+
+from thresholds import TH
 from csv_parser import PARSER_VERSION
 
 INTEGRITY_VERSION = "integ-2026-09"
-ANALYZER_VERSION = f"th-{TH_VERSION}|{INTEGRITY_VERSION}|{PARSER_VERSION}"
+
+# 로그 판정에 실제로 쓰이는 섹션만 서명한다. thresholds.json 최상위 version 을
+# 쓰면 EGCS 검교정이나 메일 임계값을 고쳐도 BWTS 캐시 672개월치가 통째로 날아가
+# G드라이브 재파싱이 돈다 (2026-09-09 bd4d70c 가 실제로 그랬다).
+_TH_SIG_SRC = json.dumps({k: TH[k] for k in ("bwts_log", "integrity")},
+                         sort_keys=True, ensure_ascii=False)
+TH_SIG = hashlib.sha1(_TH_SIG_SRC.encode("utf-8")).hexdigest()[:8]
+ANALYZER_VERSION = f"th-{TH_SIG}|{INTEGRITY_VERSION}|{PARSER_VERSION}"
 
 _PAYLOAD_KEYS = (
     "grade", "grade_rule", "grade_reasons", "reception",
