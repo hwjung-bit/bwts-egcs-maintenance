@@ -14,6 +14,7 @@ import { requireTH } from './thresholds.js';
 import { daysUntil, dLabel } from './dates.js';
 import { bwtsDue, bwtsLevel } from '../tabs/bwtsCal.js';
 import { egcsCellStatus } from '../tabs/egcsCal.js';
+import { calMailLink } from './calMail.js';
 
 export const CHIP_MAX = 8;   // 칩 상한 — 표 대신 한 줄로 끝내기 위함
 
@@ -33,7 +34,7 @@ export function panelHtml(o) {
     `<span class="pill ${c.cls || ''}"${c.color ? ` style="background:${c.color}22;color:${c.color}"` : ''}${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.text)}</span>`).join('') +
     (o.chips.length > CHIP_MAX ? `<span class="muted">+${o.chips.length - CHIP_MAX}</span>` : '');
   return `<div class="cal-panel" onclick="calDash.go('${o.tab}')" title="클릭 → ${esc(o.title)} 탭 열기">` +
-    `<div class="cal-head"><b>${esc(o.title)}</b><span class="muted cal-unit">${esc(o.unit)}</span>` +
+    `<div class="cal-head"><b>${esc(o.title)}</b><span class="muted cal-unit">${esc(o.unit)}</span>${o.extra || ''}` +
       `<span class="cal-rate ${o.bigCls || ''}"${o.bigTitle ? ` title="${esc(o.bigTitle)}"` : ''}>${esc(o.big)}<small>${esc(o.bigLabel)}</small></span></div>` +
     (bar || '<div class="cal-bar"></div>') +
     `<div class="cal-nums">${pills}</div>` +
@@ -75,6 +76,7 @@ function calPanel(title, unit, items, staleDays, tab) {
     .filter(i => !seen[i.label] && (seen[i.label] = 1));
   return panelHtml({
     title, unit: `${unit} · ${total}`, tab,
+    extra: calMailLink('text-decoration:none;font-size:12px;flex-shrink:0;margin-right:6px'),
     big: total ? Math.round((n.ok + n.soon) / total * 100) + '%' : '—', bigLabel: '관리율',
     bigCls: n.expired ? 'rose' : (n.soon ? 'amber' : 'green'), bigTitle: '관리율 = (정상+임박) ÷ 전체',
     segs: [

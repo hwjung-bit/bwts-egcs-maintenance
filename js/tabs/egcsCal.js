@@ -5,6 +5,7 @@ import { $, esc, placePopup, toast } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
+import { calMailLink } from '../shared/calMail.js';
 
 function getShipWms(code) {
   const s = shipByCode(code);
@@ -117,6 +118,7 @@ function refresh() {
   if (rest.length) groups.push({ label: '기타', ships: rest });
 
   $('egcsCalRoot').innerHTML =
+    `<div style="display:flex;justify-content:flex-end;margin-bottom:8px">${calMailLink()}</div>` +
     cycleBoxHtml(CYCLE, WARN) +
     groups.filter(g => g.ships.length)
       .map(g => makerTable(g, equipSet, map, CYCLE, WARN)).join('') +

@@ -144,6 +144,10 @@ def to_repair(t):
     action = t.get("lastAction", "")
     if t.get("nextAction"):
         action += (" → 다음: " if action else "다음: ") + t["nextAction"]
+    # 진행률은 repairs 에 칸이 없다 — 0/100 이 아닌 값만 조치 앞에 붙여 보여준다
+    prog = re.sub(r"\D", "", t.get("progress", ""))
+    if prog and prog not in ("0", "100"):
+        action = f"[{prog}%] " + action if action else f"[{prog}%]"
     return {
         "id": "WL_" + t["id"],
         "ship_code": ship,

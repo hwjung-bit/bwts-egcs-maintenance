@@ -4,12 +4,12 @@
 // app.js compares its own ?v with this BUILD: a mismatch means the browser
 // still holds old modules, so it re-fetches FILES with cache:'reload' and
 // reloads. Bump BUILD together with index.html ?v= and version.json.
-export const BUILD = '20260916f';
+export const BUILD = '20260916g';
 
 export const FILES = [
   'js/version.js', 'js/app.js',
   'js/core/auth.js', 'js/core/dom.js', 'js/core/router.js', 'js/core/state.js', 'js/core/supabase.js',
-  'js/shared/constants.js', 'js/shared/dates.js', 'js/shared/drive.js', 'js/shared/ships.js', 'js/shared/thresholds.js', 'js/shared/calSummary.js',
+  'js/shared/constants.js', 'js/shared/dates.js', 'js/shared/drive.js', 'js/shared/ships.js', 'js/shared/thresholds.js', 'js/shared/calSummary.js', 'js/shared/calMail.js',
   'js/tabs/home.js', 'js/tabs/mail.js', 'js/tabs/repairs.js', 'js/tabs/status.js', 'js/tabs/bwtsLog.js',
   'js/tabs/bwtsCal.js', 'js/tabs/egcsCal.js', 'js/tabs/ships.js',
   'css/base.css', 'contracts/thresholds.json',
