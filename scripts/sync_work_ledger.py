@@ -136,8 +136,9 @@ def to_repair(t):
         system = "EGCS"
     else:
         system = "BWTS" if re.search(r"BWTS", text, re.I) else "EGCS"
+    # ships FK: unknown/ALL/blank must be NULL, '' is rejected
     ship = t.get("vessel", "").upper()
-    ship = ship if ship in SHIP_CODES else ""
+    ship = ship if ship in SHIP_CODES else None
     symptom = t["title"] + (" — " + t["detail"] if t.get("detail") else "")
     action = t.get("lastAction", "")
     if t.get("nextAction"):
