@@ -163,6 +163,117 @@ def to_repair(t):
     }
 
 
+# ── 메일 건 ↔ 업무대장 건 병합 ─────────────────────────────────────────
+# 메일대장에서 옮긴 수리이력(ML_)과 업무대장에서 온 건(WL_)이 같은 일이면
+# WL_ 을 주인으로 두고 메일 링크·첨부·Drive 폴더를 넘긴 뒤 ML_ 을 지운다.
+# 짝 판정: 같은 선박·시스템, 날짜 ±MERGE_DAYS, 제목 공통 단어 ≥2 & 겹침 ≥ MERGE_MIN.
+MERGE_DAYS = 30
+MERGE_MIN = 0.5
+MERGE_MIN_HITS = 2
+STOP = {"및", "관련", "내용", "건", "요청", "확인", "작성", "검토", "정리", "전달", "본선",
+        "진행", "대기", "완료", "보류", "PO", "RST", "ALL", "RE", "FW", "FWD", "KMTC", "SM", "ETP",
+        "BWTS", "EGCS", "호선", "호", "의"}
+
+
+def tokens(s):
+    s = re.sub(r"\[[^\]]*\]", " ", str(s or "")).upper()
+    out = set()
+    for p in re.split(r"[^0-9A-Z가-힣]+", s):
+        if len(p) >= 2 and p not in STOP:
+            out.add(p)
+    return out
+
+
+def overlap(a, b):
+    hit = len(a & b)
+    if hit < MERGE_MIN_HITS:
+        return 0.0, hit
+    return hit / max(4, min(len(a), len(b))), hit
+
+
+def day_diff(a, b):
+    try:
+        return abs((dt.date.fromisoformat(str(a)[:10]) - dt.date.fromisoformat(str(b)[:10])).days)
+    except ValueError:
+        return 999
+
+
+def parse_list(v):
+    if not v:
+        return []
+    if isinstance(v, str):
+        try:
+            v = json.loads(v)
+        except ValueError:
+            return []
+    return v if isinstance(v, list) else []
+
+
+def merge_duplicates(sb):
+    cols = "id,ship_code,system,date,symptom,email_subject,email_link,source_msg_id,attachments,file_url,history"
+    rows = sb.table("repairs").select(cols).execute().data or []
+    wl = [r for r in rows if str(r["id"]).startswith("WL_")]
+    ml = [r for r in rows if str(r["id"]).startswith("ML_")]
+    merged = 0
+    for m in ml:
+        if not m.get("ship_code"):
+            continue
+        mt = tokens(m.get("email_subject") or m.get("symptom"))
+        best, best_score = None, 0.0
+        for w in wl:
+            if w.get("ship_code") != m["ship_code"] or w.get("system") != m.get("system"):
+                continue
+            if day_diff(w.get("date"), m.get("date")) > MERGE_DAYS:
+                continue
+            score, _ = overlap(mt, tokens(w.get("symptom")))
+            if score > best_score:
+                best, best_score = w, score
+        if not best or best_score < MERGE_MIN:
+            continue
+        merge_into(sb, best, m)
+        merged += 1
+        log.info("병합 %.2f  %s ← %s | %s", best_score, best["id"], m["id"],
+                 (m.get("email_subject") or m.get("symptom") or "")[:50])
+    return merged
+
+
+def merge_into(sb, w, m):
+    patch = {}
+    if not w.get("email_link") and m.get("email_link"):
+        patch["email_link"] = m["email_link"]
+    if not w.get("source_msg_id") and m.get("source_msg_id"):
+        patch["source_msg_id"] = m["source_msg_id"]
+    atts = parse_list(w.get("attachments"))
+    names = {a.get("name") for a in atts if isinstance(a, dict)}
+    added = [a for a in parse_list(m.get("attachments")) if isinstance(a, dict) and a.get("name") not in names]
+    if added:
+        patch["attachments"] = json.dumps(atts + added, ensure_ascii=False)
+    folder_id = None
+    fm = re.search(r"/folders/([A-Za-z0-9_-]+)", m.get("file_url") or "")
+    if fm:
+        folder_id = fm.group(1)
+    else:
+        fr = sb.table("folder_requests").select("folder_id").eq("repair_id", m["id"]).execute().data or []
+        if fr and fr[0].get("folder_id"):
+            folder_id = fr[0]["folder_id"]
+    if folder_id and not w.get("file_url"):
+        patch["file_url"] = f"https://drive.google.com/drive/folders/{folder_id}"
+    hist = parse_list(w.get("history"))
+    hist.append({"date": dt.date.today().isoformat(), "by": "sync",
+                 "note": f"메일 건 병합: {m['id']} — {(m.get('email_subject') or m.get('symptom') or '')[:80]}"})
+    patch["history"] = json.dumps(hist, ensure_ascii=False)
+    sb.table("repairs").update(patch).eq("id", w["id"]).execute()
+    if folder_id:
+        # 이 WL 건의 작업폴더는 이미 있다 — 워커가 새로 만들지 않도록 linked 로 남긴다
+        sb.table("folder_requests").upsert({
+            "repair_id": w["id"], "ship_code": w["ship_code"], "system": w["system"],
+            "req_date": w.get("date"), "title": w.get("symptom") or "",
+            "status": "linked", "folder_id": folder_id, "msg_id": m.get("source_msg_id"),
+        }, on_conflict="repair_id").execute()
+    sb.table("folder_requests").update({"status": "merged"}).eq("repair_id", m["id"]).execute()
+    sb.table("repairs").delete().eq("id", m["id"]).execute()
+
+
 def sync(dry_run=False):
     tasks = read_tasks(get_creds())
     rows = [r for r in (to_repair(t) for t in tasks) if r]
@@ -184,10 +295,13 @@ def sync(dry_run=False):
         sb.table("repairs").delete().in_("id", stale[i:i + 200]).execute()
     if stale:
         log.info("대상 아님 → 삭제 %d건", len(stale))
+    merged = merge_duplicates(sb)
+    if merged:
+        log.info("메일 건 병합 %d건", merged)
     by = {}
     for r in rows:
         by[r["system"] + "/" + r["stage"]] = by.get(r["system"] + "/" + r["stage"], 0) + 1
-    return {"tasks": len(tasks), "matched": len(rows), "removed": len(stale), "by": by}
+    return {"tasks": len(tasks), "matched": len(rows), "removed": len(stale), "merged": merged, "by": by}
 
 
 if __name__ == "__main__":

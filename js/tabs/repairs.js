@@ -151,10 +151,13 @@ function renderRows() {
         ? `<span class="origin-badge" title="메일 없이 ${esc(org)}(으)로 접수된 건">${ORIGIN_ICON[org] || '📝'} ${esc(org)}</span>`
         : '<span class="muted" style="font-size:11px">—</span>');
     const fold = findDriveFolder(r);
-    const shipUrl = fold ? '' : shipFolderUrl(r);
+    // file_url 이 작업폴더 링크면 그게 정답 (병합·직접 지정) — 선박 폴더로 오해하지 않게
+    const linked = !fold && /\/folders\//.test(r.file_url || '') ? r.file_url : '';
+    const shipUrl = fold || linked ? '' : shipFolderUrl(r);
     const foldCell = fold
       ? `<a class="fold-link" href="${esc(fold.url)}" target="_blank" title="${esc(fold.name)}">📁 폴더</a>`
-      : (shipUrl ? `<a class="fold-link ship" href="${esc(shipUrl)}" target="_blank" title="매칭 폴더 없음 — 선박 폴더 열기">📁 선박</a>` : '');
+      : (linked ? `<a class="fold-link" href="${esc(linked)}" target="_blank" title="연결된 작업폴더">📁 폴더</a>`
+        : (shipUrl ? `<a class="fold-link ship" href="${esc(shipUrl)}" target="_blank" title="매칭 폴더 없음 — 선박 폴더 열기">📁 선박</a>` : ''));
     const atts = repairAtts(r);
     const attCell = atts.length
       ? `<button class="att-badge" onclick="driveUi.showAtts('${eid}',event)" title="첨부 목록">📄 ${atts.length}</button>` : '';
