@@ -86,8 +86,11 @@ function refresh() {
   renderRows();
   if (FOCUS) {
     const tr = document.querySelector(`#repairsRoot tr[data-id="${CSS.escape(FOCUS)}"]`);
-    FOCUS = null;
-    if (tr) { tr.scrollIntoView({ block: 'center' }); tr.classList.add('flash'); }
+    if (tr) tr.scrollIntoView({ block: 'center' });
+    // loadPending() re-renders shortly after; the row keeps its flash class
+    // through that because renderRows() reads FOCUS. Drop it once the flash
+    // animation is over.
+    setTimeout(() => { FOCUS = null; }, 3000);
   }
   // pending uploads are a separate small query; render again when it lands
   loadPending().then(renderRows).catch(() => {});
@@ -161,7 +164,7 @@ function renderRows() {
     const urgBtn = `<span onclick="${fromLedger ? '' : `repairsTab.toggleUrgent('${eid}')`}" ` +
       `style="cursor:${fromLedger ? 'default' : 'pointer'};font-size:12px;margin-right:2px;opacity:${urg ? 1 : .25}" ` +
       `title="${fromLedger ? '긴급도 ' + esc(r.urgency || '미지정') + ' — 업무관리대장에서 변경' : (urg ? '긴급 상 — 클릭하여 해제' : '클릭 → 긴급 상')}">🔥</span>`;
-    return `<tr data-id="${eid}">` +
+    return `<tr data-id="${eid}"${r.id === FOCUS ? ' class="flash"' : ''}>` +
       `<td style="white-space:nowrap">${esc(r.date || '—')}</td>` +
       `<td style="white-space:nowrap">${urgBtn}${esc(r.ship_code || '—')}</td>` +
       `<td><span class="pill pill-${(r.system || '').toLowerCase() === 'bwts' ? 'bwts' : 'egcs'}">${esc(r.system)}</span></td>` +
