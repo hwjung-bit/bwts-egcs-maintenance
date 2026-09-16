@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: '15 */2 * * *'   # every 2 hours, offset from mail collect
   workflow_dispatch:
+    inputs:
+      merge_dry:
+        description: '메일 건 병합을 실행하지 않고 예정만 로그에 남김 (1)'
+        default: ''
 
 jobs:
   sync:
@@ -34,6 +38,7 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          MERGE_DRY: ${{ inputs.merge_dry }}
         run: python scripts/sync_work_ledger.py
       - name: Notify on failure
         if: failure()

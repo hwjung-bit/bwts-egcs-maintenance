@@ -167,9 +167,10 @@ def to_repair(t):
 # 메일대장에서 옮긴 수리이력(ML_)과 업무대장에서 온 건(WL_)이 같은 일이면
 # WL_ 을 주인으로 두고 메일 링크·첨부·Drive 폴더를 넘긴 뒤 ML_ 을 지운다.
 # 짝 판정: 같은 선박·시스템, 날짜 ±MERGE_DAYS, 제목 공통 단어 ≥2 & 겹침 ≥ MERGE_MIN.
-MERGE_DAYS = 30
+MERGE_DAYS = 180   # 업무대장 등록일은 붙여넣은 날이라 메일 날짜와 한참 다를 수 있다
 MERGE_MIN = 0.5
 MERGE_MIN_HITS = 2
+MERGE_DRY = os.environ.get("MERGE_DRY", "") in ("1", "true")   # 병합 예정만 기록, 실행 안 함
 STOP = {"및", "관련", "내용", "건", "요청", "확인", "작성", "검토", "정리", "전달", "본선",
         "진행", "대기", "완료", "보류", "PO", "RST", "ALL", "RE", "FW", "FWD", "KMTC", "SM", "ETP",
         "BWTS", "EGCS", "호선", "호", "의"}
@@ -229,11 +230,17 @@ def merge_duplicates(sb):
             if score > best_score:
                 best, best_score = w, score
         if not best or best_score < MERGE_MIN:
+            if best and best_score >= 0.3:
+                log.info("근접(미병합) %.2f  %s | %s  ~  %s", best_score, m["id"],
+                         (m.get("email_subject") or "")[:40], (best.get("symptom") or "")[:40])
+            continue
+        log.info("병합%s %.2f  %s ← %s | %s  ~  %s", " 예정" if MERGE_DRY else "", best_score,
+                 best["id"], m["id"], (m.get("email_subject") or m.get("symptom") or "")[:40],
+                 (best.get("symptom") or "")[:40])
+        if MERGE_DRY:
             continue
         merge_into(sb, best, m)
         merged += 1
-        log.info("병합 %.2f  %s ← %s | %s", best_score, best["id"], m["id"],
-                 (m.get("email_subject") or m.get("symptom") or "")[:50])
     return merged
 
 
