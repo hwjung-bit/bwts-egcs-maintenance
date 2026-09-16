@@ -5,6 +5,7 @@ import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, placePopup } from '../core/dom.js';
 import { STATUS_OPTS } from '../shared/constants.js';
 import { getShipOrder } from '../shared/ships.js';
+import { calSummaryHtml } from '../shared/calSummary.js';
 
 /* History snapshots merge into the last row when it is younger than this,
    so a save followed by quick corrections stays one history entry. */
@@ -142,6 +143,7 @@ function refresh() {
       `<div class="card amber"><div class="num">${repairCnt}</div><div class="label">수리중</div></div>` +
       `<div class="card rose"><div class="num">${issueCnt}</div><div class="label">문제</div></div>` +
     '</div></div>' +
+    calSummaryHtml() +
     '<table style="table-layout:fixed;width:100%"><thead><tr>' +
       '<th style="width:36px">코드</th><th style="width:24%">BWTS</th><th style="width:24%">EGCS WMS</th>' +
       '<th style="width:24%">EGCS CEMS</th><th style="width:24%">EGCS BODY</th>' +

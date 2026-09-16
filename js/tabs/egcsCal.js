@@ -29,6 +29,20 @@ export function sensorModel(code, equip, model, CYCLE) {
 function level(days, warn) {
   return days <= 0 ? 'expired' : (days <= warn ? 'soon' : 'ok');
 }
+/* One sensor cell's judgment — the earlier of cal/repl due. The calibration
+   summary (js/shared/calSummary.js) calls this too, so it can never disagree
+   with the matrix. */
+export function egcsCellStatus(d, CYCLE, WARN) {
+  if (!d.last_date) return { lv: 'unknown', why: '검교정일 미기재' };
+  const sm = sensorModel(d.ship_code, (d.equip || '').replace('-', '/'), d.model, CYCLE);
+  const cyc = sm ? CYCLE[sm] : null;
+  if (!cyc) return { lv: 'unknown', why: '센서 모델 미기재' };
+  const calDue = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : null;
+  const replDue = addMonths(d.last_date, cyc.repl);
+  const due = calDue || replDue;
+  const days = daysUntil(due);
+  return { lv: level(days, WARN), due, days, calDue, replDue, repl: cyc.cal == null };
+}
 function fmtD(d) {
   const p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
@@ -141,23 +155,18 @@ function makerTable(g, equipSet, map, CYCLE, WARN) {
       const base = 'text-align:center;font-size:13px;padding:5px 3px;cursor:pointer;white-space:nowrap';
       // 산정 불가 칸은 회색(lv-unknown)으로만 구분한다 — 이유는 툴팁에.
       // 흰칸으로 두면 정상으로 오독된다.
-      if (!d.last_date) {
-        return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 미기재${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">` +
-          `${esc(d.note || '—')}</td>`;
-      }
-      const sm = sensorModel(s, o.key, d.model, CYCLE);
-      const cyc = sm ? CYCLE[sm] : null;
-      if (!cyc) {
+      const st = egcsCellStatus(d, CYCLE, WARN);
+      if (st.lv === 'unknown') {
+        if (!d.last_date) {
+          return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 미기재${info ? ' / ' + esc(info) : ''} — 클릭하여 수정">` +
+            `${esc(d.note || '—')}</td>`;
+        }
         return `<td class="lv-unknown"${ed} style="${base}" title="검교정일 ${esc(d.last_date)} / 센서 모델을 몰라 주기를 산정하지 못함${info ? ' / ' + esc(info) : ''} — 클릭하여 모델 입력">` +
           `${esc(d.last_date)}</td>`;
       }
       // 한 줄 요약: 먼저 도래하는 만료일만. 상세(남은 일수·신환·모델·S/N)는 툴팁으로.
-      const calDue = cyc.cal != null ? addMonths(d.last_date, cyc.cal) : null;
-      const replDue = addMonths(d.last_date, cyc.repl);
-      const due = calDue || replDue;
-      const dueDays = daysUntil(due);
-      const lv = level(dueDays, WARN);
-      const tag = cyc.cal == null ? ' 신환' : '';
+      const { due, days: dueDays, lv, calDue, replDue } = st;
+      const tag = st.repl ? ' 신환' : '';
       const tip = `검교정일 ${d.last_date}` +
         (calDue ? ` / 다음 검교정 ${fmtD(calDue)} (${dLabel(daysUntil(calDue))})` : '') +
         ` / 신환 ${fmtD(replDue)} (${dLabel(daysUntil(replDue))})` +

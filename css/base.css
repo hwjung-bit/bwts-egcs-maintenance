@@ -122,6 +122,16 @@ tr.stale:hover{background:#fef3c7 !important}
 .cal-table th,.cal-table td{padding:6px 10px;font-size:12px}
 .lv-expired{background:#fee2e2;color:#b91c1c}.lv-soon{background:#ffedd5;color:#c2410c}
 .lv-ok{background:#dcfce7;color:#15803d}.lv-unknown{background:#f1f5f9;color:#64748b}
+/* 검교정 관리 현황 요약판 (종합·현황 탭, js/shared/calSummary.js) */
+.cal-dash{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin:0 0 14px}
+.cal-panel{background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;border:2px solid transparent;transition:all .15s}
+.cal-panel:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1);border-color:#93c5fd}
+.cal-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}.cal-head b{font-size:14px}
+.cal-rate{margin-left:auto;font-size:22px;font-weight:700}.cal-rate small{font-size:10px;color:#94a3b8;margin-left:4px;font-weight:400}
+.cal-rate.green{color:#16a34a}.cal-rate.amber{color:#d97706}.cal-rate.rose{color:#e11d48}
+.cal-bar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:#f1f5f9;margin-bottom:8px}
+.cal-nums{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.cal-urgent{font-size:11px;color:#64748b;display:flex;gap:4px;align-items:center;flex-wrap:wrap}
 .edit-cell{cursor:pointer;border-radius:4px}.edit-cell:hover{background:#eff6ff}
 
 /* ===== v3 additions: tab isolation + version banner ===== */
