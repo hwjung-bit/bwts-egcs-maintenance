@@ -77,6 +77,31 @@ function repairPanel() {
   });
 }
 
+/* 현황 탭의 선박별 상태 — 같은 규칙(문제 > 수리중 > 정상), 칩은 정상이 아닌 배 */
+const SYS = { bwts: 'BWTS', egcs_wms: 'WMS', egcs_cems: 'CEMS', egcs_body: 'BODY' };
+const ST_COLOR = { '정상': '#16a34a', '수리중': '#d97706', '문제': '#e11d48' };
+function statusPanel() {
+  const ships = S.SHIPS.filter(s => !s.hidden);
+  const cnt = { '정상': 0, '수리중': 0, '문제': 0 };
+  const chips = [];
+  ships.forEach(s => {
+    const by = { '문제': [], '수리중': [] };
+    Object.keys(SYS).forEach(f => { const v = s[f + '_status']; if (by[v]) by[v].push(SYS[f]); });
+    const worst = by['문제'].length ? '문제' : (by['수리중'].length ? '수리중' : '정상');
+    cnt[worst]++;
+    ['문제', '수리중'].forEach(st => {
+      if (by[st].length) chips.push({ text: `${s.code} ${st} ${by[st].join('·')}`, color: ST_COLOR[st] });
+    });
+  });
+  return panelHtml({
+    title: '장비 현황', unit: `${ships.length}척`, tab: 'status',
+    big: `${cnt['정상']}/${ships.length}`, bigLabel: '정상', bigCls: cnt['문제'] ? 'rose' : (cnt['수리중'] ? 'amber' : 'green'),
+    bigTitle: '선박 기준 — 문제 > 수리중 > 정상',
+    segs: ['정상', '수리중', '문제'].map(st => ({ n: cnt[st], label: st, color: ST_COLOR[st] })),
+    chips, chipsLead: '', chipsEmpty: '전 선박 정상',
+  });
+}
+
 function render(k, log) {
   let cal = '';
   try { cal = calPanelsHtml(); } catch (e) { cal = `<div class="cal-panel muted">검교정 요약 불가 — ${esc(e.message)}</div>`; }
@@ -94,7 +119,7 @@ function render(k, log) {
     ${card(k.repairs_open, '진행 중 수리', 'purple', "homeTab.go('repairs')")}
     ${card(k.bwts_log_review_pending, '로그 재검토 대기', 'teal', 'homeTab.goLog()')}
   </div>
-  <div class="cal-dash home-dash">${cal}${logPanel(k, log)}${repairPanel()}</div>`;
+  <div class="cal-dash home-dash">${statusPanel()}${cal}${logPanel(k, log)}${repairPanel()}</div>`;
 }
 
 window.homeTab = { go, goLog: () => go('bwtsLog') };
