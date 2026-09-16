@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO,
 log = logging.getLogger(__name__)
 
 LEDGER_ID = "19GuSBHq_YhyRIkgcClXK0AWfjIlfZ2V1m22w-OWBjkU"   # 환경기술파트 업무 DB
-TASK_RANGE = "업무!A1:R"
+TASK_RANGE = "업무!A1:Z"
 ORIGIN = "업무대장"
 SYNC_FROM = "2026-09-16"   # 이 날 이후 등록된 업무만 (과거 건은 옮기지 않음)
 
@@ -46,6 +46,7 @@ HEADERS = {
     "상세/지시내용": "detail", "기한": "dueDate", "상태": "status",
     "진행률": "progress", "최근조치": "lastAction", "다음조치": "nextAction",
     "완료일": "completedAt", "비고": "note", "updatedAt": "updatedAt",
+    "긴급도": "urgency",
 }
 
 
@@ -154,6 +155,7 @@ def to_repair(t):
         "action": action,
         "email_subject": t["title"],
         "origin": ORIGIN,
+        "urgency": t.get("urgency", ""),
     }
 
 

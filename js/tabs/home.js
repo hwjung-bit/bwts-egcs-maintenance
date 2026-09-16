@@ -110,6 +110,22 @@ function statusPanel() {
   });
 }
 
+/* 긴급도 '상' 인 미완료 수리 — 업무대장 긴급도 칸 또는 수리이력 🔥 토글. 클릭 → 그 행으로 */
+function urgentListHtml() {
+  const list = S.REPAIRS.filter(r => r.urgency === '상' && (r.stage || '') !== '완료')
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  const rows = list.map(r => {
+    const sys = (r.system || '').toUpperCase() === 'BWTS' ? 'bwts' : 'egcs';
+    return `<div class="urg-row" onclick="homeTab.focusRepair('${esc(r.id)}')" title="클릭 → 수리이력에서 보기">` +
+      `<span class="pill pill-${sys}">${esc(r.system || '')}</span><b>${esc(r.ship_code || '—')}</b>` +
+      `<span class="urg-txt">${esc(r.symptom || r.email_subject || '')}</span>` +
+      `<span class="status-select st-${esc(r.stage)}" style="padding:2px 8px">${esc(r.stage || '')}</span>` +
+      `<span class="muted" style="white-space:nowrap">${esc(r.date || '')}</span></div>`;
+  }).join('');
+  return `<div class="urg-box"><h4>🔥 긴급 (상) <span class="muted" style="font-weight:400">${list.length}건 · 업무관리대장 긴급도 칸 또는 수리이력 🔥 로 지정</span></h4>` +
+    (rows || '<div class="muted" style="font-size:12px;padding:4px 0">긴급 상 없음</div>') + '</div>';
+}
+
 function render(k, log) {
   let cal = '';
   try { cal = calPanelsHtml(); } catch (e) { cal = `<div class="cal-panel muted">검교정 요약 불가 — ${esc(e.message)}</div>`; }
@@ -127,9 +143,10 @@ function render(k, log) {
     ${card(k.repairs_open, '진행 중 수리', 'purple', "homeTab.go('repairs')")}
     ${card(k.bwts_log_review_pending, '로그 재검토 대기', 'teal', 'homeTab.goLog()')}
   </div>
-  <div class="cal-dash home-dash">${statusPanel()}${cal}${logPanel(k, log)}${repairPanel()}</div>`;
+  <div class="cal-dash home-dash">${statusPanel()}${cal}${logPanel(k, log)}${repairPanel()}</div>
+  ${urgentListHtml()}`;
 }
 
-window.homeTab = { go, goLog: () => go('bwtsLog') };
+window.homeTab = { go, goLog: () => go('bwtsLog'), focusRepair: id => go('repairs', { focus: id }) };
 
 export default { id: 'home', mount, refresh };

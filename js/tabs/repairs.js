@@ -72,13 +72,23 @@ function mount(root) {
   };
 }
 
+let FOCUS = null;   // repair id to scroll to after the next render (종합 → 수리이력)
 function setParams(p) {
   if (p && 'ship' in p) F.ship = p.ship || '';
+  if (p && 'focus' in p) {
+    FOCUS = p.focus;
+    F.ship = ''; F.system = ''; F.stage = ''; F.year = '';   // filters must not hide the target
+  }
 }
 
 function refresh() {
   $('rfShip').innerHTML = shipOptions(S.REPAIRS);
   renderRows();
+  if (FOCUS) {
+    const tr = document.querySelector(`#repairsRoot tr[data-id="${CSS.escape(FOCUS)}"]`);
+    FOCUS = null;
+    if (tr) { tr.scrollIntoView({ block: 'center' }); tr.classList.add('flash'); }
+  }
   // pending uploads are a separate small query; render again when it lands
   loadPending().then(renderRows).catch(() => {});
 }
@@ -145,9 +155,15 @@ function renderRows() {
     const atts = repairAtts(r);
     const attCell = atts.length
       ? `<button class="att-badge" onclick="driveUi.showAtts('${eid}',event)" title="첨부 목록">📄 ${atts.length}</button>` : '';
-    return '<tr>' +
+    // 긴급도: 업무대장 건은 시트가 주인(표시만), 그 외는 클릭으로 '상' 토글
+    const fromLedger = String(r.id).startsWith('WL_');
+    const urg = r.urgency === '상';
+    const urgBtn = `<span onclick="${fromLedger ? '' : `repairsTab.toggleUrgent('${eid}')`}" ` +
+      `style="cursor:${fromLedger ? 'default' : 'pointer'};font-size:12px;margin-right:2px;opacity:${urg ? 1 : .25}" ` +
+      `title="${fromLedger ? '긴급도 ' + esc(r.urgency || '미지정') + ' — 업무관리대장에서 변경' : (urg ? '긴급 상 — 클릭하여 해제' : '클릭 → 긴급 상')}">🔥</span>`;
+    return `<tr data-id="${eid}">` +
       `<td style="white-space:nowrap">${esc(r.date || '—')}</td>` +
-      `<td>${esc(r.ship_code)}</td>` +
+      `<td style="white-space:nowrap">${urgBtn}${esc(r.ship_code || '—')}</td>` +
       `<td><span class="pill pill-${(r.system || '').toLowerCase() === 'bwts' ? 'bwts' : 'egcs'}">${esc(r.system)}</span></td>` +
       `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || '—')}</td>` +
       `<td style="padding:4px 6px"><select class="status-select st-${esc(r.stage)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','stage',this.value)">${stOpts}</select></td>` +
@@ -225,6 +241,16 @@ function editFileUrl(id) {
 async function updateField(id, field, val) {
   const patch = {}; patch[field] = val;
   await dbSave(sb.from('repairs').update(patch).eq('id', id), field + ' 저장됨');
+}
+
+async function toggleUrgent(id) {
+  const r = S.REPAIRS.find(x => x.id === id);
+  if (!r) return;
+  const val = r.urgency === '상' ? '' : '상';
+  const ok = await dbSave(sb.from('repairs').update({ urgency: val }).eq('id', id), val ? '긴급 상 지정' : '긴급 해제');
+  if (!ok) return;
+  r.urgency = val;
+  renderRows();
 }
 
 async function deleteRepair(id) {
@@ -481,6 +507,6 @@ async function submitUpload() {
   }
 }
 
-window.repairsTab = { filterStage, editField, editFileUrl, updateField, deleteRepair, openUpload, removeFile, toggleClamp };
+window.repairsTab = { filterStage, editField, editFileUrl, updateField, toggleUrgent, deleteRepair, openUpload, removeFile, toggleClamp };
 
 export default { id: 'repairs', mount, refresh, setParams };

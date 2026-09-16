@@ -138,6 +138,14 @@ tr.stale:hover{background:#fef3c7 !important}
 .cal-nums .pill{font-size:10px;padding:1px 6px}
 .cal-urgent{font-size:11px;color:#64748b;display:flex;gap:4px;align-items:center;flex-wrap:wrap;margin-top:auto}
 .cal-urgent .pill{font-size:11px;font-weight:700}
+/* 종합 — 긴급(상) 목록 */
+.urg-box{background:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);border-left:4px solid #e11d48}
+.urg-box h4{font-size:13px;margin:0 0 6px}
+.urg-row{display:flex;align-items:center;gap:8px;padding:5px 4px;border-top:1px solid #f1f5f9;cursor:pointer;font-size:12px}
+.urg-row:hover{background:#fff1f2}
+.urg-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.flash{animation:rowflash 2.4s ease-out}
+@keyframes rowflash{0%,60%{background:#fef3c7}100%{background:transparent}}
 .edit-cell{cursor:pointer;border-radius:4px}.edit-cell:hover{background:#eff6ff}
 
 /* ===== v3 additions: tab isolation + version banner ===== */
