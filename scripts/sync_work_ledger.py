@@ -10,8 +10,9 @@ BWTS/EGCS 관련 업무만 골라 repairs 에 upsert 한다. id 는 'WL_<업무I
   관리대장이 주인 → Drive 폴더, 첨부, 파일 링크. 여기서는 건드리지 않는다
                     (upsert 는 보낸 컬럼만 갱신한다).
 
-대상 판정: 시스템 칸 또는 제목/상세에 BWTS·EGCS·스크러버·WMS·CEMS 가 있으면.
-시스템 값이 명시돼 있으면 그것을, 없으면 본문에 BWTS 가 있으면 BWTS, 아니면 EGCS.
+대상 판정: 시스템 칸에 BWTS 또는 EGCS 가 있고 등록일이 SYNC_FROM 이후인 행만
+(제목은 보지 않고, 과거 건은 옮기지 않는다 — 사용자 결정 2026-09-16).
+시스템이 바뀌거나 업무가 지워져 대상에서 빠진 WL_ 행은 repairs 에서도 지운다.
 
 GitHub Actions 에서 실행. 환경변수는 drive_index.py 와 같다:
   DRIVE_SA_JSON (권장, 시트를 서비스 계정에 뷰어로 공유) / DRIVE_TOKEN_JSON
@@ -36,6 +37,7 @@ log = logging.getLogger(__name__)
 LEDGER_ID = "19GuSBHq_YhyRIkgcClXK0AWfjIlfZ2V1m22w-OWBjkU"   # 환경기술파트 업무 DB
 TASK_RANGE = "업무!A1:R"
 ORIGIN = "업무대장"
+SYNC_FROM = "2026-09-16"   # 이 날 이후 등록된 업무만 (과거 건은 옮기지 않음)
 
 # 시트 헤더 (work-ledger Schema.js TASK_COLS) → 키
 HEADERS = {
@@ -46,8 +48,6 @@ HEADERS = {
     "완료일": "completedAt", "비고": "note", "updatedAt": "updatedAt",
 }
 
-TOPIC_RE = re.compile(r"BWTS|EGCS|SCRUBBER|스크러버|WMS|CEMS", re.I)
-EGCS_RE = re.compile(r"EGCS|SCRUBBER|스크러버|WMS|CEMS", re.I)
 
 # 업무대장 상태 → 수리이력 단계 (js/shared/constants.js STATUS_LIST)
 STAGE = {"대기": "미확인", "진행": "확인", "보류": "확인", "완료": "완료"}
@@ -126,16 +126,16 @@ def read_tasks(creds):
 
 
 def to_repair(t):
-    text = " ".join([t.get("system", ""), t.get("title", ""), t.get("detail", "")])
-    if not TOPIC_RE.search(text):
-        return None
-    sysv = t.get("system", "")
-    if re.search(r"BWTS", sysv, re.I):
+    sysv = t.get("system", "").upper()
+    if "BWTS" in sysv:
         system = "BWTS"
-    elif EGCS_RE.search(sysv):
+    elif "EGCS" in sysv:
         system = "EGCS"
     else:
-        system = "BWTS" if re.search(r"BWTS", text, re.I) else "EGCS"
+        return None
+    created = norm_date(t.get("createdAt"))
+    if not created or created < SYNC_FROM:
+        return None
     # ships FK: unknown/ALL/blank must be NULL, '' is rejected
     ship = t.get("vessel", "").upper()
     ship = ship if ship in SHIP_CODES else None
@@ -147,7 +147,7 @@ def to_repair(t):
         "id": "WL_" + t["id"],
         "ship_code": ship,
         "system": system,
-        "date": norm_date(t.get("createdAt")) or dt.date.today().isoformat(),
+        "date": created,
         "equip": t.get("category", ""),
         "stage": STAGE.get(t.get("status", ""), "미확인"),
         "symptom": symptom,
@@ -166,16 +166,22 @@ def sync(dry_run=False):
             log.info("  %s %s %s %s | %s", r["id"], r["ship_code"] or "—",
                      r["system"], r["stage"], r["symptom"][:50])
         return {"tasks": len(tasks), "matched": len(rows), "dry_run": True}
-    if not rows:
-        return {"tasks": len(tasks), "matched": 0}
     sb = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
     for i in range(0, len(rows), 200):
         sb.table("repairs").upsert(rows[i:i + 200], on_conflict="id").execute()
     log.info("upsert %d건", len(rows))
+    # 대상에서 빠진 거울 행 정리 — 시트를 읽지 못했으면 여기까지 오지 않으므로 안전
+    live = {r["id"] for r in rows}
+    old = sb.table("repairs").select("id").like("id", "WL_%").execute()
+    stale = [r["id"] for r in (old.data or []) if r["id"] not in live]
+    for i in range(0, len(stale), 200):
+        sb.table("repairs").delete().in_("id", stale[i:i + 200]).execute()
+    if stale:
+        log.info("대상 아님 → 삭제 %d건", len(stale))
     by = {}
     for r in rows:
         by[r["system"] + "/" + r["stage"]] = by.get(r["system"] + "/" + r["stage"], 0) + 1
-    return {"tasks": len(tasks), "matched": len(rows), "by": by}
+    return {"tasks": len(tasks), "matched": len(rows), "removed": len(stale), "by": by}
 
 
 if __name__ == "__main__":
