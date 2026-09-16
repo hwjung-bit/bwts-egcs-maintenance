@@ -15,28 +15,29 @@ import { daysUntil, dLabel } from './dates.js';
 import { bwtsDue, bwtsLevel } from '../tabs/bwtsCal.js';
 import { egcsCellStatus } from '../tabs/egcsCal.js';
 
-const URGENT_MAX = 4;   // 시급 칩 상한 — 표 대신 한 줄로 끝내기 위함
+export const CHIP_MAX = 8;   // 칩 상한 — 표 대신 한 줄로 끝내기 위함
 
-/* 패널 하나.
-   o = { title, unit, big, bigCls(green|amber|rose), bigLabel, tab,
-         segs: [{ n, label, cls?, color? }]   막대 구간이자 숫자 필 (n=0 도 필은 회색으로 표시)
-         note?: { text, title }               필 줄 끝에 붙는 보조 문구
-         chips: [{ text, cls?, color? }], chipsLead, chipsEmpty } */
+/* 패널 하나 — 모든 패널이 같은 4줄: 제목+큰숫자 / 막대 / 숫자 필 / 칩.
+   칩은 선박 코드처럼 짧게, 상세는 title(툴팁)로.
+   o = { title, unit, big, bigCls(green|amber|rose), bigLabel, bigTitle?, tab,
+         segs: [{ n, label, cls?, color?, title? }]   막대 구간이자 숫자 필 (0 도 회색 필로)
+         chips: [{ text, cls?, color?, title? }], chipsEmpty } */
 export function panelHtml(o) {
   const total = o.segs.reduce((a, s) => a + s.n, 0);
   const bar = total ? '<div class="cal-bar">' + o.segs.filter(s => s.n).map(s =>
     `<span class="${s.cls || ''}" style="flex:${s.n}${s.color ? ';background:' + s.color : ''}" title="${esc(s.label)} ${s.n}"></span>`).join('') + '</div>' : '';
   const pills = o.segs.map(s => s.n
-    ? `<span class="pill ${s.cls || ''}"${s.color ? ` style="background:${s.color}22;color:${s.color}"` : ''}>${esc(s.label)} ${s.n}</span>`
+    ? `<span class="pill ${s.cls || ''}"${s.color ? ` style="background:${s.color}22;color:${s.color}"` : ''}${s.title ? ` title="${esc(s.title)}"` : ''}>${esc(s.label)} ${s.n}</span>`
     : `<span class="pill lv-unknown" style="opacity:.6">${esc(s.label)} 0</span>`).join('');
-  const chips = o.chips.map(c =>
-    `<span class="pill ${c.cls || ''}"${c.color ? ` style="background:${c.color}22;color:${c.color}"` : ''}>${esc(c.text)}</span>`).join('');
+  const chips = o.chips.slice(0, CHIP_MAX).map(c =>
+    `<span class="pill ${c.cls || ''}"${c.color ? ` style="background:${c.color}22;color:${c.color}"` : ''}${c.title ? ` title="${esc(c.title)}"` : ''}>${esc(c.text)}</span>`).join('') +
+    (o.chips.length > CHIP_MAX ? `<span class="muted">+${o.chips.length - CHIP_MAX}</span>` : '');
   return `<div class="cal-panel" onclick="calDash.go('${o.tab}')" title="클릭 → ${esc(o.title)} 탭 열기">` +
-    `<div class="cal-head"><b>${esc(o.title)}</b><span class="muted">${esc(o.unit)}</span>` +
+    `<div class="cal-head"><b>${esc(o.title)}</b><span class="muted cal-unit">${esc(o.unit)}</span>` +
       `<span class="cal-rate ${o.bigCls || ''}"${o.bigTitle ? ` title="${esc(o.bigTitle)}"` : ''}>${esc(o.big)}<small>${esc(o.bigLabel)}</small></span></div>` +
-    bar +
-    `<div class="cal-nums">${pills}${o.note ? `<span class="muted" title="${esc(o.note.title || '')}">${esc(o.note.text)}</span>` : ''}</div>` +
-    `<div class="cal-urgent">${chips ? esc(o.chipsLead || '') + ' ' + chips : `<span class="muted">${esc(o.chipsEmpty || '없음')}</span>`}</div>` +
+    (bar || '<div class="cal-bar"></div>') +
+    `<div class="cal-nums">${pills}</div>` +
+    `<div class="cal-urgent">${chips || `<span class="muted">${esc(o.chipsEmpty || '—')}</span>`}</div>` +
     '</div>';
 }
 
@@ -52,7 +53,9 @@ function egcsItems() {
   const th = requireTH('egcs_calibration');
   return S.EGCS_CAL.map(c => {
     const st = egcsCellStatus(c, th.sensor_cycle_months, th.warn_days);
-    return { label: c.ship_code + ' ' + (c.equip || '').replace('-', '/'), days: st.days, lv: st.lv };
+    // 'WMS1/TURB' → 'TURB': 요약판에선 센서 종류만. WMS1·2 는 같은 칩으로 합쳐진다
+    const sensor = (c.equip || '').replace('-', '/').split('/').pop();
+    return { label: c.ship_code + ' ' + sensor, days: st.days, lv: st.lv };
   });
 }
 
@@ -65,19 +68,23 @@ function calPanel(title, unit, items, staleDays, tab) {
     if (i.lv === 'expired' && -i.days > staleDays) n.stale++;
   });
   const total = items.length;
+  // 같은 라벨(예: KCB TURB 가 WMS1·WMS2 둘 다)은 더 급한 쪽 하나만
+  const seen = {};
   const urgent = items.filter(i => i.lv === 'expired' || i.lv === 'soon')
-    .sort((a, b) => a.days - b.days).slice(0, URGENT_MAX);
+    .sort((a, b) => a.days - b.days)
+    .filter(i => !seen[i.label] && (seen[i.label] = 1));
   return panelHtml({
-    title, unit: `${unit} · 총 ${total}`, tab,
+    title, unit: `${unit} · ${total}`, tab,
     big: total ? Math.round((n.ok + n.soon) / total * 100) + '%' : '—', bigLabel: '관리율',
     bigCls: n.expired ? 'rose' : (n.soon ? 'amber' : 'green'), bigTitle: '관리율 = (정상+임박) ÷ 전체',
     segs: [
       { n: n.ok, label: '정상', cls: 'lv-ok' }, { n: n.soon, label: '임박', cls: 'lv-soon' },
-      { n: n.expired, label: '만료', cls: 'lv-expired' }, { n: n.unknown, label: '미상', cls: 'lv-unknown' },
+      { n: n.expired, label: '만료', cls: 'lv-expired',
+        title: n.stale ? `이 중 ${n.stale}건은 만료 후 ${staleDays}일 넘음 — 기록 미갱신일 수 있음` : '' },
+      { n: n.unknown, label: '미상', cls: 'lv-unknown', title: '검교정일·모델 미기재' },
     ],
-    note: n.stale ? { text: `(만료 중 기록 미갱신 ${n.stale})`, title: `만료 후 ${staleDays}일 넘음 — 검교정을 안 한 게 아니라 기록이 안 올라온 건일 수 있음` } : null,
-    chips: urgent.map(u => ({ text: `${u.label} ${dLabel(u.days)}`, cls: 'lv-' + u.lv })),
-    chipsLead: '시급', chipsEmpty: '만료·임박 없음',
+    chips: urgent.map(u => ({ text: u.label, cls: 'lv-' + u.lv, title: (u.lv === 'expired' ? '만료 ' : '임박 ') + dLabel(u.days) })),
+    chipsEmpty: '만료·임박 없음',
   });
 }
 
@@ -98,8 +105,8 @@ export function calSummaryHtml() {
 export function calPanelsHtml() {
   const bth = requireTH('bwts_calibration');
   const eth = requireTH('egcs_calibration');
-  return calPanel('BWTS 검교정', `TRO 센서 · ${bth.interval_months}개월 주기`, bwtsItems(), bth.stale_after_days, 'bwtsCal') +
-    calPanel('EGCS 검교정', `WMS 센서별 · 임박 ${Math.round(eth.warn_days / 30)}개월 전`, egcsItems(), eth.stale_after_days, 'egcsCal');
+  return calPanel('BWTS 검교정', 'TRO 센서', bwtsItems(), bth.stale_after_days, 'bwtsCal') +
+    calPanel('EGCS 검교정', 'WMS 센서', egcsItems(), eth.stale_after_days, 'egcsCal');
 }
 
 window.calDash = { go };

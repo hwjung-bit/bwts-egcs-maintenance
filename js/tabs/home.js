@@ -14,7 +14,6 @@ import { GRADES } from './bwtsLog.js';
 
 const GRADE_DOT = { '운전양호': '#4CAF50', '점검필요': '#FF9800', '수리후정상': '#42A5F5', '미운전': '#9E9E9E', '미수신': '#F44336', '데이터불량': '#9C27B0', '판독실패': '#FDD835' };
 const GOOD = ['운전양호', '수리후정상'];
-const CHIP_MAX = 6;
 
 function mount(root) {
   root.innerHTML = '<div class="wrap" id="homeRoot"><div class="loading"><span class="spin"></span> KPI 로딩...</div></div>';
@@ -49,13 +48,13 @@ function logPanel(k, log) {
   const bad = rows.filter(x => !GOOD.includes(x.display_grade))
     .sort((a, b) => GRADES.indexOf(a.display_grade) - GRADES.indexOf(b.display_grade) || a.ship_code.localeCompare(b.ship_code));
   return panelHtml({
-    title: 'BWTS 로그 분석', unit: `${period || '—'} · ${rows.length}척`, tab: 'bwtsLog',
+    title: 'BWTS 로그', unit: period || '—', tab: 'bwtsLog',
     big: rows.length ? `${good}/${rows.length}` : '—', bigLabel: '양호',
     bigCls: rows.length && good === rows.length ? 'green' : (bad.some(x => x.display_grade !== '미운전') ? 'amber' : 'green'),
     bigTitle: '양호 = 운전양호 + 수리후정상',
     segs: GRADES.map(g => ({ n: cnt[g] || 0, label: g, color: GRADE_DOT[g] })),
-    chips: bad.slice(0, CHIP_MAX).map(x => ({ text: `${x.ship_code} ${x.display_grade}`, color: GRADE_DOT[x.display_grade] })),
-    chipsLead: bad.length > CHIP_MAX ? `확인 ${bad.length}척 중` : '확인', chipsEmpty: '전 선박 양호',
+    chips: bad.map(x => ({ text: x.ship_code, color: GRADE_DOT[x.display_grade], title: x.display_grade })),
+    chipsEmpty: '전 선박 양호',
   });
 }
 
@@ -65,15 +64,21 @@ function repairPanel() {
   const cnt = {};
   open.forEach(r => { const st = STATUS_LIST.includes(r.stage) ? r.stage : '미확인'; cnt[st] = (cnt[st] || 0) + 1; });
   const bwts = open.filter(r => (r.system || '').toUpperCase() === 'BWTS').length;
-  const oldest = open.filter(r => r.stage === '미확인' || !r.stage)
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).slice(0, CHIP_MAX);
+  // 미확인 건의 선박, 오래된 순 — 같은 배는 한 번만 (건수는 툴팁)
+  const byShip = {};
+  open.filter(r => r.stage === '미확인' || !r.stage)
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+    .forEach(r => { const k = r.ship_code || '—'; (byShip[k] = byShip[k] || []).push(r); });
   return panelHtml({
     title: '진행 중 수리', unit: `BWTS ${bwts} · EGCS ${open.length - bwts}`, tab: 'repairs',
     big: String(open.length), bigLabel: '건', bigCls: cnt['미확인'] ? 'amber' : 'green',
     bigTitle: '완료 제외 전체',
     segs: STATUS_LIST.filter(s => s !== '완료').map(s => ({ n: cnt[s] || 0, label: s, cls: 'st-' + s })),
-    chips: oldest.map(r => ({ text: `${r.ship_code || '—'} ${r.system || ''} ${String(r.date || '').slice(5)}`, cls: 'st-미확인' })),
-    chipsLead: '미확인 오래된 순', chipsEmpty: '미확인 없음',
+    chips: Object.keys(byShip).map(k => ({
+      text: k, cls: 'st-미확인',
+      title: '미확인 ' + byShip[k].length + '건 · ' + byShip[k].map(r => `${r.system || ''} ${r.date || ''}`).join(' / '),
+    })),
+    chipsEmpty: '미확인 없음',
   });
 }
 
@@ -90,7 +95,10 @@ function statusPanel() {
     const worst = by['문제'].length ? '문제' : (by['수리중'].length ? '수리중' : '정상');
     cnt[worst]++;
     ['문제', '수리중'].forEach(st => {
-      if (by[st].length) chips.push({ text: `${s.code} ${st} ${by[st].join('·')}`, color: ST_COLOR[st] });
+      if (by[st].length) chips.push({
+        text: `${s.code} ${by[st].join('·')}`, color: ST_COLOR[st],
+        title: st + ' — ' + by[st].map(sys => (s[Object.keys(SYS).find(f => SYS[f] === sys) + '_memo'] || '').trim()).filter(Boolean).join(' / '),
+      });
     });
   });
   return panelHtml({
@@ -98,7 +106,7 @@ function statusPanel() {
     big: `${cnt['정상']}/${ships.length}`, bigLabel: '정상', bigCls: cnt['문제'] ? 'rose' : (cnt['수리중'] ? 'amber' : 'green'),
     bigTitle: '선박 기준 — 문제 > 수리중 > 정상',
     segs: ['정상', '수리중', '문제'].map(st => ({ n: cnt[st], label: st, color: ST_COLOR[st] })),
-    chips, chipsLead: '', chipsEmpty: '전 선박 정상',
+    chips, chipsEmpty: '전 선박 정상',
   });
 }
 
