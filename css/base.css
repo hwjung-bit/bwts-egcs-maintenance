@@ -187,3 +187,29 @@ tr.flash{animation:rowflash 2.4s ease-out}
 .dropzone{border:2px dashed #93c5fd;border-radius:8px;padding:18px 12px;text-align:center;font-size:12px;color:#475569;background:#f8fafc;cursor:pointer;margin:6px 0}
 .dropzone.over{background:#dbeafe;border-color:#2563eb}
 #repairUpload .box{width:520px}
+
+/* ── phone (≤760px) ───────────────────────────────────────────
+   The desktop layout assumes a wide viewport: .tabs is a plain flex row,
+   so on a phone its 8 items shrink until each label breaks one character
+   per line, and the wide tables stretch the page instead of scrolling. */
+@media (max-width:760px){
+  .header{padding:8px 12px;gap:8px}
+  .header h1{font-size:15px}
+  .header .meta{display:none}
+
+  /* one swipeable strip instead of 8 crushed buttons */
+  .tabs{padding:8px 12px;gap:6px;flex-wrap:nowrap;overflow-x:auto;
+        -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{flex:0 0 auto;white-space:nowrap}
+
+  /* wide tables scroll inside the content area, so the sticky header and
+     tab strip keep their own width instead of being dragged sideways */
+  #view{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+  .stats{padding:12px;gap:8px}
+  .ships{padding:4px 12px 12px}
+  .wrap{padding:8px 12px 24px}
+  .home-dash{grid-template-columns:1fr}
+  #previewFloat{width:min(90vw,360px)}
+}
