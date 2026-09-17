@@ -76,8 +76,12 @@ LEGACY_SNAPSHOT_DIRS = [
     Path(r"G:\공유 드라이브\고려에스엠 0033 공무팀 환경기술파트\_dashboard"),
     Path("G:/공유 드라이브/고려에스엠 0033 공무팀 환경기술파트/025  SCRUBBER 업무/13 메이커 서비스/_dashboard"),
 ]
-_STAGE_LEGACY = {"미확인": "received", "확인": "diagnosing", "수리준비중": "repairing",
-                 "자재준비중": "repairing", "방선예정": "repairing", "완료": "done"}
+# 통일 status(sql/027) → 계약의 영문 단계. 키 집합(received/diagnosing/repairing/done)은
+# 공무팀 Dash 가 그대로 읽으므로 바꾸지 않는다. '보류' 는 진행 중이 아니므로 received.
+_STAGE_LEGACY = {"대기": "received", "확인": "diagnosing", "준비중": "repairing",
+                 "방선예정": "repairing", "진행": "repairing", "보류": "received", "완료": "done",
+                 # 028 이전 행이 남아 있을 때의 옛 stage 값
+                 "미확인": "received", "수리준비중": "repairing", "자재준비중": "repairing"}
 
 
 def _kst_now():
@@ -113,7 +117,8 @@ def build_legacy_snapshot(sb):
                   for s in sorted(ships, key=lambda x: (x.get("sort_order") or 999))],
         "repairs": [{"id": r["id"], "shipCode": r.get("ship_code") or "", "system": r.get("system") or "",
                      "date": r.get("date") or "", "equip": r.get("equip") or "",
-                     "stage": _STAGE_LEGACY.get(r.get("stage"), "received"), "stageKo": r.get("stage") or "",
+                     "stage": _STAGE_LEGACY.get(r.get("status") or r.get("stage"), "received"),
+                     "stageKo": r.get("status") or r.get("stage") or "",
                      "symptom": r.get("symptom") or "", "action": r.get("action") or "",
                      "parts": r.get("parts") or "", "cost": r.get("cost") or "",
                      "attachments": _atts(r.get("attachments")), "createdAt": "", "updatedAt": "",

@@ -4,7 +4,7 @@ import { matchQuery } from '../shared/search.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, inlineEdit } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
-import { STATUS_LIST, YEARS, MAIL_CATEGORIES, MAIL_SOURCES } from '../shared/constants.js';
+import { MAIL_STATUS_LIST, YEARS, MAIL_CATEGORIES, MAIL_SOURCES } from '../shared/constants.js';
 import { shipOptions } from '../shared/ships.js';
 import { requestDriveFolder } from '../shared/drive.js';
 import { go } from '../core/router.js';
@@ -37,7 +37,7 @@ function mount(root) {
     <select id="fSys"><option value="">전체 시스템</option>${opts(['BWTS', 'EGCS', '기타'], F.sys)}</select>
     <select id="fSrc"><option value="">전체 출처</option>${opts(MAIL_SOURCES, F.src)}</select>
     <select id="fShip"><option value="">전체 선박</option></select>
-    <select id="fStatus"><option value="">전체 상태</option>${opts(STATUS_LIST, F.status)}</select>
+    <select id="fStatus"><option value="">전체 상태</option>${opts(MAIL_STATUS_LIST, F.status)}</select>
     <select id="fCat"><option value="">전체 분류</option>${opts(MAIL_CATEGORIES, F.cat)}</select>
     <input type="text" id="search" placeholder="🔍 검색 — 띄어쓰기로 겹치기 (예: KMU 검교정)" title="제목·선박·분류·키워드·발신자·상태·비고·날짜 전부 검색. 여러 단어는 모두 포함된 것만" value="${esc(F.q)}">
     <button class="refresh-btn" id="mailReload">🔄 새로고침</button>
@@ -111,7 +111,7 @@ function renderRows() {
       ? `<span class="preview-tip" data-preview="${esc(tipText)}" onmouseenter="ui.showPreview(event)" onmouseleave="ui.hidePreview()">${subjWrap}</span>`
       : subjWrap;
     const reply = (m.reply_count && m.reply_count > 0) ? `<span class="reply-badge">↩${m.reply_count}</span>` : '';
-    const stOpts = STATUS_LIST.map(s => `<option value="${s}"${m.status === s ? ' selected' : ''}>${s}</option>`).join('');
+    const stOpts = MAIL_STATUS_LIST.map(s =>`<option value="${s}"${m.status === s ? ' selected' : ''}>${s}</option>`).join('');
     const eid = esc(m.id);
     const shipClick = m.ship_code ? ` onclick="mailTab.goRepairs('${esc(m.ship_code)}')" style="cursor:pointer" title="수리이력 보기"` : '';
     const catHtml = m.category ? `<span class="cat-badge cat-${esc(m.category)}">${esc(m.category)}</span>` : '';
@@ -203,7 +203,7 @@ async function mailToRepair(mailId) {
     system: m.system || '기타',
     date: m.date || null,
     equip: m.keyword || '',
-    stage: '미확인',
+    status: '대기',
     symptom: m.subject || '',
     action: '', parts: '', cost: '',
     // Gmail gives names only — Drive links come from the folder index

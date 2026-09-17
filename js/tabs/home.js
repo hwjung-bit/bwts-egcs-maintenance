@@ -60,13 +60,13 @@ function logPanel(k, log) {
 
 /* 진행 중 수리 — 수리이력 탭의 「완료 숨기기」와 같은 집합(S.REPAIRS, stage≠완료) */
 function repairPanel() {
-  const open = S.REPAIRS.filter(r => (r.stage || '') !== '완료');
+  const open = S.REPAIRS.filter(r => (r.status || '') !== '완료');
   const cnt = {};
-  open.forEach(r => { const st = STATUS_LIST.includes(r.stage) ? r.stage : '미확인'; cnt[st] = (cnt[st] || 0) + 1; });
+  open.forEach(r => { const st = STATUS_LIST.includes(r.status) ? r.status : '대기'; cnt[st] = (cnt[st] || 0) + 1; });
   const bwts = open.filter(r => (r.system || '').toUpperCase() === 'BWTS').length;
   // 미확인 건의 선박, 오래된 순 — 같은 배는 한 번만 (건수는 툴팁)
   const byShip = {};
-  open.filter(r => r.stage === '미확인' || !r.stage)
+  open.filter(r => r.status === '대기' || !r.status)
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
     .forEach(r => { const k = r.ship_code || '—'; (byShip[k] = byShip[k] || []).push(r); });
   return panelHtml({
@@ -112,14 +112,14 @@ function statusPanel() {
 
 /* 긴급도 '상' 인 미완료 수리 — 업무대장 긴급도 칸 또는 수리이력 🔥 토글. 클릭 → 그 행으로 */
 function urgentListHtml() {
-  const list = S.REPAIRS.filter(r => r.urgency === '상' && (r.stage || '') !== '완료')
+  const list = S.REPAIRS.filter(r => r.urgency === '상' && (r.status || '') !== '완료')
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const rows = list.map(r => {
     const sys = (r.system || '').toUpperCase() === 'BWTS' ? 'bwts' : 'egcs';
     return `<div class="urg-row" onclick="homeTab.focusRepair('${esc(r.id)}')" title="클릭 → 수리이력에서 보기">` +
       `<span class="pill pill-${sys}">${esc(r.system || '')}</span><b>${esc(r.ship_code || '—')}</b>` +
       `<span class="urg-txt">${esc(r.symptom || r.email_subject || '')}</span>` +
-      `<span class="status-select st-${esc(r.stage)}" style="padding:2px 8px">${esc(r.stage || '')}</span>` +
+      `<span class="status-select st-${esc(r.status)}" style="padding:2px 8px">${esc(r.status || '')}</span>` +
       `<span class="muted" style="white-space:nowrap">${esc(r.date || '')}</span></div>`;
   }).join('');
   return `<div class="urg-box"><h4>🔥 긴급 (상) <span class="muted" style="font-weight:400">${list.length}건 · 업무관리대장 긴급도 칸 또는 수리이력 🔥 로 지정</span></h4>` +

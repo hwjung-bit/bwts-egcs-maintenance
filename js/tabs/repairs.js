@@ -52,7 +52,7 @@ function mount(root) {
     <select id="rfYear"><option value="">전체 년도</option>${opts(YEARS, F.year)}</select>
     <select id="rfSys"><option value="">전체 시스템</option>${opts(['BWTS', 'EGCS'], F.system)}</select>
     <select id="rfShip"><option value="">전체 선박</option></select>
-    <select id="rfStage"><option value="">전체 단계</option>${opts(STATUS_LIST, F.stage)}</select>
+    <select id="rfStage"><option value="">전체 상태</option>${opts(STATUS_LIST, F.stage)}</select>
     <input type="text" id="rfSearch" placeholder="🔍 검색 — 띄어쓰기로 겹치기 (예: KMU CEMS)" title="선박·장비·증상·조치·메일제목·부품·단계·날짜 전부 검색. 검색 중엔 완료 건도 보임" value="${esc(F.q)}">
     <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="rfHideDone"${F.hideDone ? ' checked' : ''}> 완료 숨기기</label>
     <button class="add-btn" id="raOpen" title="메일 없이 카톡·전화 등으로 처리된 건 등록">➕ 직접 등록</button>
@@ -107,16 +107,16 @@ function renderRows() {
     if (F.year && !(r.date || '').startsWith(F.year)) return false;
     if (F.ship && r.ship_code !== F.ship) return false;
     if (F.system && r.system !== F.system) return false;
-    if (F.stage && r.stage !== F.stage) return false;
-    // 완료 숨기기 — 단계 필터로 '완료'를 직접 고르거나 검색 중이면 보여준다
-    if (F.hideDone && !F.stage && !F.q && r.stage === '완료') return false;
-    if (F.q && !matchQuery(F.q, r.date, r.ship_code, r.system, r.equip, r.stage, r.origin,
+    if (F.stage && r.status !== F.stage) return false;
+    // 완료 숨기기 — 상태 필터로 '완료'를 직접 고르거나 검색 중이면 보여준다
+    if (F.hideDone && !F.stage && !F.q && r.status === '완료') return false;
+    if (F.q && !matchQuery(F.q, r.date, r.ship_code, r.system, r.equip, r.status, r.origin,
       r.symptom, r.email_subject, r.action, r.parts)) return false;
     return true;
   });
   // 완료만 아래, 나머지는 날짜 최신순
   filtered.sort((a, b) => {
-    const da = a.stage === '완료' ? 1 : 0, db = b.stage === '완료' ? 1 : 0;
+    const da = a.status === '완료' ? 1 : 0, db = b.status === '완료' ? 1 : 0;
     if (da !== db) return da - db;
     return String(b.date || '').localeCompare(String(a.date || ''));
   });
@@ -125,7 +125,7 @@ function renderRows() {
   REPAIRS.forEach(r => {
     if (r.system === 'BWTS') st.BWTS++;
     if (r.system === 'EGCS') st.EGCS++;
-    st[r.stage] = (st[r.stage] || 0) + 1;
+    st[r.status] = (st[r.status] || 0) + 1;
   });
   const card = (l, n, cls, stage) => {
     const click = stage ? ` onclick="repairsTab.filterStage('${stage}')" style="cursor:pointer"` : '';
@@ -134,7 +134,7 @@ function renderRows() {
   $('repairStats').innerHTML =
     card('전체', st.total, '', '') + card('BWTS', st.BWTS, 'blue', '') + card('EGCS', st.EGCS, 'green', '') +
     STATUS_LIST.map(s => card(s, st[s] || 0, STATUS_COLOR[s], s)).join('');
-  const hidden = F.hideDone && !F.stage && !F.q ? REPAIRS.filter(r => r.stage === '완료').length : 0;
+  const hidden = F.hideDone && !F.stage && !F.q ? REPAIRS.filter(r => r.status === '완료').length : 0;
   $('repairCnt').textContent = filtered.length + ' / ' + REPAIRS.length + '건' + (hidden ? ` (완료 ${hidden}건 숨김)` : '');
 
   if (!REPAIRS.length) {
@@ -142,7 +142,7 @@ function renderRows() {
     return;
   }
   const rows = filtered.map(r => {
-    const stOpts = STATUS_LIST.map(s => `<option value="${s}"${r.stage === s ? ' selected' : ''}>${s}</option>`).join('');
+    const stOpts = STATUS_LIST.map(s => `<option value="${s}"${r.status === s ? ' selected' : ''}>${s}</option>`).join('');
     const eid = esc(r.id);
     const org = r.origin && r.origin !== '메일' ? r.origin : '';
     const mailCell = r.email_link
@@ -161,18 +161,17 @@ function renderRows() {
     const atts = repairAtts(r);
     const attCell = atts.length
       ? `<button class="att-badge" onclick="driveUi.showAtts('${eid}',event)" title="첨부 목록">📄 ${atts.length}</button>` : '';
-    // 긴급도: 업무대장 건은 시트가 주인(표시만), 그 외는 클릭으로 '상' 토글
-    const fromLedger = String(r.id).startsWith('WL_');
+    // 긴급도: 클릭으로 '상' 토글. (업무대장 이관 후 이 앱이 주인 — WL_ 예외 없음)
     const urg = r.urgency === '상';
-    const urgBtn = `<span onclick="${fromLedger ? '' : `repairsTab.toggleUrgent('${eid}')`}" ` +
-      `style="cursor:${fromLedger ? 'default' : 'pointer'};font-size:12px;margin-right:2px;opacity:${urg ? 1 : .25}" ` +
-      `title="${fromLedger ? '긴급도 ' + esc(r.urgency || '미지정') + ' — 업무관리대장에서 변경' : (urg ? '긴급 상 — 클릭하여 해제' : '클릭 → 긴급 상')}">🔥</span>`;
+    const urgBtn = `<span onclick="repairsTab.toggleUrgent('${eid}')" ` +
+      `style="cursor:pointer;font-size:12px;margin-right:2px;opacity:${urg ? 1 : .25}" ` +
+      `title="${urg ? '긴급 상 — 클릭하여 해제' : '클릭 → 긴급 상'}">🔥</span>`;
     return `<tr data-id="${eid}"${r.id === FOCUS ? ' class="flash"' : ''}>` +
       `<td style="white-space:nowrap">${esc(r.date || '—')}</td>` +
       `<td style="white-space:nowrap">${urgBtn}${esc(r.ship_code || '—')}</td>` +
       `<td><span class="pill pill-${(r.system || '').toLowerCase() === 'bwts' ? 'bwts' : 'egcs'}">${esc(r.system)}</span></td>` +
       `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || '—')}</td>` +
-      `<td style="padding:4px 6px"><select class="status-select st-${esc(r.stage)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','stage',this.value)">${stOpts}</select></td>` +
+      `<td style="padding:4px 6px"><select class="status-select st-${esc(r.status)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','status',this.value)">${stOpts}</select></td>` +
       `<td>${mailCell}</td>` +
       longCell(eid, 'symptom', r.symptom) +
       longCell(eid, 'action', r.action) +
@@ -311,7 +310,7 @@ async function saveNewRepair() {
   const newR = {
     id: 'MN_' + Date.now(),
     ship_code: shipCode, system: sys, date: v('raDate') || null,
-    equip: v('raEquip'), stage: v('raStage'), symptom, action: v('raAction'),
+    equip: v('raEquip'), status: v('raStage'), symptom, action: v('raAction'),
     parts: '', cost: '', attachments: '[]', history: '[]',
     email_subject: '', email_link: '', needs_review: false, source_msg_id: '',
     origin,
@@ -458,7 +457,7 @@ async function submitUpload() {
     const title = [shipCode, v('ruSys').toUpperCase(), v('ruEquip'), v('ruDesc')].filter(Boolean).join(' ');
     const rec = {
       id: 'FL_' + Date.now(), ship_code: shipCode, system: v('ruSys').toUpperCase(), date: v('ruDate'),
-      equip: v('ruEquip'), stage: v('ruStage') || '완료', symptom: title, action: '',
+      equip: v('ruEquip'), status: v('ruStage') || '완료', symptom: title, action: '',
       parts: '', cost: '', attachments: '[]', history: '[]', email_subject: '', email_link: '',
       needs_review: false, source_msg_id: '', origin: '파일',
     };

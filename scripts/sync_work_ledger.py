@@ -2,7 +2,12 @@
 업무관리대장 → 수리이력 sync (Google Sheet → Supabase repairs)
 
 환경기술파트 업무관리대장(GAS 웹앱, 진실원본 = 시트 '업무' 탭)에서
-BWTS/EGCS 관련 업무만 골라 repairs 에 upsert 한다. id 는 'WL_<업무ID>'.
+[폐기 2026-09-18] 업무관리대장을 이 앱으로 흡수(sql/027, migrate_work_ledger.py)하면서
+정기 sync 는 끝났다. 워크플로(work-ledger-sync.yml)는 삭제됐고 이 파일은
+migrate_work_ledger.py 가 시트 읽기 함수(get_creds/read_tasks/HEADERS)를 import 하기
+위해서만 남긴다. 직접 실행하지 말 것 — 대상 밖 WL_ 행을 지워 이관된 일반 업무가 사라진다.
+
+(원래 설명) BWTS/EGCS 관련 업무만 골라 repairs 에 upsert 한다. id 는 'WL_<업무ID>'.
 
 소유권 규칙:
   업무대장이 주인 → 제목·상세(symptom), 최근/다음조치(action), 상태(stage),
