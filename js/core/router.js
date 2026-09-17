@@ -19,6 +19,7 @@ export const ROUTER_BUILD = BUILD;
 // Tab bar order. Adding a tab = one line here + one file in js/tabs/.
 export const TABS = [
   { id: 'home',    label: '🏠 종합' },
+  { id: 'work',    label: '📋 업무' },
   { id: 'mail',    label: '📧 메일대장' },
   { id: 'repairs', label: '🔧 수리이력' },
   { id: 'status',  label: '📊 현황' },

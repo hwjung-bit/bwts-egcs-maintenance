@@ -57,6 +57,11 @@ tr:hover{background:#f8fafc}
 .st-방선예정{background:#f0fdf4;color:#166534}
 .st-확인{background:#dbeafe;color:#1e40af}
 .st-완료{background:#d1fae5;color:#065f46}
+/* 📋 업무 통일 상태 — 확인·방선예정·완료 는 위 수리 단계 색을 그대로 쓴다 */
+.st-대기{background:#fef3c7;color:#92400e}
+.st-준비중{background:#ede9fe;color:#5b21b6}
+.st-진행{background:#dbeafe;color:#1e40af}
+.st-보류{background:#fee2e2;color:#991b1b}
 .note-cell{max-width:200px;position:relative}
 .note-text{font-size:12px;color:#64748b;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 4px;border-radius:4px;min-height:20px}
 .note-text:hover{background:#f1f5f9}
