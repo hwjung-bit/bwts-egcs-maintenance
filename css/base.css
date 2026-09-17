@@ -62,6 +62,36 @@ tr:hover{background:#f8fafc}
 .st-준비중{background:#ede9fe;color:#5b21b6}
 .st-진행{background:#dbeafe;color:#1e40af}
 .st-보류{background:#fee2e2;color:#991b1b}
+/* 📋 업무 — 긴급도 배지, 단건/일괄 등록 모달 (#repairAdd 와 같은 골격) */
+.urg-badge{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700;white-space:nowrap}
+.urg-badge.urg-상{background:#fee2e2;color:#b91c1c}
+.urg-badge.urg-중{background:#fef3c7;color:#92400e}
+.urg-badge.urg-하{background:#f1f5f9;color:#64748b}
+.urg-badge.urg-none{color:#cbd5e1}
+#workAdd,#workBulk{display:none;position:fixed;inset:0;z-index:10001;background:rgba(15,23,42,.35);align-items:center;justify-content:center}
+#workAdd.open,#workBulk.open{display:flex}
+#workAdd .box,#workBulk .box{background:#fff;border-radius:12px;padding:16px 18px;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+#workAdd .box{width:520px}
+#workBulk .box{width:min(1100px,96vw)}
+#workAdd h3,#workBulk h3{margin:0 0 12px;font-size:14px;color:#0f172a}
+#workAdd label,#workBulk label{display:block;margin-bottom:8px;color:#64748b;font-size:11px;font-weight:600}
+#workAdd input,#workAdd select,#workAdd textarea,#workBulk>.box>label input,#workBulk>.box>label textarea,#workBulk .row input{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
+#workAdd input:focus,#workAdd select:focus,#workAdd textarea:focus,#workBulk textarea:focus{border-color:#3b82f6}
+#workAdd textarea{min-height:56px;resize:vertical}
+#workBulk textarea{min-height:110px;resize:vertical;font-family:inherit}
+#workAdd .row,#workBulk .row{display:flex;gap:8px}
+#workAdd .row>label,#workBulk .row>label{flex:1}
+#workAdd .btns,#workBulk .btns{display:flex;gap:8px;margin-top:10px}
+#workAdd .btns button,#workBulk .btns button{flex:1;padding:7px 0;border-radius:7px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:12px}
+#workAdd .btns .pri,#workBulk .btns .pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+#workBulk .btns button:disabled{opacity:.5;cursor:default}
+#workBulk .btns .armed{background:#d97706;border-color:#d97706}
+.wb-table{width:100%;border-collapse:collapse;font-size:12px}
+.wb-table th{position:sticky;top:0;background:#f8fafc;font-size:11px;color:#64748b;padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:left;white-space:nowrap}
+.wb-table td{padding:3px 4px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+.wb-table input,.wb-table select{padding:3px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box;max-width:100%}
+.wb-table tr.wb-skip td{opacity:.4}
+.wb-table tr.wb-update td{background:#fffbeb}
 .note-cell{max-width:200px;position:relative}
 .note-text{font-size:12px;color:#64748b;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 4px;border-radius:4px;min-height:20px}
 .note-text:hover{background:#f1f5f9}
