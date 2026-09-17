@@ -21,7 +21,8 @@ function onLogin(session) {
   $('userInfo').style.display = '';
   $('loginBtn').style.display = 'none';
   $('logoutBtn').style.display = '';
-  $('collectBtn').style.display = '';
+  // 📧 메일 수집 버튼은 메일대장 탭과 함께 제거됨(2026-09-18). 남아 있으면 보여주고, 없으면 무시.
+  const collectBtn = $('collectBtn'); if (collectBtn) collectBtn.style.display = '';
   loadData();
 }
 

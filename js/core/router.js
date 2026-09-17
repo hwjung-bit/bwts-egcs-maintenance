@@ -20,13 +20,14 @@ export const ROUTER_BUILD = BUILD;
 export const TABS = [
   { id: 'home',    label: '🏠 종합' },
   { id: 'work',    label: '📋 업무' },
-  { id: 'mail',    label: '📧 메일대장' },
+  // 📧 메일대장 탭은 2026-09-18 제거 — 수리이력 자동 생성 경로가 아니었고 소비자가 없었다.
   { id: 'repairs', label: '🔧 수리이력' },
   { id: 'status',  label: '📊 현황' },
   { id: 'bwtsLog', label: '🧪 BWTS 로그' },
   { id: 'bwtsCal', label: 'BWTS 검교정' },
   { id: 'egcsCal', label: 'EGCS 검교정' },
   { id: 'ships',   label: '🚢 선박관리' },
+  { id: 'links',   label: '📎 자료' },
 ];
 
 const mods = {};            // id → module default export, or Error

@@ -112,17 +112,25 @@ function statusPanel() {
 
 /* 긴급도 '상' 인 미완료 수리 — 업무대장 긴급도 칸 또는 수리이력 🔥 토글. 클릭 → 그 행으로 */
 function urgentListHtml() {
-  const list = S.REPAIRS.filter(r => r.urgency === '상' && (r.status || '') !== '완료')
+  // 긴급 상 = 시스템 구분 없이 전체 업무(S.TASKS). 수리이력만 보던 S.REPAIRS 는 BWTS/EGCS 뿐이라
+  // Hi-NAS·CII 같은 업무의 긴급건이 빠졌다.
+  const list = S.TASKS.filter(r => r.urgency === '상' && (r.status || '') !== '완료')
     .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   const rows = list.map(r => {
-    const sys = (r.system || '').toUpperCase() === 'BWTS' ? 'bwts' : 'egcs';
-    return `<div class="urg-row" onclick="homeTab.focusRepair('${esc(r.id)}')" title="클릭 → 수리이력에서 보기">` +
-      `<span class="pill pill-${sys}">${esc(r.system || '')}</span><b>${esc(r.ship_code || '—')}</b>` +
-      `<span class="urg-txt">${esc(r.symptom || r.email_subject || '')}</span>` +
+    const up = (r.system || '').toUpperCase();
+    const repair = up === 'BWTS' || up === 'EGCS';
+    const pill = repair
+      ? `<span class="pill pill-${up === 'BWTS' ? 'bwts' : 'egcs'}">${esc(r.system)}</span>`
+      : `<span class="pill" style="background:#e2e8f0;color:#334155">${esc(r.system || '업무')}</span>`;
+    // BWTS/EGCS 는 수리이력 행으로, 그 외 업무는 📋 업무 탭으로
+    const click = repair ? `homeTab.focusRepair('${esc(r.id)}')` : `homeTab.go('work')`;
+    return `<div class="urg-row" onclick="${click}" title="클릭 → ${repair ? '수리이력' : '업무 탭'}에서 보기">` +
+      pill + `<b>${esc(r.ship_code || '—')}</b>` +
+      `<span class="urg-txt">${esc(r.title || r.symptom || r.email_subject || '')}</span>` +
       `<span class="status-select st-${esc(r.status)}" style="padding:2px 8px">${esc(r.status || '')}</span>` +
       `<span class="muted" style="white-space:nowrap">${esc(r.date || '')}</span></div>`;
   }).join('');
-  return `<div class="urg-box"><h4>🔥 긴급 (상) <span class="muted" style="font-weight:400">${list.length}건 · 업무관리대장 긴급도 칸 또는 수리이력 🔥 로 지정</span></h4>` +
+  return `<div class="urg-box"><h4>🔥 긴급 (상) <span class="muted" style="font-weight:400">${list.length}건 · 📋 업무 탭 긴급 배지 또는 수리이력 🔥 로 지정</span></h4>` +
     (rows || '<div class="muted" style="font-size:12px;padding:4px 0">긴급 상 없음</div>') + '</div>';
 }
 

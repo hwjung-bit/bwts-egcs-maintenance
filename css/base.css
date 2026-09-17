@@ -92,6 +92,13 @@ tr:hover{background:#f8fafc}
 .wb-table input,.wb-table select{padding:3px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box;max-width:100%}
 .wb-table tr.wb-skip td{opacity:.4}
 .wb-table tr.wb-update td{background:#fffbeb}
+/* 📎 자료 탭 */
+.links-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.link-card{display:block;background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;text-decoration:none;color:#0f172a;box-shadow:0 1px 3px rgba(0,0,0,.06);transition:all .15s}
+.link-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1);border-color:#2563eb}
+.lc-title{font-weight:700;font-size:14px;margin-bottom:4px}
+.lc-note{font-size:12px;color:#64748b;line-height:1.45}
+.lc-url{font-size:11px;color:#94a3b8;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .note-cell{max-width:200px;position:relative}
 .note-text{font-size:12px;color:#64748b;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 4px;border-radius:4px;min-height:20px}
 .note-text:hover{background:#f1f5f9}

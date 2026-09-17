@@ -1,8 +1,10 @@
 name: Mail Collect
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'  # Every 2 hours
+  # 2026-09-18 스케줄 정지: 📧 메일대장 탭 제거로 mail_log 소비자가 없다.
+  # 수리이력·검교정은 이 수집기와 무관(다른 경로). 필요하면 수동 실행만.
+  # schedule:
+  #   - cron: '0 */2 * * *'  # Every 2 hours
   workflow_dispatch:        # Manual trigger (from UI or API)
   repository_dispatch:
     types: [collect-mail]   # API trigger from dashboard

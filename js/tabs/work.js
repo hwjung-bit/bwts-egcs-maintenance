@@ -234,6 +234,8 @@ function edit(id, field, kind, el) {
     // 시스템이 BWTS/EGCS 로 바뀌면 수리이력 탭에도 나타나므로 옛 stage 를 채워 둔다
     if (field === 'system' && REPAIR_SYS[v] && !REPAIR_SYS[t.system]) { patch.stage = STAGE_OF[t.status] || '미확인'; if (!t.symptom) patch.symptom = t.title || ''; }
     if (field === 'title' && REPAIR_SYS[t.system]) patch.symptom = v;
+    if (field === 'category' && REPAIR_SYS[t.system]) patch.equip = v;
+    if (field === 'last_action' && REPAIR_SYS[t.system]) patch.action = v;
     await patchTask(id, patch, '저장됨');
   };
   if (kind === 'long') {

@@ -170,11 +170,12 @@ function renderRows() {
       `<td style="white-space:nowrap">${esc(r.date || '—')}</td>` +
       `<td style="white-space:nowrap">${urgBtn}${esc(r.ship_code || '—')}</td>` +
       `<td><span class="pill pill-${(r.system || '').toLowerCase() === 'bwts' ? 'bwts' : 'egcs'}">${esc(r.system)}</span></td>` +
-      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || '—')}</td>` +
+      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || r.category || '—')}</td>` +
       `<td style="padding:4px 6px"><select class="status-select st-${esc(r.status)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','status',this.value)">${stOpts}</select></td>` +
       `<td>${mailCell}</td>` +
-      longCell(eid, 'symptom', r.symptom) +
-      longCell(eid, 'action', r.action) +
+      // 업무대장에서 온 행은 title/last_action 에 내용이 있다 — 비어 있으면 그걸 보여준다
+      longCell(eid, 'symptom', r.symptom || r.title) +
+      longCell(eid, 'action', r.action || r.last_action) +
       `<td style="white-space:nowrap">${foldCell}${attCell}` +
         `<button onclick="repairsTab.editFileUrl('${eid}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8" title="Drive 링크 지정/변경">🔗</button>` +
         `<button onclick="repairsTab.openUpload('${eid}')" style="background:none;border:none;cursor:pointer;font-size:12px;color:#2563eb" title="파일 업로드 → Drive 작업폴더 (서비스리포트 등)">⬆</button>` +
