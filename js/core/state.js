@@ -27,7 +27,10 @@ export async function loadData() {
   try {
     const [m, r, bc, ec, s, df] = await Promise.all([
       sb.from('mail_log').select('*').order('date', { ascending: false }).limit(limit),
-      sb.from('repairs').select('*').order('date', { ascending: false }),
+      // repairs 는 업무 테이블을 겸한다(sql/027). 이 앱의 수리이력·종합·메일
+      // 전환은 BWTS/EGCS 건만 다루므로 여기서 한 번 걸러 S.REPAIRS 에 담는다.
+      sb.from('repairs').select('*').in('system', ['BWTS', 'EGCS'])
+        .order('date', { ascending: false }),
       sb.from('calibrations').select('*').eq('system', 'BWTS'),
       sb.from('calibrations').select('*').eq('system', 'EGCS'),
       sb.from('ships').select('*'),

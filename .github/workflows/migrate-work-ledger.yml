@@ -1,27 +1,22 @@
-name: Work Ledger Sync
+name: Migrate Work Ledger
 
-# 업무관리대장 시트의 BWTS/EGCS 업무를 수리이력(repairs)로 upsert.
-#
-# 2026-09-17 스케줄 정지: 업무대장을 이 앱으로 흡수(sql/027, scripts/migrate_work_ledger.py)
-# 하면서 repairs 가 업무 테이블을 겸한다. 이 sync 는 대상 밖 WL_ 행을 지우므로
-# 이관된 일반 업무를 삭제해 버린다. 수동 실행만 남기고, 5단계에서 파일째 폐기.
+# 업무관리대장 시트 전체 → repairs/work_actions 일회성 이관 (scripts/migrate_work_ledger.py).
+# 수동 실행 전용. 기본은 dry_run=1 (쓰기 없이 건수만). sql/027 이 먼저 적용돼 있어야 한다.
 on:
-  # schedule:
-  #   - cron: '15 */2 * * *'   # every 2 hours, offset from mail collect
   workflow_dispatch:
     inputs:
-      merge_dry:
-        description: '메일 건 병합을 실행하지 않고 예정만 로그에 남김 (1)'
-        default: ''
+      dry_run:
+        description: '1 = 쓰기 없이 건수만 로그 (기본), 0 = 실제 이관'
+        default: '1'
 
 jobs:
-  sync:
+  migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
     concurrency:
-      group: work-ledger-sync
+      group: work-ledger-sync     # 예전 sync 와 동시에 돌지 않게 같은 그룹
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
@@ -33,7 +28,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
-      - name: Sync work ledger
+      - name: Migrate work ledger
+        working-directory: scripts   # sync_work_ledger 를 같은 폴더에서 import
         env:
           DRIVE_SA_JSON: ${{ secrets.DRIVE_SA_JSON }}
           DRIVE_TOKEN_JSON: ${{ secrets.DRIVE_TOKEN_JSON }}
@@ -42,8 +38,13 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          MERGE_DRY: ${{ inputs.merge_dry }}
-        run: python scripts/sync_work_ledger.py
+        run: |
+          if [ "${{ inputs.dry_run }}" = "0" ]; then
+            python migrate_work_ledger.py
+          else
+            python migrate_work_ledger.py --dry-run
+          fi
+
       - name: Notify on failure
         if: failure()
         env:
