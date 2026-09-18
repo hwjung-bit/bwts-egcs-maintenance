@@ -156,9 +156,14 @@ function render() {
       `<td style="white-space:nowrap;${dueCls}"><span${ed(eid, 'due_date', 'date')}>${esc(t.due_date || '—')}</span></td>` +
       `<td style="padding:4px 6px">${status}</td>` +
       `<td style="white-space:nowrap">${bar}</td>` +
-      `<td style="max-width:220px;white-space:pre-wrap;word-break:break-word"><span${ed(eid, 'last_action', 'long')}>${esc(t.last_action || (can ? '—' : ''))}</span></td>` +
-      `<td style="max-width:220px;white-space:pre-wrap;word-break:break-word"><span${ed(eid, 'next_action', 'long')}>${esc(t.next_action || (can ? '—' : ''))}</span></td>` +
-      `<td style="white-space:nowrap">${actBtn}</td></tr>`;
+      // 최근 조치 = 조치이력 최신 건 (없으면 이관 때 들어온 last_action). 클릭 → 이력 펼침.
+      `<td style="max-width:300px;white-space:pre-wrap;word-break:break-word;cursor:pointer" onclick="workTab.toggleActs('${eid}')" title="클릭 → 조치이력 펼치기">` +
+        (list[0]
+          ? `<span class="muted" style="font-size:11px;white-space:nowrap">${esc(list[0].date || '')}</span> ${esc(list[0].note || '')}`
+          : esc(t.last_action || '')) + '</td>' +
+      `<td style="white-space:nowrap">${actBtn}` +
+        (can ? ` <button id="wdel-${eid}" onclick="workTab.deleteTask('${eid}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px" title="삭제 (두 번 클릭)">✕</button>` : '') +
+      '</td></tr>';
     const entries = list.map(a =>
       `<div style="font-size:12px;padding:2px 0;display:flex;gap:6px;align-items:baseline"><b style="color:#64748b;white-space:nowrap">${esc(a.date || '')}</b>` +
       (a.progress !== null && a.progress !== undefined ? `<span class="muted">[${a.progress}%]</span>` : '') +
@@ -173,13 +178,13 @@ function render() {
         `<input type="text" id="wa-n-${eid}" placeholder="조치 내용 (Enter 로 추가)" style="flex:1;padding:3px 6px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px" onkeydown="if(event.key==='Enter')workTab.addAct('${eid}')">` +
         `<button class="add-btn" style="padding:3px 10px" onclick="workTab.addAct('${eid}')">추가</button></div>`
       : '';
-    const detail = `<tr class="detail-row${OPEN_ACTS[t.id] ? ' open' : ''}" data-acts="${eid}"><td colspan="12" style="background:#f8fafc;padding:6px 12px 8px 40px">${entries}${form}</td></tr>`;
+    const detail = `<tr class="detail-row${OPEN_ACTS[t.id] ? ' open' : ''}" data-acts="${eid}"><td colspan="11" style="background:#f8fafc;padding:6px 12px 8px 40px">${entries}${form}</td></tr>`;
     return main + detail;
   }).join('');
   $('workRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">등록일</th><th style="width:56px">긴급</th><th style="width:50px">선박</th><th style="width:70px">시스템</th><th style="width:60px">구분</th><th>제목</th><th style="width:80px">기한</th><th style="width:90px">상태</th><th style="width:110px">진행률</th><th>최근조치</th><th>다음조치</th><th style="width:50px">이력</th></tr></thead><tbody>' +
+    '<table><thead><tr><th style="width:80px">등록일</th><th style="width:56px">긴급</th><th style="width:50px">선박</th><th style="width:70px">시스템</th><th style="width:60px">구분</th><th>제목</th><th style="width:80px">기한</th><th style="width:90px">상태</th><th style="width:110px">진행률</th><th>최근 조치</th><th style="width:50px">이력</th></tr></thead><tbody>' +
     rows + '</tbody></table>' +
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 🔥 → 긴급도 순환 · 기한 빨강=지남, 주황=7일 내 · 🗒 → 조치이력(추가는 펼친 뒤) · BWTS/EGCS 건은 🔧 EGCS·BWTS 이력 탭과 같은 행</div>';
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 🔥 → 긴급도 순환 · 기한 빨강=지남, 주황=7일 내 · 최근 조치 = 조치이력 최신 건(클릭 또는 🗒 → 펼치기·추가) · ✕ 두 번 = 삭제 · BWTS/EGCS 건은 🔧 EGCS·BWTS 이력 탭과 같은 행</div>';
 }
 
 /* ===== 저장 공통 ===== */
@@ -254,6 +259,25 @@ function edit(id, field, kind, el) {
     css: kind === 'number' ? 'width:56px;font-size:12px;padding:3px 6px;border:1px solid #3b82f6;border-radius:4px;outline:none' : undefined,
     restore: () => render(),
   });
+}
+
+/* ===== 삭제 (두 번 클릭 — 팝업 없이) ===== */
+const DEL_ARM = {};
+async function deleteTask(id) {
+  const btn = $('wdel-' + id);
+  if (!DEL_ARM[id]) {
+    DEL_ARM[id] = setTimeout(() => { delete DEL_ARM[id]; if (btn) { btn.textContent = '✕'; btn.style.fontWeight = ''; } }, 4000);
+    if (btn) { btn.textContent = '삭제?'; btn.style.fontWeight = '700'; }
+    return;
+  }
+  clearTimeout(DEL_ARM[id]); delete DEL_ARM[id];
+  // work_actions·folder_requests 는 ON DELETE CASCADE. GAS 폴더는 남는다(파일 보존).
+  const ok = await dbSave(sb.from('repairs').delete().eq('id', id), '삭제됨');
+  if (!ok) return;
+  S.TASKS = S.TASKS.filter(t => t.id !== id);
+  S.REPAIRS = S.REPAIRS.filter(t => t.id !== id);
+  S.ACTIONS = S.ACTIONS.filter(a => a.task_id !== id);
+  render();
 }
 
 /* ===== 조치이력 ===== */
@@ -571,6 +595,6 @@ async function applyBulk() {
   }
 }
 
-window.workTab = { filterStatus, toggleActs, edit, setStatus, cycleUrgency, addAct, removeAct };
+window.workTab = { filterStatus, toggleActs, edit, setStatus, cycleUrgency, addAct, removeAct, deleteTask };
 
 export default { id: 'work', mount, refresh };
