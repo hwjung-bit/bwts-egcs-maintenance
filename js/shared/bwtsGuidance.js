@@ -21,11 +21,13 @@ export function analyzeSessions(sessions) {
     ballast: bal.length, deballast: deb.length,
     ok: bal.filter(x => x.in_range === true),
     noTro: bal.filter(x => x.in_range === false && !x.tro_appeared),
+    // 저/과는 파이프라인 세션 판정(in_range=false)을 그대로 따른다 — 완화 정상(범위내 ≥50%·max ≤12)을
+    // 여기서 다시 이탈로 세지 않게. 배출도 세션 판정만 (월 평균 0.2 기준은 파이프라인 몫).
     low: bal.filter(x => x.in_range === false && x.tro_appeared && x.stable_avg != null && x.stable_avg < min),
-    high: bal.filter(x => x.tro_appeared && x.stable_avg != null && (x.stable_avg > max || (x.stable_max != null && x.stable_max > relaxedMax))),
+    high: bal.filter(x => x.in_range === false && x.tro_appeared && x.stable_avg != null && x.stable_avg >= min),
     short: bal.filter(x => x.in_range == null && (x.duration_min == null || x.duration_min < wm)),
     pending: bal.filter(x => x.in_range == null && x.duration_min != null && x.duration_min >= wm),
-    debBad: deb.filter(x => x.in_range === false || (x.stable_max != null && x.stable_max > dMax)),
+    debBad: deb.filter(x => x.in_range === false),
     debOk: deb.filter(x => x.in_range === true),
     limits: { min, max, relaxedMax, dMax, wm },
   };
@@ -105,6 +107,20 @@ export function buildGuidance(r, sessions) {
     act.push('배출 TRO 초과 — 중화제 잔량·중화 펌프 토출·중화 후 TRO 센서 확인');
     ae.push('Discharge TRO high — check neutraliser stock, dosing pump and post-neutralisation TRO sensor');
   }
+  // 등급 사유에만 있는 항목 — Trip·알람 Shutdown·E-stop (세션 TRO 와 무관하게 점검필요를 만든다)
+  (r && r.grade_reasons || []).forEach(x => {
+    let m;
+    if ((m = /^Trip (\d+)건/.exec(x))) {
+      f.push(`Trip ${m[1]}건 — 운전 중 정지 반복`); fe.push(`${m[1]} trip(s) — repeated stops during operation`);
+      act.push('Trip 발생 시각의 알람 코드·원인(유량 저하, 압력, 전원, 인터록) 확인 후 회신'); ae.push('Report the alarm code and cause at each trip (low flow, pressure, power, interlock)');
+    } else if ((m = /알람 Shutdown (\d+)회/.exec(x))) {
+      f.push(`알람 Shutdown ${m[1]}회`); fe.push(`${m[1]} alarm shutdown(s)`);
+      act.push('Shutdown 알람 이력(코드·시각) 목록과 조치 내역 회신'); ae.push('Reply with the shutdown alarm list (code, time) and the action taken');
+    } else if ((m = /E-stop (\d+)회/.exec(x))) {
+      f.push(`E-stop ${m[1]}회`); fe.push(`${m[1]} emergency stop(s)`);
+      act.push('E-stop 사용 사유 확인 — 비상 정지 대신 정상 정지 절차 사용'); ae.push('Confirm why E-stop was used — use the normal stop procedure instead');
+    }
+  });
   (r && r.flags || []).forEach(x => {
     if (/채터링/.test(x)) { act.push('밸브 개폐 신호 반복(채터링) — 해당 밸브 리미트 스위치·액추에이터 점검'); ae.push('Valve signal chattering — check the limit switch and actuator of the valve concerned'); }
   });
