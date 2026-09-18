@@ -179,7 +179,7 @@ function render() {
   $('workRoot').innerHTML =
     '<table><thead><tr><th style="width:80px">등록일</th><th style="width:56px">긴급</th><th style="width:50px">선박</th><th style="width:70px">시스템</th><th style="width:60px">구분</th><th>제목</th><th style="width:80px">기한</th><th style="width:90px">상태</th><th style="width:110px">진행률</th><th>최근조치</th><th>다음조치</th><th style="width:50px">이력</th></tr></thead><tbody>' +
     rows + '</tbody></table>' +
-    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 🔥 → 긴급도 순환 · 기한 빨강=지남, 주황=7일 내 · 🗒 → 조치이력(추가는 펼친 뒤) · BWTS/EGCS 건은 🔧 수리이력 탭과 같은 행</div>';
+    '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 🔥 → 긴급도 순환 · 기한 빨강=지남, 주황=7일 내 · 🗒 → 조치이력(추가는 펼친 뒤) · BWTS/EGCS 건은 🔧 EGCS·BWTS 이력 탭과 같은 행</div>';
 }
 
 /* ===== 저장 공통 ===== */

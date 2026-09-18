@@ -20,7 +20,7 @@ function ensureModal() {
   d.id = 'repairAdd';
   d.innerHTML = `
   <div class="box">
-    <h3>🔧 수리이력 직접 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 카톡·전화 등 메일 없이 처리된 건</span></h3>
+    <h3>🔧 EGCS·BWTS 이력 직접 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 카톡·전화 등 메일 없이 처리된 건</span></h3>
     <div class="row">
       <label>일자<input id="raDate" type="date"></label>
       <label>선박<input id="raShip" list="dlShips" placeholder="입력 또는 선택" maxlength="3" style="text-transform:uppercase" autocomplete="off"></label>
@@ -138,7 +138,7 @@ function renderRows() {
   $('repairCnt').textContent = filtered.length + ' / ' + REPAIRS.length + '건' + (hidden ? ` (완료 ${hidden}건 숨김)` : '');
 
   if (!REPAIRS.length) {
-    $('repairsRoot').innerHTML = '<div class="loading">수리이력 없음</div>';
+    $('repairsRoot').innerHTML = '<div class="loading">이력 없음</div>';
     return;
   }
   const rows = filtered.map(r => {
@@ -184,7 +184,8 @@ function renderRows() {
       `<td style="text-align:center"><button onclick="repairsTab.deleteRepair('${eid}')" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px" title="삭제">✕</button></td></tr>`;
   }).join('');
   $('repairsRoot').innerHTML =
-    '<table><thead><tr><th style="width:80px">일자</th><th style="width:40px">선박</th><th style="width:50px">시스템</th><th style="width:70px">장비</th><th style="width:100px">단계</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:110px">파일</th><th style="width:30px"></th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    // table-layout:fixed — 고정 폭 칸은 헤더 폭 그대로, 증상·조치만 남는 폭을 나눠 쓴다
+    '<table style="table-layout:fixed"><thead><tr><th style="width:80px">일자</th><th style="width:56px">선박</th><th style="width:56px">시스템</th><th style="width:80px">장비</th><th style="width:100px">상태</th><th style="width:110px">메일</th><th>증상</th><th>조치</th><th style="width:110px">파일</th><th style="width:30px"></th></tr></thead><tbody>' + rows + '</tbody></table>' +
     '<div style="margin-top:8px;color:#94a3b8;font-size:11px">셀 클릭 → 수정 · 📧 → 원본 메일 · 💬 → 메일 없이 접수(카톡 등) · 📁 → Drive 폴더 · 📄 → 첨부 목록 · 🔗 → 선박 폴더 링크 변경</div>';
 }
 
@@ -364,7 +365,7 @@ function ensureUploadModal() {
     </div>
     <div id="ruDrop" class="dropzone">여기에 파일을 <b>드래그</b>하거나 클릭해서 선택 (여러 개 가능, 50MB 이하)<input id="ruFiles" type="file" multiple style="display:none"></div>
     <div class="up-list" id="ruList"></div>
-    <label>조치 내용 / 메모 (선택 — 수리이력 '조치'에 날짜와 함께 추가됨)<textarea id="ruNote" placeholder="예: 테크로스 방선 점검 완료, TRO 센서 교체. 서비스리포트 첨부"></textarea></label>
+    <label>조치 내용 / 메모 (선택 — 이력 '조치'에 날짜와 함께 추가됨)<textarea id="ruNote" placeholder="예: 테크로스 방선 점검 완료, TRO 센서 교체. 서비스리포트 첨부"></textarea></label>
     <div style="font-size:11px;color:#94a3b8">저장 위치: Drive › 시스템 › 선박 › "날짜 제목" 작업폴더 (없으면 자동 생성). 5분 내 📄 첨부 목록에 링크가 생깁니다.</div>
     <div class="btns">
       <button id="ruCancel">취소</button>
@@ -463,7 +464,7 @@ async function submitUpload() {
       needs_review: false, source_msg_id: '', origin: '파일',
     };
     const ins = await sb.from('repairs').insert(rec).select();
-    if (ins.error) { toast('수리이력 등록 실패: ' + ins.error.message); return; }
+    if (ins.error) { toast('이력 등록 실패: ' + ins.error.message); return; }
     r = ins.data && ins.data[0] ? ins.data[0] : rec;
     S.REPAIRS.unshift(r);
   } else if (!files.length && !note) { toast('파일 또는 메모를 입력하세요'); return; }

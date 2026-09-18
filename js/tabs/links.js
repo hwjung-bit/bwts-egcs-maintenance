@@ -10,12 +10,10 @@ const CARDS = [
     note: 'KMC 주간호 전체 아카이브 — 검색·분류·관련도·월 필터. 코워크가 갱신하면 publish_static.py 로 반영.' },
   { icon: '⛽', title: 'BSR 대시보드 (최신)', url: 'archive/bsr/', target: '_blank',
     note: '본선 BUNKER SOUNDING 편차 분석. 매주 화 14:30 자동 빌드 → 이 페이지 갱신.' },
-  { icon: '🛠', title: 'BWTS 로그 분석 · 검교정 · 선박관리', url: '#bwtsLog', target: '',
-    note: '이 앱의 다른 탭. (예전 "BWTS 분석 대시보드" 링크는 여기로 통합됨)' },
   { icon: '🖥', title: '공무팀 런처', url: 'http://127.0.0.1:8777/', target: '_blank',
     note: '내 PC 전용 — 런처(TOOL1)가 켜져 있을 때만 열림. 다른 PC·폰에선 동작 안 함.' },
-  { icon: '📄', title: '업무 DB 시트 (백업, 읽기용)', url: 'https://docs.google.com/spreadsheets/d/19GuSBHq_YhyRIkgcClXK0AWfjIlfZ2V1m22w-OWBjkU/edit', target: '_blank',
-    note: '2026-09-18 이관 전 업무관리대장 원본. 이제 편집은 📋 업무 탭에서 — 시트는 참고만.' },
+  // 제거(2026-09-18): 앱 내부 탭 링크(#bwtsLog — 라우터가 해시 변경을 안 들어 동작 안 함),
+  // 업무 DB 시트(은퇴 후 갱신 없음 — 이관 시점 백업일 뿐, 보려면 📋 업무 탭).
 ];
 
 function mount(root) {
