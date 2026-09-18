@@ -9,6 +9,7 @@ import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast } from '../core/dom.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
 import { requireTH } from '../shared/thresholds.js';
+import { buildGuidance, sessionTableText } from '../shared/bwtsGuidance.js';
 
 export const GRADES = ['운전양호', '점검필요', '수리후정상', '미운전', '미수신', '데이터불량', '판독실패'];
 const STYLE = {
@@ -30,6 +31,7 @@ const F = { year: String(new Date().getFullYear()), filter: '' };
 let ROWS = [];              // rows for F.year
 let YEARS = [];             // available years
 let selected = null;        // {ship_code, period}
+let DETAIL = null;          // {ship_code, period, sessions, flags} — renderDetail 이 채우고 issueMail 이 쓴다
 let loadedYear = null;
 
 const disp = r => r.final_grade || r.grade;
@@ -292,6 +294,16 @@ async function renderDetail() {
   const sess = (sum.data && sum.data.summary && sum.data.summary.session_summaries) || [];
   const chat = (sum.data && sum.data.summary && sum.data.summary.chattering) || [];
   const rp = (sum.data && sum.data.summary && sum.data.summary.recovery_pattern) || {};
+  DETAIL = { ship_code: r.ship_code, period: r.period, sessions: sess, flags: fl };
+  // 본선 점검 지침 — 메일(issueMail)과 같은 룰(shared/bwtsGuidance.js)
+  let guideHtml = '';
+  try {
+    const gd = buildGuidance(r, sess);
+    guideHtml = `<div class="bl-sec" style="border-left:3px solid #2563eb;margin-bottom:8px"><h4>본선 점검 지침 <span class="muted" style="font-weight:400;font-size:11px">— ✉ 본선 메일에 그대로 들어감</span></h4>` +
+      `<div style="font-weight:600;margin:2px 0 6px">${esc(gd.verdict)}</div>` +
+      (gd.findings.length ? `<ul style="margin:0 0 6px 16px">${gd.findings.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '') +
+      (gd.actions.length ? `<ol style="margin:0 0 0 16px">${gd.actions.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : '<div class="muted">점검 지침 없음 — 정상</div>') + '</div>';
+  } catch (e) { console.warn('guidance', e); }
   // 일자~판정은 붙여서 한 눈에 읽히게 폭을 고정하고, 숫자는 자릿수를 맞춰
   // 오른쪽 정렬한다. 남는 폭은 비고가 가져가고 거기서만 줄바꿈된다.
   const NUM = 'text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap';
@@ -307,7 +319,7 @@ async function renderDetail() {
   const thread = (rv.data || []).map(q =>
     `<div class="bl-q"><div><b>Q</b> ${esc(q.question)} <span class="muted" style="font-size:11px">${esc(q.requested_by || '')} ${esc((q.created_at || '').slice(0, 16).replace('T', ' '))}</span></div>` +
     (q.answer ? `<div class="bl-a"><b>A</b> ${esc(q.answer)} <span class="muted" style="font-size:11px">${esc(q.answered_by || '')} ${esc((q.answered_at || '').slice(0, 16).replace('T', ' '))}</span></div>` : '<div class="muted" style="font-size:11px">답변 대기 — 로컬에서 /bwts-review 실행</div>') + '</div>').join('');
-  $('blSessions').innerHTML =
+  $('blSessions').innerHTML = guideHtml +
     (rp.pattern ? `<div style="margin-bottom:6px"><b>회복 패턴:</b> ${esc(rp.pattern)} — ${esc(rp.detail || '')}</div>` : '') +
     chatterDetail(chat) +
     `<h4>세션 (${sess.length}${sess.length > 60 ? ', 60개 표시' : ''})</h4>` +
@@ -700,35 +712,39 @@ function issueMail(lang) {
   if (!reasons.length) { toast('이 달은 등급 사유가 없음 — 보낼 내용이 없습니다'); return; }
   const per = `${r.period.slice(0, 4)}년 ${+r.period.slice(5)}월`;
 
-  const ko = [
-    `${per} BWTS 로그 확인 결과, 아래 사항이 확인되었습니다.`,
-    ``,
-    ...reasons.map(x => `  - ${x}`),
-    ``,
-    `해당 기간 판정: ${disp(r)}`,
-    ``,
-    `원인 확인 후 조치 내역을 회신해 주시기 바랍니다.`,
-    `조치가 어려운 경우 필요한 자재·지원 사항을 함께 알려 주십시오.`,
-  ].join('\n');
+  // 세션·지침은 상세 패널이 로드해 둔 DETAIL 에서. (아직 안 열렸으면 등급 사유만)
+  const sess = DETAIL && DETAIL.ship_code === r.ship_code && DETAIL.period === r.period ? DETAIL.sessions : null;
+  const gd = sess ? buildGuidance(r, sess) : null;
 
-  let body = ko;
+  const ko = [
+    `${per} BWTS 로그 확인 결과입니다.`,
+    ``,
+    `■ 판정: ${disp(r)}${gd ? ' — ' + gd.verdict : ''}`,
+    ...(gd ? gd.findings.map(x => `  - ${x}`) : reasons.map(x => `  - ${x}`)),
+  ];
+  if (sess) ko.push(``, `■ 운전 기록 (warm-up 제외, TRO ppm)`, sessionTableText(sess, 'ko'));
+  if (gd && gd.actions.length) ko.push(``, `■ 본선 점검 요청`, ...gd.actions.map((x, i) => `  ${i + 1}. ${x}`));
+  ko.push(``, `점검 결과와 조치 내역(운전 시각·해역 포함)을 회신해 주시기 바랍니다.`,
+    `본선에서 조치가 어려우면 필요한 자재·지원 사항을 함께 알려 주십시오.`);
+
+  let body = ko.join('\n');
   if (lang === 'ko_en') {
-    const en = reasons.map(x => `  - ${reasonEn(x) || x}`);
-    body += '\n\n' + [
+    const en = [
       `----------------------------------------`,
       ``,
-      `Our review of the BWTS log for ${r.period} found the following.`,
+      `BWTS log review for ${r.period}.`,
       ``,
-      ...en,
-      ``,
-      `Assessment for the period: ${disp(r)}`,
-      ``,
-      `Please check the cause and reply with the action taken.`,
-      `If it cannot be resolved onboard, advise the parts or support required.`,
-    ].join('\n');
+      `■ Assessment: ${disp(r)}${gd ? ' — ' + gd.en.verdict : ''}`,
+      ...(gd ? gd.en.findings.map(x => `  - ${x}`) : reasons.map(x => `  - ${reasonEn(x) || x}`)),
+    ];
+    if (sess) en.push(``, `■ Operation record (warm-up excluded, TRO ppm)`, sessionTableText(sess, 'en'));
+    if (gd && gd.en.actions.length) en.push(``, `■ Please check onboard`, ...gd.en.actions.map((x, i) => `  ${i + 1}. ${x}`));
+    en.push(``, `Please reply with the findings and action taken (include operating time and area).`,
+      `If it cannot be resolved onboard, advise the parts or support required.`);
+    body += '\n\n' + en.join('\n');
   }
   gmailCompose(vesselMail(r.ship_code),
-    `[${r.ship_code}] BWTS 운전 상태 확인 요청 (${r.period})`, body + '\n' + SIGN);
+    `[${r.ship_code}] BWTS 운전 상태 확인 및 점검 요청 (${r.period})`, body + '\n' + SIGN);
 }
 
 /* ===== 미수신 로그 제출 요청 =====
