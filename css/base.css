@@ -72,7 +72,7 @@ tr:hover{background:#f8fafc}
 #workAdd.open,#workBulk.open{display:flex}
 #workAdd .box,#workBulk .box{background:#fff;border-radius:12px;padding:16px 18px;max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25)}
 #workAdd .box{width:520px}
-#workBulk .box{width:min(1100px,96vw)}
+#workBulk .box{width:min(1560px,96vw)}
 #workAdd h3,#workBulk h3{margin:0 0 12px;font-size:14px;color:#0f172a}
 #workAdd label,#workBulk label{display:block;margin-bottom:8px;color:#64748b;font-size:11px;font-weight:600}
 #workAdd input,#workAdd select,#workAdd textarea,#workBulk>.box>label input,#workBulk>.box>label textarea,#workBulk .row input{display:block;width:100%;margin-top:3px;padding:5px 7px;border:1px solid #cbd5e1;border-radius:5px;font-size:12px;font-family:inherit;color:#0f172a;outline:none;box-sizing:border-box}
@@ -86,10 +86,10 @@ tr:hover{background:#f8fafc}
 #workAdd .btns .pri,#workBulk .btns .pri{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
 #workBulk .btns button:disabled{opacity:.5;cursor:default}
 #workBulk .btns .armed{background:#d97706;border-color:#d97706}
-.wb-table{width:100%;border-collapse:collapse;font-size:12px}
+.wb-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}
 .wb-table th{position:sticky;top:0;background:#f8fafc;font-size:11px;color:#64748b;padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:left;white-space:nowrap}
 .wb-table td{padding:3px 4px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
-.wb-table input,.wb-table select{padding:3px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box;max-width:100%}
+.wb-table input,.wb-table select{width:100%;padding:3px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;font-family:inherit;box-sizing:border-box;max-width:100%}
 .wb-table tr.wb-skip td{opacity:.4}
 .wb-table tr.wb-update td{background:#fffbeb}
 /* 📎 자료 탭 */

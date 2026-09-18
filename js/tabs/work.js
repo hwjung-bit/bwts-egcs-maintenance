@@ -482,7 +482,7 @@ function matchSelect(it) {
   if (cand.length) html += `<optgroup label="비슷한 업무 (${cand.length})">${cand.map(opt).join('')}</optgroup>`;
   if (same.length) html += `<optgroup label="같은 선박 (${same.length})">${same.map(opt).join('')}</optgroup>`;
   if (others.length) html += `<optgroup label="그 외 진행 중 (${others.length})">${others.map(opt).join('')}</optgroup>`;
-  return `<select class="bmatch" data-k="${it.key}" style="max-width:260px">${html}</select>`;
+  return `<select class="bmatch" data-k="${it.key}">${html}</select>`;
 }
 function renderBulk() {
   const sel = (cls, list, cur, k, allowBlank) =>
@@ -491,18 +491,18 @@ function renderBulk() {
     <tr data-k="${it.key}" class="wb-${it.action}">
       <td>${sel('baction', [], '', it.key).replace('</select>', `<option value="new"${it.action === 'new' ? ' selected' : ''}>신규</option><option value="update"${it.action === 'update' ? ' selected' : ''}>기존에 추가</option><option value="skip"${it.action === 'skip' ? ' selected' : ''}>제외</option></select>`)}</td>
       <td>${matchSelect(it)}</td>
-      <td><input class="bf" data-f="ship" data-k="${it.key}" value="${esc(it.ship)}" style="width:44px;text-transform:uppercase"></td>
+      <td><input class="bf" data-f="ship" data-k="${it.key}" value="${esc(it.ship)}" style="text-transform:uppercase"></td>
       <td>${sel('bf', SYSTEMS, it.system, it.key, true).replace('class="bf"', `class="bf" data-f="system"`)}</td>
       <td>${sel('bf', CATEGORIES, it.category, it.key, false).replace('class="bf"', `class="bf" data-f="category"`)}</td>
-      <td><input class="bf" data-f="title" data-k="${it.key}" value="${esc(it.title)}" style="min-width:200px"></td>
-      <td><input class="bf" data-f="detail" data-k="${it.key}" value="${esc(it.detail)}" style="min-width:140px"></td>
+      <td><input class="bf" data-f="title" data-k="${it.key}" value="${esc(it.title)}"></td>
+      <td><input class="bf" data-f="detail" data-k="${it.key}" value="${esc(it.detail)}"></td>
       <td>${sel('bf', URGENCY.slice(1), it.urgency, it.key, true).replace('class="bf"', `class="bf" data-f="urgency"`)}</td>
       <td>${sel('bf', WORK_STATUS, it.status, it.key, true).replace('class="bf"', `class="bf" data-f="status"`)}</td>
-      <td><input class="bf" data-f="progress" data-k="${it.key}" type="number" min="0" max="100" step="5" value="${esc(it.progress)}" placeholder="%" style="width:52px"></td>
+      <td><input class="bf" data-f="progress" data-k="${it.key}" type="number" min="0" max="100" step="5" value="${esc(it.progress)}" placeholder="%"></td>
     </tr>`).join('');
   $('wbPreview').innerHTML = `
     <div class="muted" style="font-size:11px;margin:6px 0">각 줄의 동작(신규 / 기존에 추가 / 제외)과 값을 고친 뒤 등록. "기존에 추가"는 새 업무를 만들지 않고 고른 업무에 조치이력만 남깁니다.</div>
-    <div style="overflow:auto;max-height:46vh"><table class="wb-table"><thead><tr><th>동작</th><th>대상 업무</th><th>선박</th><th>시스템</th><th>구분</th><th>제목</th><th>상세</th><th>긴급</th><th>상태</th><th>%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    <div style="overflow-y:auto;overflow-x:hidden;max-height:52vh"><table class="wb-table"><thead><tr><th style="width:92px">동작</th><th style="width:240px">대상 업무</th><th style="width:60px">선박</th><th style="width:104px">시스템</th><th style="width:96px">구분</th><th>제목</th><th style="width:24%">상세</th><th style="width:62px">긴급</th><th style="width:92px">상태</th><th style="width:62px">%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   $('wbPreview').querySelectorAll('.baction').forEach(s => { s.onchange = () => { const it = BULK.find(x => x.key === s.dataset.k); it.action = s.value; s.closest('tr').className = 'wb-' + s.value; }; });
   $('wbPreview').querySelectorAll('.bmatch').forEach(s => { s.onchange = () => { BULK.find(x => x.key === s.dataset.k).matchId = s.value; }; });
   $('wbPreview').querySelectorAll('.bf').forEach(el => { el.onchange = () => { BULK.find(x => x.key === el.dataset.k)[el.dataset.f] = el.value.trim(); }; });
