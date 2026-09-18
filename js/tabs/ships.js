@@ -46,7 +46,7 @@ function refresh() {
   $('shipsRoot').innerHTML = head('<span style="font-size:12px;color:#64748b">셀 클릭 수정</span>') + tabs +
     // width:auto + table-layout:fixed — 헤더 폭을 그대로 쓰고 창이 넓어도 늘어나지 않는다
     '<table style="width:auto;table-layout:fixed"><thead><tr><th style="width:40px">#</th><th style="width:50px">코드</th><th style="width:160px">선명</th><th style="width:60px">TEU</th>' +
-    '<th style="width:90px">BWTS</th><th style="width:90px">EGCS</th><th style="width:70px">WMS</th><th style="width:80px">CEMS</th><th style="width:320px">리마크</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<th style="width:90px">BWTS</th><th style="width:90px">EGCS</th><th style="width:70px">WMS</th><th style="width:80px">CEMS</th><th style="width:560px">리마크</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function sub(id) { SUB = id; refresh(); }
