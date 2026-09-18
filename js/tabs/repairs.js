@@ -170,7 +170,7 @@ function renderRows() {
       `<td style="white-space:nowrap">${esc(r.date || '—')}</td>` +
       `<td style="white-space:nowrap">${urgBtn}${esc(r.ship_code || '—')}</td>` +
       `<td><span class="pill pill-${(r.system || '').toLowerCase() === 'bwts' ? 'bwts' : 'egcs'}">${esc(r.system)}</span></td>` +
-      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" title="클릭하여 수정">${esc(r.equip || r.category || '—')}</td>` +
+      `<td class="edit-cell" onclick="repairsTab.editField('${eid}','equip',this)" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.equip || r.category || '')} — 클릭하여 수정">${esc(r.equip || r.category || '—')}</td>` +
       `<td style="padding:4px 6px"><select class="status-select st-${esc(r.status)}" style="padding:3px 18px 3px 6px" onchange="repairsTab.updateField('${eid}','status',this.value)">${stOpts}</select></td>` +
       `<td>${mailCell}</td>` +
       // 업무대장에서 온 행은 title/last_action 에 내용이 있다 — 비어 있으면 그걸 보여준다
