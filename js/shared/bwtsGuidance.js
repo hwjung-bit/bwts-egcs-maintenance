@@ -162,7 +162,11 @@ export function sessionTableText(sessions, lang) {
       note = !x.tro_appeared ? (en ? 'no TRO' : '미생성')
         : (x.stable_avg != null && x.stable_avg < (B.tro_ballast_min_ppm ?? 5)) ? (en ? 'low' : '저농도')
         : (x.mode === 'DEBALLAST' ? (en ? 'high' : '초과') : (en ? 'high' : '과다'));
-    } else { judge = en ? 'n/a' : '보류'; note = en ? 'short' : '짧은 운전'; }
+    } else {
+      // 판정 보류: 10분 미만이면 '짧은 운전', 10분 넘게 돌렸는데 정상운전 구간이 부족하면 '판정보류'
+      judge = en ? 'n/a' : '보류';
+      note = (x.duration_min != null && x.duration_min < wm) ? (en ? 'short' : '짧은 운전') : (en ? 'too few rows' : '판정보류');
+    }
     rows.push(`${x.date.slice(5)}  ${mode}  ${String(min).padStart(3)}${en ? 'min' : '분'}  TRO ${tro.padStart(5)}  ${judge}${note ? '  ' + note : ''}`);
   });
   Object.entries(shortByDay).forEach(([d, n]) => rows.push(`${d.slice(5)}  ${en ? 'BAL' : '주입'}  ${en ? `short starts ×${n} (not assessed)` : `짧은 기동 ${n}회 (판정 보류)`}`));
