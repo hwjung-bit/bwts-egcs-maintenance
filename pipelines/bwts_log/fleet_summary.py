@@ -15,7 +15,8 @@ from csv_parser import combine_csv_results
 from analysis import validate_and_normalize
 from fleet_log_analyzer import analyze_datalog_deep
 from thresholds import BL
-from pdf_converter import ensure_csv_from_pdf
+# pdf_converter 는 pdfplumber(무거움)를 끌어온다. 등급 재판정(scripts/regrade.py)처럼
+# 파싱 없이 compute_grade 만 쓰는 쪽이 pdfplumber 없이 import 할 수 있도록 지연 import.
 
 # Alfa Laval: fewer non-housekeeping events than this in a month means the
 # export did not cover the month (see analyze_alfa_laval)
@@ -352,6 +353,7 @@ def compute_vessel_summary(code, year, month, verbose=False):
     # from the PDFs in place so the month is judged on content
     if folder:
         try:
+            from pdf_converter import ensure_csv_from_pdf  # lazy: pulls pdfplumber
             made = ensure_csv_from_pdf(folder, code, year, month, verbose=verbose)
             if made:
                 summary["pdf_converted"] = [f"{sec}:{cnt}" for sec, _, cnt in made]
