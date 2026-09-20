@@ -66,7 +66,8 @@
     "warmup_minutes": 10,
     "steady_min_rows": 3,
     "chatter_affects_grade": false,
-    "last_ballast_clears_tro": true
+    "last_ballast_clears_tro": true,
+    "trip_affects_grade": false
   },
   "integrity": {
     "csv_min_bytes_for_content": 20480,

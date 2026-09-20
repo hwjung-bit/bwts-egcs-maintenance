@@ -178,8 +178,14 @@ def compute_grade(summary):
             reasons.append(f"주입 TRO 범위 이탈 (정상 세션 {summary.get('tro_b_session_ok', '?')})")
         if tro_d_ok is False:
             reasons.append("배출 TRO 기준 초과")
+    # Trip: 2026-09-21 부터 등급이 아니라 참고 표시(flags). Trip 은 유량·압력·전원·
+    # 인터록 등 여러 원인으로 나므로 그 자체론 BWTS 성능 이상이 아니다. 등급 기준은
+    # TRO. 되돌리려면 thresholds.json trip_affects_grade: true.
     if trip_count >= BL["trip_check_needed"]:
-        reasons.append(f"Trip {trip_count}건")
+        if BL.get("trip_affects_grade", False):
+            reasons.append(f"Trip {trip_count}건")
+        else:
+            flags.append(f"Trip {trip_count}건")
     # 밸브 채터링: 2026-09-01 부터 등급이 아니라 참고 표시(flags). 밸브가
     # 열고 닫히는 패턴만으로 점검필요를 매기면 정상 운전의 절반이 걸렸다.
     # 표시 대상은 chatter_report_min_events 이상만. 그 미만(한두 번 튄 것)은

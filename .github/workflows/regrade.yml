@@ -1,0 +1,34 @@
+name: Regrade BWTS Log
+
+# 저장된 summary 로 등급만 다시 매긴다 (원본 재파싱 없음). 판정 룰이 바뀌었을 때만.
+# 수동 실행. 기본 dry_run=1. review_*/final_grade 는 안 건드린다.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '1 = 바뀔 행만 출력(기본), 0 = 실제 갱신'
+        default: '1'
+
+jobs:
+  regrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+      - name: Regrade
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "0" ]; then
+            python scripts/regrade.py --write
+          else
+            python scripts/regrade.py
+          fi
