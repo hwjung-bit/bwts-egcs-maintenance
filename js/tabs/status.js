@@ -67,10 +67,11 @@ async function history(code, sys, ev) {
     const prev = list[i + 1];
     const cleared = h.status === '수리완료' ||
       (h.status === '정상' && prev && prev.status && prev.status !== '정상' && prev.status !== '수리완료');
-    return `<tr><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
+    return `<tr data-hid="${h.id}"><td style="white-space:nowrap;color:#64748b">${kst(h.updated_at)}</td>` +
       `<td style="text-align:center;font-weight:700;white-space:nowrap">${esc(h.status || '')}` +
       (cleared ? ' <span style="color:#059669;font-size:11px;font-weight:700">✅ 클리어</span>' : '') + '</td>' +
-      `<td style="white-space:pre-wrap;word-break:break-word">${esc(h.memo || '')}</td></tr>`;
+      `<td style="white-space:pre-wrap;word-break:break-word">${esc(h.memo || '')}</td>` +
+      `<td style="text-align:center;width:34px"><button id="hdel-${h.id}" onclick="statusTab.delHist(${h.id})" title="이 기록 삭제 (두 번 클릭) — 잘못 기록한 항목만" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px">✕</button></td></tr>`;
   }).join('');
   box.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin:4px 0 10px">' +
@@ -78,11 +79,27 @@ async function history(code, sys, ev) {
       '<span style="font-size:11px;color:#94a3b8">✅ 클리어 = 수리중·문제 → 정상 전환일 · 5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
       '<div style="flex:1"></div><button onclick="statusTab.hideHist()">✕ 닫기</button></div>' +
     (rows
-      ? `<table class="cal-table" style="width:100%;font-size:13px"><thead><tr><th style="width:150px">저장일시</th><th style="width:110px">상태</th><th>메모</th></tr></thead><tbody>${rows}</tbody></table>`
+      ? `<table class="cal-table" style="width:100%;font-size:13px"><thead><tr><th style="width:150px">저장일시</th><th style="width:110px">상태</th><th>메모</th><th style="width:34px"></th></tr></thead><tbody>${rows}</tbody></table>`
       : '<div style="font-size:12px;color:#94a3b8">이력 없음 — 다음 저장부터 쌓입니다</div>');
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function hideHist() { const b = $('statusHist'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } }
+
+// 이력 항목 삭제 (잘못 기록한 것만). 두 번 클릭 — 팝업 없이. 현황판 현재값은 안 건드림.
+const HDEL = {};
+async function delHist(id) {
+  const btn = $('hdel-' + id);
+  if (!HDEL[id]) {
+    HDEL[id] = setTimeout(() => { delete HDEL[id]; if (btn) { btn.textContent = '✕'; btn.style.fontWeight = ''; } }, 4000);
+    if (btn) { btn.textContent = '삭제?'; btn.style.fontWeight = '700'; }
+    return;
+  }
+  clearTimeout(HDEL[id]); delete HDEL[id];
+  const ok = await dbSave(sb.from('status_history').delete().eq('id', id), '이력 삭제됨');
+  if (!ok) return;
+  const tr = document.querySelector(`#statusHist tr[data-hid="${id}"]`);
+  if (tr) tr.remove();
+}
 function closeHistory() { $('calEdit').style.display = 'none'; }
 
 function stColor(st) {
@@ -197,6 +214,6 @@ async function saveCell(code, sys) {
   refresh();
 }
 
-window.statusTab = { editCell, saveCell, history, hideHist, closeHistory };
+window.statusTab = { editCell, saveCell, history, hideHist, closeHistory, delHist };
 
 export default { id: 'status', mount, refresh };
