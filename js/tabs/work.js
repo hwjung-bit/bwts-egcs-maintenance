@@ -494,19 +494,32 @@ function parseBulk() {
 }
 
 function taskLabel(t) { return (t.ship_code ? `[${t.ship_code}] ` : '') + (t.title || t.symptom || '') + ' · ' + (t.status || ''); }
-function matchSelect(it) {
+
+// 대상 업무 후보: 비슷한 업무 → 같은 선박 → 그 외 진행 중. datalist 로 타이핑 검색.
+const MATCH_MAP = {};   // it.key → { 표시라벨: task id }
+function matchOptions(it) {
   const byId = {}; S.TASKS.forEach(t => { byId[t.id] = t; });
   const cand = it.candidates.map(c => byId[c.id]).filter(Boolean);
   const seen = {}; cand.forEach(t => { seen[t.id] = 1; });
   const rest = S.TASKS.filter(t => t.status !== '완료' && !seen[t.id]);
   const same = rest.filter(t => it.ship && t.ship_code === it.ship);
   const others = rest.filter(t => !(it.ship && t.ship_code === it.ship));
-  const opt = t => `<option value="${esc(t.id)}"${t.id === it.matchId ? ' selected' : ''}>${esc(taskLabel(t))}</option>`;
-  let html = '<option value="">— 대상 업무 선택 —</option>';
-  if (cand.length) html += `<optgroup label="비슷한 업무 (${cand.length})">${cand.map(opt).join('')}</optgroup>`;
-  if (same.length) html += `<optgroup label="같은 선박 (${same.length})">${same.map(opt).join('')}</optgroup>`;
-  if (others.length) html += `<optgroup label="그 외 진행 중 (${others.length})">${others.map(opt).join('')}</optgroup>`;
-  return `<select class="bmatch" data-k="${it.key}">${html}</select>`;
+  return [...cand, ...same, ...others];
+}
+function matchSelect(it) {
+  const list = matchOptions(it);
+  const map = {};
+  const opts = list.map(t => {
+    let d = taskLabel(t);
+    if (map[d] && map[d] !== t.id) d += ' #' + String(t.id).slice(-4);   // 라벨 충돌 시 id 꼬리로 구분
+    map[d] = t.id;
+    return `<option value="${esc(d)}"></option>`;
+  }).join('');
+  MATCH_MAP[it.key] = map;
+  const cur = it.matchId ? (Object.keys(map).find(k => map[k] === it.matchId) || '') : '';
+  return `<input class="bmatch" data-k="${it.key}" list="bmdl-${it.key}" value="${esc(cur)}"` +
+    ` placeholder="🔍 대상 업무 검색·선택" autocomplete="off">` +
+    `<datalist id="bmdl-${it.key}">${opts}</datalist>`;
 }
 function renderBulk() {
   const sel = (cls, list, cur, k, allowBlank) =>
@@ -528,7 +541,16 @@ function renderBulk() {
     <div class="muted" style="font-size:11px;margin:6px 0">각 줄의 동작(신규 / 기존에 추가 / 제외)과 값을 고친 뒤 등록. "기존에 추가"는 새 업무를 만들지 않고 고른 업무에 조치이력만 남깁니다.</div>
     <div style="overflow-y:auto;overflow-x:hidden;max-height:52vh"><table class="wb-table"><thead><tr><th style="width:92px">동작</th><th style="width:240px">대상 업무</th><th style="width:60px">선박</th><th style="width:104px">시스템</th><th style="width:96px">구분</th><th>제목</th><th style="width:24%">상세</th><th style="width:62px">긴급</th><th style="width:92px">상태</th><th style="width:62px">%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   $('wbPreview').querySelectorAll('.baction').forEach(s => { s.onchange = () => { const it = BULK.find(x => x.key === s.dataset.k); it.action = s.value; s.closest('tr').className = 'wb-' + s.value; }; });
-  $('wbPreview').querySelectorAll('.bmatch').forEach(s => { s.onchange = () => { BULK.find(x => x.key === s.dataset.k).matchId = s.value; }; });
+  $('wbPreview').querySelectorAll('.bmatch').forEach(inp => {
+    const resolve = () => {
+      const map = MATCH_MAP[inp.dataset.k] || {};
+      const v = inp.value.trim();
+      const id = map[v] || '';
+      BULK.find(x => x.key === inp.dataset.k).matchId = id;
+      inp.style.borderColor = (!v || id) ? '' : '#ef4444';   // 목록에 없는 값이면 빨강
+    };
+    inp.oninput = resolve; inp.onchange = resolve;
+  });
   $('wbPreview').querySelectorAll('.bf').forEach(el => { el.onchange = () => { BULK.find(x => x.key === el.dataset.k)[el.dataset.f] = el.value.trim(); }; });
   $('wbApply').disabled = false;
   const n = counts();
