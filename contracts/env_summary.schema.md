@@ -13,6 +13,7 @@ G:\공유 드라이브\고려에스엠 0030 공무팀\공무팀 AI\AI 대쉬보�
   repairs_open.json       진행 중 수리
   bwts_log_latest.json    BWTS 로그 분석 최근 3개월 (선박×월)
   work_summary.json       환경기술파트 업무 진행 현황 (2026-09-23 추가)
+  ships.json              선박 마스터 — 사내 툴 공용 선박 목록 원본 (2026-09-23 추가)
 ```
 
 - 갱신: `pipelines/bwts_log/export_contract.py` (월간 갱신 bat 에 포함, 수동 실행도 가능).
@@ -73,6 +74,10 @@ KPI: `open`(진행 중), `overdue`(기한 지남), `due_7d`(7일 내 마감), `u
 `rows[]`: `id, date, ship_code, system, category, title, status, due_date, urgency, progress, last_action`
 — 완료 제외, 기한 빠른 순. 상세·비고·비용은 포함하지 않음.
 repairs_open.json 에도 `status`(통일 상태) 필드가 끝에 추가됨(stage 는 호환용).
+
+### ships.json → `rows[]`
+`code, name, teu, hidden, sort_order, bwts_maker, egcs_maker` — sort_order 순.
+`hidden` 은 관리대장 화면에서만 숨김(SDL·SDY·SAC 등). 선박 추가·매각은 관리대장 🚢 선박관리에서만.
 
 ## 4. 읽기 예시 (pandas)
 

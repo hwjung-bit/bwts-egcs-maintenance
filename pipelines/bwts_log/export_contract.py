@@ -60,6 +60,12 @@ def export(sb, verbose=False):
     lg = sb.table("v_bwts_log_latest").select("*").execute().data or []
     _write("bwts_log_latest.json", {**meta, "rows": lg})
 
+    # 선박 마스터 (2026-09-23) — 이 앱 ships 가 선박 목록 원본. 다른 툴(주간 CII·입거·
+    # KINS 승선명부 등)이 하드코딩 대신 이 파일을 읽는다. hidden = 이 앱 화면에서만 숨김.
+    ships = (sb.table("ships").select("code,name,teu,hidden,sort_order,bwts_maker,egcs_maker")
+             .order("sort_order").execute().data or [])
+    _write("ships.json", {**meta, "rows": ships})
+
     # 업무 현황 (2026-09-23) — 업무관리대장 흡수 후 repairs 가 업무 테이블. 진행 중만.
     # 상세·비고·비용·부품은 내보내지 않는다 (공유본에서 금액·내부 메모 제외 원칙).
     from datetime import timedelta
