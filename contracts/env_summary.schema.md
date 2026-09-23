@@ -12,6 +12,7 @@ G:\공유 드라이브\고려에스엠 0030 공무팀\공무팀 AI\AI 대쉬보�
   egcs_calibration.json   EGCS WMS 센서 검교정·신환 (센서·구분별 1행)
   repairs_open.json       진행 중 수리
   bwts_log_latest.json    BWTS 로그 분석 최근 3개월 (선박×월)
+  work_summary.json       환경기술파트 업무 진행 현황 (2026-09-23 추가)
 ```
 
 - 갱신: `pipelines/bwts_log/export_contract.py` (월간 갱신 bat 에 포함, 수동 실행도 가능).
@@ -65,6 +66,13 @@ stage 값: 미확인 / 확인 / 수리준비중 / 자재준비중 / 방선예정
 
 등급: 운전양호(초록) / 점검필요(주황) / 수리후정상(파랑) / 미운전(회색) / 미수신(빨강) / 데이터불량(보라) /
 **판독실패(노랑)** — 판독실패 = 로그는 있는데 자동 파서가 못 읽은 것. 미운전과 다름.
+
+### work_summary.json
+KPI: `open`(진행 중), `overdue`(기한 지남), `due_7d`(7일 내 마감), `urgent`(긴급 상),
+`by_status`(대기·확인·준비중·방선예정·진행·보류 건수).
+`rows[]`: `id, date, ship_code, system, category, title, status, due_date, urgency, progress, last_action`
+— 완료 제외, 기한 빠른 순. 상세·비고·비용은 포함하지 않음.
+repairs_open.json 에도 `status`(통일 상태) 필드가 끝에 추가됨(stage 는 호환용).
 
 ## 4. 읽기 예시 (pandas)
 

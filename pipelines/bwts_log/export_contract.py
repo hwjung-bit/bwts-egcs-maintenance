@@ -60,6 +60,27 @@ def export(sb, verbose=False):
     lg = sb.table("v_bwts_log_latest").select("*").execute().data or []
     _write("bwts_log_latest.json", {**meta, "rows": lg})
 
+    # 업무 현황 (2026-09-23) — 업무관리대장 흡수 후 repairs 가 업무 테이블. 진행 중만.
+    # 상세·비고·비용·부품은 내보내지 않는다 (공유본에서 금액·내부 메모 제외 원칙).
+    from datetime import timedelta
+    today = (datetime.now(timezone.utc) + timedelta(hours=9)).date().isoformat()
+    week = (datetime.now(timezone.utc) + timedelta(hours=9, days=7)).date().isoformat()
+    tasks = (sb.table("repairs")
+             .select("id,date,ship_code,system,category,title,symptom,status,due_date,urgency,progress,last_action")
+             .neq("status", "완료").execute().data or [])
+    for t in tasks:
+        t["title"] = t.get("title") or t.pop("symptom", "") or ""
+        t.pop("symptom", None)
+    tasks.sort(key=lambda t: (t.get("due_date") or "9999", t.get("date") or ""))
+    _write("work_summary.json", {**meta,
+        "open": len(tasks),
+        "overdue": sum(1 for t in tasks if t.get("due_date") and t["due_date"] < today),
+        "due_7d": sum(1 for t in tasks if t.get("due_date") and today <= t["due_date"] <= week),
+        "urgent": sum(1 for t in tasks if t.get("urgency") == "상"),
+        "by_status": {s: sum(1 for t in tasks if t.get("status") == s)
+                      for s in ("대기", "확인", "준비중", "방선예정", "진행", "보류")},
+        "rows": tasks})
+
     if verbose:
         print(f"  env_summary: {json.dumps(summ[0] if summ else {}, ensure_ascii=False, default=str)[:300]}")
         print(f"  calibration {len(cal)} · repairs_open {len(rep)} · bwts_log_latest {len(lg)}")
