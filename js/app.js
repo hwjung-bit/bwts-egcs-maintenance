@@ -12,6 +12,7 @@ import { $, toast } from './core/dom.js';
 import { loadThresholds } from './shared/thresholds.js';
 import { initAuth } from './core/auth.js';
 import { initRouter, ROUTER_BUILD } from './core/router.js';
+import { initSchedPanel } from './shared/schedPanel.js';
 
 const V = new URL(import.meta.url).searchParams.get('v') || 'dev';
 window.APP_VERSION = V;
@@ -78,6 +79,7 @@ async function checkVersion() {
   try {
     initAuth();
     initRouter(V);
+    initSchedPanel();
   } catch (e) {
     fatal('core 모듈 초기화 중 오류', e);
     return;
