@@ -26,6 +26,7 @@ export const TABS = [
   { id: 'bwtsLog', label: '🧪 BWTS 로그' },
   { id: 'bwtsCal', label: 'BWTS 검교정' },
   { id: 'egcsCal', label: 'EGCS 검교정' },
+  { id: 'schedule', label: '🗓 선박스케줄' },
   { id: 'ships',   label: '🚢 선박관리' },
   { id: 'links',   label: '📎 바로가기' },
 ];
