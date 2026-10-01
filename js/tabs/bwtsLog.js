@@ -849,9 +849,14 @@ const latestPeriod = () => {
 };
 
 // 최신 분석월을 다시 돌려 그 사이 도착한 로그를 반영 — 미수신이 실제로 남았는지 확인.
+// 전월이 아직 한 번도 분석 안 됐으면(월초) 전월을 대상으로 — 안 그러면 새 달이 영영 안 잡힘.
 function recheck() {
-  const period = latestPeriod();
-  if (!period) { toast('데이터 없음'); return; }
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);
+  const prev = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const last = latestPeriod();
+  const period = last > prev ? last : prev;
   toast(`${period} 수신 재확인 — 터미널 확인`);
   launch(period, '');
 }
