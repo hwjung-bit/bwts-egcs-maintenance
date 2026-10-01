@@ -69,7 +69,7 @@ function guessKind(name) {
 function renderPreview() {
   const d = $('cuDate').value, s = $('cuShip').value;
   $('cuPreview').textContent = d && s
-    ? `CERT 폴더 › ${d.slice(0, 4)}년 › "${d} ${s}" 로 저장 (SERVICE REPORT 포함, SAFETY ALARM TEST 만 별도 폴더) · 파일명 "${d} ${s} BWTS <종류>"` : '';
+    ? `CERT 폴더 › ${d.slice(0, 4)}년 › "${d} ${s}" 로 저장 (SERVICE REPORT·SAFETY ALARM TEST 포함) · 파일명 "${d} ${s} BWTS <종류>"` : '';
 }
 function renderFileList() {
   $('cuList').innerHTML = pickedFiles.map((p, i) =>
@@ -139,8 +139,7 @@ async function submitUpload() {
       okCount++;
     }
     if (okCount) {
-      const kinds = Object.keys(kindSeq).map(k => KIND[k]).join('·');
-      toast(`${okCount}개 파일 업로드 — 5분 내 Drive ${kinds} › ${date} ${ship} 폴더로 이동`);
+      toast(`${okCount}개 파일 업로드 — 5분 내 Drive CERT › ${date} ${ship} 폴더로 이동`);
       closeUpload();
     }
   } finally {

@@ -828,12 +828,12 @@ function resolveRepairFolder_(req, index) {
 
 /* BWTS 검교정 자료실 업로드 (sql/024 target 컬럼).
    ROOT › <종류 폴더> › YYYY년 › 'YYYY-MM-DD SHIP' — 없으면 만든다.
-   SERVICE REPORT 는 CERT 와 같은 폴더에 둔다 — 검교정 한 건 자료를 한 곳에서 보도록. */
+   SERVICE REPORT·SAFETY ALARM TEST 도 CERT 와 같은 폴더에 둔다 — 검교정 한 건 자료를 한 곳에서 보도록. */
 var CAL_UPLOAD_ROOT = '1YZlUbAgq2_ADwrIvtiOSmRsyUAHl9xum';  // 11. CALIBRATION 연간 검교정
 var CAL_UPLOAD_DIRS = {
   bwts_cal_cert: '02. CERT',
   bwts_cal_report: '02. CERT',
-  bwts_cal_alarm: '04. SAFETY ALARM TEST'
+  bwts_cal_alarm: '02. CERT'
 };
 function getOrCreateChild_(parent, name) {
   var it = parent.getFoldersByName(name);
