@@ -208,8 +208,45 @@ def parse_optime_lines(lines):
     return header, rows
 
 
+# Newer Techcross ECS (8.7K newbuilds, KLB 2026-09): one wide table with a
+# lowercase "time Operation GPS ..." header, newest row first, single-space
+# separated, "-" for unused channels and a two-train mode such as "1-B,2-B".
+ECS_WIDE_HEADER_RE = re.compile(r"^time\s+Operation\s+GPS\s", re.I)
+ECS_WIDE_ROW_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+(\S+)\s+(\[[^\]]*\],\[[^\]]*\])\s+(.*)$")
+
+
+def parse_ecs_wide_lines(lines):
+    """Parse the wide ECS DATA LOG layout into the INDEX/TIME/OPERATION CSV
+    the analyser already reads (column names kept, so TSU1_BP1/BP3 and
+    REC*_STATE_* select the format-B path). Returns (header, rows) or None
+    when the layout is not this one."""
+    names = None
+    for line in lines:
+        if ECS_WIDE_HEADER_RE.match(line):
+            names = line.split()[3:]
+            break
+    if not names:
+        return None
+    rows = []
+    for line in lines:
+        m = ECS_WIDE_ROW_RE.match(line)
+        if not m:
+            continue
+        vals = m.group(4).split()
+        if len(vals) != len(names):
+            continue   # wrapped or truncated line
+        rows.append([m.group(1), m.group(2), m.group(3)] + vals)
+    rows.sort(key=lambda r: r[0])   # PDF lists newest first
+    header = ["INDEX", "TIME", "OPERATION", "GPS"] + names
+    return header, [[str(i + 1)] + r for i, r in enumerate(rows)]
+
+
 def parse_data_lines(lines):
     """Parse DataLog text lines into CSV rows."""
+    wide = parse_ecs_wide_lines(lines)
+    if wide:
+        return wide
     rows = []
     header = None
 
