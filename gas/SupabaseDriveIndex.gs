@@ -474,6 +474,11 @@ function processFolderRequests() {
     } catch (e) {
       Logger.log('업로드 큐 실패: ' + e.message);
     }
+    try {
+      backfillCalReportUrlsOnce_();
+    } catch (e) {
+      Logger.log('REPORT 링크 백필 실패: ' + e.message);
+    }
     return { created: created, trashed: trashed, uploaded: uploaded };
   } finally {
     lock.releaseLock();
@@ -843,15 +848,70 @@ function getOrCreateChild_(parent, name) {
    last_date = 입력 날짜. 옛 CERT 백필이 최신 기록을 되돌리지 않도록
    날짜가 기존 이상일 때만 갱신한다. */
 function syncCalRecord_(req, fileUrl) {
-  if (req.target !== 'bwts_cal_cert') return;
+  var isCert = req.target === 'bwts_cal_cert';
+  // SERVICE REPORT gets its own link (sql/032 report_url); it never moves
+  // last_date — the cert is what dates a calibration.
+  if (!isCert && req.target !== 'bwts_cal_report') return;
   var q = 'calibrations?system=eq.BWTS&ship_code=eq.' + encodeURIComponent(req.ship_code);
   var rows = supaGet_(q + '&select=id,last_date');
   if (!rows.length) return;
   var cur = rows[0].last_date || '';
   var nd = String(req.req_date || '').slice(0, 10);
-  if (cur && nd < cur) return;               // older cert — leave the ledger alone
+  if (cur && nd < cur) return;               // older file — leave the ledger alone
   supaPatch_('calibrations?id=eq.' + encodeURIComponent(rows[0].id),
-             { last_date: nd, cert_url: fileUrl });
+             isCert ? { last_date: nd, cert_url: fileUrl } : { report_url: fileUrl });
+}
+
+/* One-time fill of report_url for calibrations recorded before sql/032.
+   For each BWTS ship, the CERT tree folder 'YYYY-MM-DD SHIP…' closest to
+   last_date (within 30 days) is searched for a service-report file. Runs
+   from the queue trigger once, then marks itself done. */
+var CAL_REPORT_RE = /SERVICE\s*REPORT|CUSTOMER\s*REPORT|AS\s+SERVICE/i;
+function backfillCalReportUrlsOnce_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('CAL_REPORT_BACKFILL_DONE')) return;
+  var rows = supaGet_('calibrations?system=eq.BWTS&select=id,ship_code,last_date,report_url');
+  var certRoot = getOrCreateChild_(DriveApp.getFolderById(CAL_UPLOAD_ROOT), '02. CERT');
+  var folders = [];                          // { date, ship, folder }
+  var years = certRoot.getFolders();
+  while (years.hasNext()) {
+    var y = years.next();
+    if (!/^\d{4}년$/.test(y.getName())) continue;
+    var it = y.getFolders();
+    while (it.hasNext()) {
+      var f = it.next();
+      var m = f.getName().match(/^(\d{4}-\d{2}-\d{2})\s+([A-Z]{3})/);
+      if (m) folders.push({ date: m[1], ship: m[2], folder: f });
+    }
+  }
+  var filled = 0;
+  rows.forEach(function (r) {
+    if (r.report_url || !r.last_date) return;
+    var target = new Date(r.last_date).getTime();
+    var best = null, bestGap = 31 * 864e5;
+    folders.forEach(function (x) {
+      if (x.ship !== r.ship_code) return;
+      var gap = Math.abs(new Date(x.date).getTime() - target);
+      if (gap < bestGap) { best = x; bestGap = gap; }
+    });
+    if (!best) return;
+    var hit = null, hitRank = 9;
+    var files = best.folder.getFiles();
+    while (files.hasNext()) {
+      var file = files.next();
+      var n = file.getName();
+      if (!CAL_REPORT_RE.test(n)) continue;
+      var rank = /SERVICE\s*REPORT/i.test(n) ? 0 : 1;   // a real service report beats a customer report
+      if (rank < hitRank) { hit = file; hitRank = rank; }
+    }
+    if (hit) {
+      supaPatch_('calibrations?id=eq.' + encodeURIComponent(r.id), { report_url: hit.getUrl() });
+      filled++;
+      Logger.log('REPORT 링크 백필: ' + r.ship_code + ' ← ' + hit.getName());
+    }
+  });
+  props.setProperty('CAL_REPORT_BACKFILL_DONE', new Date().toISOString() + ' ' + filled);
+  Logger.log('REPORT 링크 백필 완료: ' + filled + '건');
 }
 
 function resolveCalFolder_(req) {

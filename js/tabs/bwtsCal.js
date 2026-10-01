@@ -184,12 +184,8 @@ function refresh() {
       `<td>${fmtDate(due)}</td>` +
       `<td style="padding:4px 10px"><span class="pill lv-${lv}" style="margin-right:6px">${label}</span>` +
         (days != null ? `<span style="color:#64748b;font-size:11px">${dLabel(days)}</span>` : '') + '</td>' +
-      '<td style="white-space:nowrap">' +
-        (/^https?:/.test(c.cert_url || '')
-          ? `<a href="${esc(c.cert_url)}" target="_blank" style="text-decoration:none;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:11px;color:#4f46e5;cursor:pointer">📄 CERT</a>`
-          : '<span style="font-size:11px;color:#cbd5e1">링크없음</span>') +
-        `<button onclick="bwtsCalTab.editCertUrl('${eid}')" style="background:none;border:none;cursor:pointer;font-size:11px;color:#94a3b8;margin-left:4px" title="Drive URL 지정/변경">🔗</button>` +
-      '</td>' +
+      '<td style="white-space:nowrap">' + docLink(c.cert_url, '📄 CERT') + ' ' +
+        docLink(c.report_url, '📋 REPORT') + '</td>' +
       `<td><span style="font-size:11px;color:#94a3b8" class="edit-cell" onclick="bwtsCalTab.editNote('${eid}',this)" title="클릭하여 비고 수정">${esc(c.note || '')}</span></td></tr>`;
   }).join('');
   const arrow = k => SORT.key === k ? (SORT.dir > 0 ? ' ▲' : ' ▼') : '';
@@ -209,7 +205,7 @@ function refresh() {
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('maker')">메이커${arrow('maker')}</th>` +
       '<th>최근 검교정</th><th>다음 만료</th>' +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('status')">상태${arrow('status')}</th>` +
-      '<th>CERT</th><th>비고</th>' +
+      '<th>CERT · SERVICE REPORT</th><th>비고</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -233,16 +229,13 @@ function editNote(id, el) {
   }, { placeholder: '비고...', css: 'width:120px;font-size:11px;padding:2px 4px;border:1px solid #3b82f6;border-radius:4px;outline:none' });
 }
 
-function editCertUrl(id) {
-  const c = find(id); if (!c) return;
-  let val = prompt(c.ship_code + ' CERT 링크 지정 — Drive 파일 우클릭 > 링크복사 > 붙여넣기 (비우면 삭제)', c.cert_url || '');
-  if (val === null) return;
-  val = val.trim();
-  c.cert_url = val || null;
-  dbSave(sb.from('calibrations').update({ cert_url: val || null }).eq('id', c.id), c.ship_code + (val ? ' CERT 링크 저장' : ' CERT 링크 삭제'))
-    .then(ok => { if (ok) refresh(); });
+// Links are filled by the 📥 파일 저장 queue (GAS syncCalRecord_), not by hand.
+function docLink(url, label) {
+  return /^https?:/.test(url || '')
+    ? `<a href="${esc(url)}" target="_blank" style="text-decoration:none;border:1px solid #c7d2fe;border-radius:6px;padding:3px 8px;font-size:11px;color:#4f46e5;cursor:pointer">${label}</a>`
+    : `<span style="font-size:11px;color:#cbd5e1">${label.replace(/^\S+\s/, '')} 없음</span>`;
 }
 
-window.bwtsCalTab = { sort: toggleSort, editDate, editNote, editCertUrl, openUpload, closeUpload, submitUpload, removeFile, setKind };
+window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind };
 
 export default { id: 'bwtsCal', mount, refresh };
