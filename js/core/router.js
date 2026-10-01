@@ -24,6 +24,7 @@ export const TABS = [
   { id: 'repairs', label: '🔧 EGCS·BWTS 이력' },
   { id: 'status',  label: '📊 EGCS·BWTS 현황' },
   { id: 'bwtsLog', label: '🧪 BWTS 로그' },
+  { id: 'bsr',     label: '⛽ BSR' },
   { id: 'bwtsCal', label: 'BWTS 검교정' },
   { id: 'egcsCal', label: 'EGCS 검교정' },
   { id: 'ships',   label: '🚢 선박관리' },
