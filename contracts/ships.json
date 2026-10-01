@@ -1,5 +1,5 @@
 {
-  "_doc": "21척 선박 마스터의 단일 출처. Supabase ships 테이블이 운영 정본이고, 이 파일은 파이프라인·수집기가 DB 없이도 코드↔선명↔폴더번호를 알 수 있게 하는 사본이다. number = G드라이브 BWTS LOG DATA 선박 폴더 접두 번호. bwts = techcross | alfa_laval | erma_first. log_format = A(TRO_B1/D1) | B(TSU1_BP1/BP3 공용센서) | KSZ(TSU1+TSU2) | AL | EF folder_name = G드라이브 선박 폴더명이 name 과 다를 때만 (띄어쓰기 차이).",
+  "_doc": "선박 마스터의 단일 출처. Supabase ships 테이블이 운영 정본이고, 이 파일은 파이프라인·수집기가 DB 없이도 코드↔선명↔폴더번호를 알 수 있게 하는 사본이다. number = G드라이브 BWTS LOG DATA 선박 폴더 접두 번호. bwts = techcross | alfa_laval | erma_first. log_format = A(TRO_B1/D1) | B(TSU1_BP1/BP3 공용센서) | KSZ(TSU1+TSU2) | AL | EF in_service_from = 인도(취항)월 YYYY-MM, 이전 달은 분석·미수신 집계 제외. number 22-24 는 SUNNY 3척(벙커 폴더)이 써서 신조선은 25부터. folder_name = G드라이브 선박 폴더명이 name 과 다를 때만 (띄어쓰기 차이).",
   "ships": [
     {
       "number": "01",
@@ -157,6 +157,22 @@
           "note": "ERMA FIRST -> Techcross 교체. 2026-06 까지 ERMA(AH*.CSV, zip), 2026-08 부터 표준 5종(코드_YYYY_MM_LOGTYPE). 2026-07 은 미수신이라 전환 시점 미확인 — 07 수신되면 확인 후 조정"
         }
       ]
+    },
+    {
+      "number": "25",
+      "code": "KLB",
+      "name": "KMTC LONG BEACH",
+      "bwts": "techcross",
+      "log_format": "",
+      "in_service_from": "2026-09"
+    },
+    {
+      "number": "26",
+      "code": "KDH",
+      "name": "KMTC DOHA",
+      "bwts": "techcross",
+      "log_format": "",
+      "in_service_from": "2026-10"
     }
   ]
 }

@@ -8,7 +8,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 
 from config import (
-    VESSELS, VESSEL_BY_CODE, LOCAL_CACHE_DIR, maker_at,
+    VESSELS, VESSEL_BY_CODE, LOCAL_CACHE_DIR, maker_at, in_service,
     get_vessel_folder, get_csv_files, scan_reception_matrix,
 )
 from csv_parser import combine_csv_results
@@ -549,6 +549,8 @@ def build_fleet_matrix(start_year, start_month,
             for v in VESSELS:
                 code = v["code"]
                 if ship_codes and code not in ship_codes:
+                    continue
+                if not in_service(v, year, month):
                     continue
                 cp = _cache_path(code, year, month)
 

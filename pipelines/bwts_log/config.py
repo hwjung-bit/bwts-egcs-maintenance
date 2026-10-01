@@ -36,7 +36,16 @@ for _s in _SHIPS_JSON:
         _v["bwts_type"] = _s["bwts"]
     if _s.get("bwts_history"):
         _v["bwts_history"] = _s["bwts_history"]
+    if _s.get("in_service_from"):
+        _v["in_service_from"] = _s["in_service_from"]
     VESSELS.append(_v)
+
+
+def in_service(v, year: int, month: int) -> bool:
+    """False for months before delivery, so a newbuild is not "미수신"
+    for the months it did not exist yet."""
+    start = v.get("in_service_from")
+    return not start or f"{year}-{month:02d}" >= start
 
 
 def maker_at(v, year: int, month: int) -> str:
@@ -371,6 +380,8 @@ def scan_reception_matrix(start_year=2026, start_month=1,
         matrix[key] = {}
         for v in VESSELS:
             code = v["code"]
+            if not in_service(v, year, month):
+                continue
             folder = get_vessel_folder(year, month, code)
             if not folder:
                 matrix[key][code] = {

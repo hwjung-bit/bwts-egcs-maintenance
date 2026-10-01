@@ -20,7 +20,7 @@ import argparse
 from datetime import datetime
 from collections import Counter
 
-from config import LOCAL_CACHE_DIR, OUTPUT_DIR, VESSELS, maker_at
+from config import LOCAL_CACHE_DIR, OUTPUT_DIR, VESSELS, maker_at, in_service
 import fleet_summary
 from fleet_summary import build_fleet_matrix
 import integrity
@@ -96,6 +96,8 @@ def regrade_from_cache(sy, sm, ey, em, ship_codes, verbose=False):
             for v in VESSELS:
                 code = v["code"]
                 if ship_codes and code not in ship_codes:
+                    continue
+                if not in_service(v, year, month):
                     continue
                 cp = fleet_summary._cache_path(code, year, month)
                 if not cp.exists():
