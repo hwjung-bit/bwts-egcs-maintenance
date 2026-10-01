@@ -141,7 +141,12 @@ function makerTable(g, equipSet, map, CYCLE, WARN) {
       // WMS 특이사항(선박관리 탭 wms_note)은 주기 판정을 흔든다 —
       // 예: KDE 는 WMS 가 GI 인데 초기 제품이라 센서는 TRI-OS. 📝 로 알리고 본문은 툴팁에.
       const memo = (sh.wms_note || '').trim();
-      return `<th style="text-align:center;cursor:pointer;padding:5px 4px;font-size:13px" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}${memo ? '\n메모: ' + esc(memo) : ''}">${esc(s)}${memo ? ' 📝' : ''}` +
+      // 본선 대조용: 셀은 다음 만료일이라, 선명 툴팁엔 직전 검교정·교체일을 센서별로
+      const last = orderedEquips.map(o => {
+        const d = map[s + '|' + o.key];
+        return d ? '\n' + o.group + ' ' + o.sensor + ': ' + (d.last_date || '미기재') : '';
+      }).join('');
+      return `<th style="text-align:center;cursor:pointer;padding:5px 4px;font-size:13px" onclick="egcsCalTab.copyShip('${esc(s)}')" title="클릭 → ${esc(s)} 검교정 이력 복사${gear ? '\nWMS·CEMS: ' + esc(gear) : ''}${memo ? '\n메모: ' + esc(memo) : ''}${last ? '\n\n[직전 검교정·교체일]' + esc(last) : ''}">${esc(s)}${memo ? ' 📝' : ''}` +
         (gear ? `<div style="font-size:10px;font-weight:400;color:#64748b;line-height:1.1">${esc(gear)}</div>` : '') + '</th>';
     }).join('') + '</tr>';
   let body = '';
