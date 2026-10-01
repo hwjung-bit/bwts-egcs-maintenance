@@ -69,7 +69,7 @@ function guessKind(name) {
 function renderPreview() {
   const d = $('cuDate').value, s = $('cuShip').value;
   $('cuPreview').textContent = d && s
-    ? `각 종류 폴더 › ${d.slice(0, 4)}년 › "${d} ${s}" 로 저장 · 파일명 "${d} ${s} BWTS <종류>"` : '';
+    ? `CERT 폴더 › ${d.slice(0, 4)}년 › "${d} ${s}" 로 저장 (SERVICE REPORT 포함, SAFETY ALARM TEST 만 별도 폴더) · 파일명 "${d} ${s} BWTS <종류>"` : '';
 }
 function renderFileList() {
   $('cuList').innerHTML = pickedFiles.map((p, i) =>
