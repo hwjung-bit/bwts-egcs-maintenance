@@ -104,7 +104,7 @@ function mount(root) {
       title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
     <button onclick="bwtsLogTab.recheck()"
       style="cursor:pointer;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
-      title="최신 분석월을 다시 분석해 도착한 로그를 반영 — kmtcfolder 등록된 PC에서만 작동">📥 수신 재확인</button>
+      title="직전 달을 다시 분석해 도착한 로그를 반영 — kmtcfolder 등록된 PC에서만 작동">📥 수신 재확인</button>
     <button onclick="bwtsLogTab.runAnalysis()"
       style="cursor:pointer;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
       title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</button>
@@ -848,15 +848,12 @@ const latestPeriod = () => {
   return ps.length ? ps[ps.length - 1] : '';
 };
 
-// 최신 분석월을 다시 돌려 그 사이 도착한 로그를 반영 — 미수신이 실제로 남았는지 확인.
-// 전월이 아직 한 번도 분석 안 됐으면(월초) 전월을 대상으로 — 안 그러면 새 달이 영영 안 잡힘.
+// 그 사이 도착한 로그를 반영해 미수신이 실제로 남았는지 확인. 항상 직전 달 — 본선 로그는 익월 1~10일에 도착하므로 재확인 대상은 전월.
 function recheck() {
   const d = new Date();
   d.setDate(1);
   d.setMonth(d.getMonth() - 1);
-  const prev = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  const last = latestPeriod();
-  const period = last > prev ? last : prev;
+  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   toast(`${period} 수신 재확인 — 터미널 확인`);
   launch(period, '');
 }
