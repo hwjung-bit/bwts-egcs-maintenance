@@ -102,9 +102,6 @@ function mount(root) {
     <a href="https://drive.google.com/drive/folders/1uyWbZUdTIkegHJUBnC5MQs4QEWQanBxE" target="_blank"
       style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d"
       title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
-    <a href="archive/bsr/" target="_blank"
-      style="text-decoration:none;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#c2410c"
-      title="본선 BUNKER SOUNDING 편차·비중 분석 — 매주 화 14:30 자동 갱신">⛽ BSR 분석</a>
     <button onclick="bwtsLogTab.recheck()"
       style="cursor:pointer;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
       title="직전 달을 다시 분석해 도착한 로그를 반영 — kmtcfolder 등록된 PC에서만 작동">📥 수신 재확인</button>
