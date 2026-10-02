@@ -401,6 +401,30 @@ function categoryOf(text) {
   });
   return cat || '기타';
 }
+/* 상태 판별 — 명시 표기가 최우선: 줄 끝 "#완료" / "→ 완료" 또는 "[완료]" (/work 스킬이 붙인다).
+   없으면 상태를 말하는 문구로 추정. 업무 동사('발주', '수리')가 아니라 경과('발주함', '견적 접수')만 본다
+   — "자재 발주" 는 아직 할 일이지 준비 중이 아니다. 위에서부터 먼저 맞는 규칙이 이긴다. */
+const ST_ALT = WORK_STATUS.join('|');
+const ST_TAIL_RE = new RegExp(`\\s*(?:#|→|=>)\\s*(${ST_ALT})\\s*$`);
+const ST_BRACKET_RE = new RegExp(`\\s*\\[\\s*(${ST_ALT})\\s*\\]`);
+const STATUS_RULES = [
+  ['보류', /보류|중단|연기|홀드|\bhold\b/i],
+  ['완료', /완료(?!\s*(예정|목표|요청|필요))|종결|마감됨|(송부|발송|제출|회신|전달|처리|발행|입고)(함|했|됨|완료)/],
+  ['진행', /(진행|작업|수리|설치|시공|공사|교체)\s*중/],
+  ['방선예정', /방선|승선\s*예정|어텐드|\battend/i],
+  ['준비중', /(준비|수배)\s*중|견적\s*(접수|수령|요청함|대기)|발주(함|했|됨)|PO\s*발행|자재\s*(대기|입고\s*대기)/i],
+  ['확인', /(확인|검토|문의)\s*중|문의(함|했)|(회신|답변)\s*대기|확인\s*필요/],
+];
+function statusOf(text) {
+  let line = text, status = '', explicit = false;
+  const m = ST_TAIL_RE.exec(line) || ST_BRACKET_RE.exec(line);
+  if (m) { status = m[1]; explicit = true; line = (line.slice(0, m.index) + line.slice(m.index + m[0].length)).trim(); }
+  if (!status) {
+    const hit = STATUS_RULES.find(([, rx]) => rx.test(line));
+    if (hit) status = hit[0];
+  }
+  return { line, status, explicit };
+}
 function tokens(s) {
   const out = {};
   String(s || '').toUpperCase().split(/[^0-9A-Z가-힣]+/).forEach(p => { if (p.length >= 2 && !STOP[p]) out[p] = 1; });
@@ -411,6 +435,8 @@ function parseLine(line, ships) {
   let urgency = '', detail = '', ship = '', system = '';
   const um = /^[\[(（]\s*(상|중|하)\s*[\])）]\s*/.exec(line);
   if (um) { urgency = um[1]; line = line.slice(um[0].length).trim(); }
+  const st = statusOf(line);
+  line = st.line;
   const m = /^(.*\S)\s*[(（]([^()（）]*)[)）]\s*$/.exec(line);
   if (m && m[2].trim()) { line = m[1].trim(); detail = m[2].trim(); }
   const head = /^([A-Za-z][A-Za-z0-9]{1,4})\b[\s:·]*/.exec(line);
@@ -418,7 +444,10 @@ function parseLine(line, ships) {
   const hay = (line + ' ' + detail).toUpperCase();
   let best = -1;
   SYSTEMS.forEach(s => { if (s === '기타') return; const at = hay.indexOf(s.toUpperCase()); if (at !== -1 && (best === -1 || at < best)) { best = at; system = s; } });
-  return { raw, ship, system, category: categoryOf(line), title: line, detail, urgency };
+  // detail ("(견적 접수됨)") often carries the state when the title does not
+  const status = st.status || statusOf(detail).status;
+  return { raw, ship, system, category: categoryOf(line), title: line, detail, urgency,
+    status, statusAuto: !!status && !st.explicit };
 }
 function candidates(it, open) {
   const a = tokens(it.title + ' ' + it.detail), ak = Object.keys(a);
@@ -445,7 +474,7 @@ function ensureBulkModal() {
   d.id = 'workBulk';
   d.innerHTML = `
   <div class="box">
-    <h3>⏎ 붙여넣기 일괄 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 한 줄 = 업무 하나. "[상] KMB Hi-NAS … (상세)" 형식, ──── 줄은 무시</span></h3>
+    <h3>⏎ 붙여넣기 일괄 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 한 줄 = 업무 하나. "[상] KMB Hi-NAS … (상세) #진행" 형식, ──── 줄은 무시</span></h3>
     <div class="row">
       <label>출처<input id="wbSource" list="wbSourceList" placeholder="주간회의 등"><datalist id="wbSourceList">${SOURCES.map(s => `<option>${s}</option>`).join('')}</datalist></label>
       <label>지시자<input id="wbReq" placeholder="선택"></label>
@@ -487,7 +516,9 @@ function parseBulk() {
     const top = it.candidates[0];
     it.action = top && top.score >= MATCH_MIN ? 'update' : 'new';
     it.matchId = it.action === 'update' ? top.id : '';
-    it.status = '대기'; it.progress = '';
+    // no detected state: a new task starts 대기, an existing one keeps its own
+    if (!it.status && it.action === 'new') it.status = '대기';
+    it.progress = '';
     return it;
   });
   renderBulk();
@@ -534,11 +565,11 @@ function renderBulk() {
       <td><input class="bf" data-f="title" data-k="${it.key}" value="${esc(it.title)}"></td>
       <td><input class="bf" data-f="detail" data-k="${it.key}" value="${esc(it.detail)}"></td>
       <td>${sel('bf', URGENCY.slice(1), it.urgency, it.key, true).replace('class="bf"', `class="bf" data-f="urgency"`)}</td>
-      <td>${sel('bf', WORK_STATUS, it.status, it.key, true).replace('class="bf"', `class="bf" data-f="status"`)}</td>
+      <td style="white-space:nowrap">${sel('bf', WORK_STATUS, it.status, it.key, true).replace('class="bf"', `class="bf" data-f="status"`)}${it.statusAuto ? '<span title="문구로 추정한 상태 — 확인 후 등록" style="color:#f59e0b;font-weight:700"> *</span>' : ''}</td>
       <td><input class="bf" data-f="progress" data-k="${it.key}" type="number" min="0" max="100" step="5" value="${esc(it.progress)}" placeholder="%"></td>
     </tr>`).join('');
   $('wbPreview').innerHTML = `
-    <div class="muted" style="font-size:11px;margin:6px 0">각 줄의 동작(신규 / 기존에 추가 / 제외)과 값을 고친 뒤 등록. "기존에 추가"는 새 업무를 만들지 않고 고른 업무에 조치이력만 남깁니다.</div>
+    <div class="muted" style="font-size:11px;margin:6px 0">각 줄의 동작(신규 / 기존에 추가 / 제외)과 값을 고친 뒤 등록. "기존에 추가"는 새 업무를 만들지 않고 고른 업무에 조치이력만 남깁니다. 상태: 줄 끝 #완료·[진행] 표기 우선, 없으면 문구로 추정(<span style="color:#f59e0b;font-weight:700">*</span>), 빈칸이면 기존 업무 상태 유지.</div>
     <div style="overflow-y:auto;overflow-x:hidden;max-height:52vh"><table class="wb-table"><thead><tr><th style="width:92px">동작</th><th style="width:240px">대상 업무</th><th style="width:60px">선박</th><th style="width:104px">시스템</th><th style="width:96px">구분</th><th>제목</th><th style="width:24%">상세</th><th style="width:62px">긴급</th><th style="width:92px">상태</th><th style="width:62px">%</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   $('wbPreview').querySelectorAll('.baction').forEach(s => { s.onchange = () => { const it = BULK.find(x => x.key === s.dataset.k); it.action = s.value; s.closest('tr').className = 'wb-' + s.value; }; });
   $('wbPreview').querySelectorAll('.bmatch').forEach(inp => {
