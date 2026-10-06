@@ -54,6 +54,23 @@ if ($tasks.ContainsKey($key)) {
   exit
 }
 
+# Direct pipeline runs (no Claude, no URL parameters): key -> command run in
+# a visible PowerShell window that stays open with the result.
+$bsr = 'D:\CLAUDE CODE\(제작중) 본선 BUNKER SOUNDING 분석'
+$jobs = @{
+  'bwts-run' = "Set-Location '$repo\pipelines\bwts_log'; python run_pending.py"
+  'bsr-run'  = "& '$bsr\대시보드_갱신_무인.bat'; " +
+               "Get-Content '$bsr\output\schedule.log' -Tail 25 -Encoding UTF8"
+}
+if ($jobs.ContainsKey($key)) {
+  # PS 5.1 joins ArgumentList with bare spaces, so quote the whole command
+  # (it only ever contains single quotes).
+  $cmd = '$env:PYTHONIOENCODING=''utf-8''; ' + $jobs[$key] +
+         '; Write-Host ''''; Write-Host ''=== done ==='''
+  Start-Process powershell -ArgumentList @('-NoExit', '-Command', "`"$cmd`"")
+  exit
+}
+
 $map = @{
   'bwtslog' = 'G:\공유 드라이브\고려에스엠 0033 공무팀 환경기술파트\011  BWTS\4. BWTS LOG DATA'
 }

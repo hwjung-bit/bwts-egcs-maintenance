@@ -104,10 +104,7 @@ function mount(root) {
       title="Google Drive BWTS LOG DATA 폴더 열기">📁 LOG 폴더</a>
     <button onclick="bwtsLogTab.recheck()"
       style="cursor:pointer;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#1d4ed8"
-      title="직전 달을 다시 분석해 도착한 로그를 반영 — kmtcfolder 등록된 PC에서만 작동">📥 수신 재확인</button>
-    <button onclick="bwtsLogTab.runAnalysis()"
-      style="cursor:pointer;background:#fdf4ff;border:1px solid #d8b4fe;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#7e22ce"
-      title="로컬 Claude Code 로 /bwts-analysis 실행 — kmtcfolder 등록된 PC에서만 작동">🤖 로그 분석 실행</button>
+      title="미수신·부분수신이던 칸 중 새 파일이 들어온 것 + 처음 보는 달만 분석 (Claude 안 씀) — kmtcfolder 등록된 PC에서만 작동">📥 수신분 분석</button>
     <button onclick="bwtsLogTab.chatterList()"
       style="cursor:pointer;background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#c2410c"
       title="밸브 채터링 걸린 선박·월을 한 번에 목록으로">🔧 채터링 목록</button>
@@ -848,14 +845,11 @@ const latestPeriod = () => {
   return ps.length ? ps[ps.length - 1] : '';
 };
 
-// 그 사이 도착한 로그를 반영해 미수신이 실제로 남았는지 확인. 항상 직전 달 — 본선 로그는 익월 1~10일에 도착하므로 재확인 대상은 전월.
+// 새로 도착한 로그만 분석 — PC 의 pipelines/bwts_log/run_pending.py (Claude 안 씀).
+// 끝나면 새로고침해서 결과 확인.
 function recheck() {
-  const d = new Date();
-  d.setDate(1);
-  d.setMonth(d.getMonth() - 1);
-  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  toast(`${period} 수신 재확인 — 터미널 확인`);
-  launch(period, '');
+  toast('수신분 분석 시작 — PC 창에서 진행 확인, 끝나면 🔄 새로고침');
+  location.href = 'kmtcfolder:bwts-run';
 }
 
 // 언어는 아래 패널에서 고른다 — 대상 선박을 눈으로 보고 보내게.
@@ -918,16 +912,6 @@ function launch(period, ships) {
   location.href = url;
 }
 
-function runAnalysis() {
-  const months = [...new Set(ROWS.map(r => r.period))].sort();
-  const last = months.length ? months[months.length - 1] : '';
-  const p = prompt('분석할 월 (YYYY-MM). 비우면 전체 기간 분석', last);
-  if (p === null) return;
-  const period = p.trim();
-  if (period && !/^\d{4}-\d{2}$/.test(period)) { toast('YYYY-MM 형식으로 입력하세요'); return; }
-  launch(period, '');
-}
-
 async function reanalyze() {
   if (!selected) return;
   const r = ROWS.find(x => x.ship_code === selected.ship_code && x.period === selected.period);
@@ -986,7 +970,7 @@ async function override() {
   renderAll();
 }
 
-window.bwtsLogTab = { select, close, filter, requestReview, override, runAnalysis, reanalyze,
+window.bwtsLogTab = { select, close, filter, requestReview, override, reanalyze,
   chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailMulti,
   chatterMailSelected, chatterPick, issueMail, missingMail, missingPanel, recheck,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
