@@ -270,7 +270,7 @@ function pickAll(on) {
 }
 
 const TC_TO = 'as.managers@techcross.com,david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
-const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
+const TC_CC = 'etp@ekmtc.com,as@lastech.kr';
 const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 만료 예정 선박 방선 가능 여부 확인 요청의 건';
 const TC_INTRO = [
   '수신 : 테크로스 AS팀',
