@@ -5,6 +5,7 @@ import { $, esc, fmtDate, inlineEdit, toast, todayStr } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
+import { gmailDraft, preloadGmail } from '../shared/gmailDraft.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
@@ -29,6 +30,7 @@ export function bwtsLevel(days) {
 }
 
 function mount(root) {
+  preloadGmail();
   root.innerHTML = '<div class="wrap" id="bwtsCalRoot"></div>' +
     '<div id="bwtsCalUpload"><div class="box">' +
     '<h3>📥 검교정 파일 저장</h3>' +
@@ -195,7 +197,7 @@ function refresh() {
       `<div style="font-size:12px;color:#64748b">검교정 주기 ${th.interval_months}개월 · 임박 ${th.soon_days}일 · 날짜 클릭하여 수정</div>` +
       `<a href="${CERT_FOLDER}" target="_blank" style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d;margin-left:8px" title="Google Drive CERT 폴더 열기">📁 CERT 폴더</a>` +
       '<button onclick="bwtsCalTab.openUpload()" style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#047857;cursor:pointer" title="CERT·서비스레포트·SAFETY ALARM TEST 파일을 Drive 에 자동 저장">📥 파일 저장</button>' +
-      `<button onclick="bwtsCalTab.techcrossMail()" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8;cursor:pointer" title="체크한 선박으로 테크로스 검교정 요청 메일 — Gmail 작성창이 열리면 본문에 Ctrl+V">✉ 테크로스 요청 <span id="tcCnt">(${PICK.size}척)</span></button>` +
+      `<button onclick="bwtsCalTab.techcrossMail()" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8;cursor:pointer" title="체크한 선박으로 테크로스 검교정 요청 메일을 Gmail 임시보관함에 바로 작성">✉ 테크로스 요청 <span id="tcCnt">(${PICK.size}척)</span></button>` +
       '<div style="margin-left:auto;display:flex;gap:6px">' +
         `<span class="pill lv-expired" style="font-size:11px;padding:3px 8px">만료 ${expCnt}</span>` +
         `<span class="pill lv-soon" style="font-size:11px;padding:3px 8px">임박 ${soonCnt}</span>` +
@@ -241,8 +243,8 @@ function docLink(url, label) {
 /* ===== 테크로스 검교정 요청 =====
    2026-09-16 사용자가 직접 보낸 메일 양식(주간 리포트 표를 붙여넣은 것) 그대로.
    대상 = 체크한 선박. 처음엔 만료·임박(메이커 테크로스 또는 공란)이 체크돼 있다.
-   Gmail 작성 URL 은 HTML 을 못 싣는다 → 요청 문장+표를 HTML 로 클립보드에 넣고
-   작성창은 받는 사람·제목만 채워 연다. 사용자는 본문에 Ctrl+V. */
+   Gmail API 로 HTML 임시보관 메일을 바로 만든다(shared/gmailDraft.js) — API 초안엔
+   계정 서명이 안 붙으므로 수신/발신·인사·서명까지 본문에 넣는다. */
 const PICK = new Set();
 let pickInit = false;
 const isTechcross = code => {
@@ -268,11 +270,23 @@ function pickAll(on) {
 const TC_TO = 'as.managers@techcross.com,david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
 const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
 const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건';
-// 작성창엔 Gmail 서명 템플릿(TO/FR·수신/발신·인사·서명)이 자동으로 들어간다 →
-// 붙여넣을 건 요청 문장과 표만. '업무에 수고가 많으십니다.' 아래 빈 줄에 Ctrl+V.
 const TC_INTRO = [
+  '수신 : 테크로스 AS팀',
+  '발신 : KMTC SM ETP / 정현우 과장',
+  '',
+  '업무에 수고가 많으십니다.',
   'KMTC 호선중 BWTS 검교정 예정되어있는 선박들 확인요청드립니다.',
   '아래 내용 중 진행 예정인 선박만 일정 재확인, 회신 부탁드립니다.',
+];
+const TC_SIGN = [
+  '==========================================================',
+  '   정 현 우 (H.W. JUNG 鄭 泫 禹 / 과장 (Manager)',
+  '   Environment Tech. Part / Repair & Supply Team',
+  '   KMTC Ship Management Co.,Ltd. (KMTC SM)',
+  '   E-mail : hwjung@ekmtc.com',
+  '   Office : TEL : +82-51-790-2473 / FAX : +82-51-466-5217',
+  '   M.P : +82-10-7930-3820',
+  '==========================================================',
 ];
 // 주간 리포트 메일(weekly_cal_alert.py) 표 색과 같게
 const TC_LV = {
@@ -301,6 +315,8 @@ function techcrossHtml(items, sub) {
     '<thead><tr style="background:#1e40af;color:#ffffff">' +
       ['선박', '장비', '구분', '만료일', '상태'].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + div('') +
+    div('감사합니다. thanks,') +
+    TC_SIGN.map(t => `<div style="white-space:pre">${esc(t)}</div>`).join('') +
     '</div>';
 }
 
@@ -314,30 +330,7 @@ function techcrossMail() {
   const exp = items.filter(x => x.lv === 'expired').length;
   const soon = items.filter(x => x.lv === 'soon').length;
   const sub = `(${items.length}건 · 만료 ${exp} · 임박 ${soon})`;
-  const text = [...TC_INTRO, '', `⚓ BWTS ${sub}`, '선박\t장비\t구분\t만료일\t상태',
-    ...items.map(({ c, due, days, lv }) =>
-      [c.ship_code, 'BWTS 연간', '검교정', fmtDate(due), TC_LV[lv].txt(days)].join('\t')),
-    ''].join('\n');
-
-  // 복사는 작성창을 열기 전에 동기로 끝낸다. navigator.clipboard.write 는 비동기라
-  // window.open 으로 포커스가 넘어가면 "Document is not focused" 로 조용히 실패했다.
-  let ok = false;
-  const onCopy = e => {
-    e.clipboardData.setData('text/html', techcrossHtml(items, sub));
-    e.clipboardData.setData('text/plain', text);
-    e.preventDefault();
-    ok = true;
-  };
-  document.addEventListener('copy', onCopy);
-  try { document.execCommand('copy'); } finally { document.removeEventListener('copy', onCopy); }
-  if (!ok) { toast('클립보드 복사 실패 — 다시 눌러 주세요'); return; }
-  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
-    + '&to=' + encodeURIComponent(TC_TO)
-    + '&cc=' + encodeURIComponent(TC_CC)
-    + '&su=' + encodeURIComponent(TC_SUBJECT);
-  const w = window.open(url, '_blank');
-  toast(w ? `${items.length}척 표 복사됨 — 작성창 '업무에 수고가 많으십니다.' 아래 클릭 후 Ctrl+V`
-    : '표 복사됨 — 팝업이 차단됨, 허용 후 다시');
+  gmailDraft({ to: TC_TO, cc: TC_CC, subject: TC_SUBJECT, html: techcrossHtml(items, sub) });
 }
 
 window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind, techcrossMail, pick, pickAll };
