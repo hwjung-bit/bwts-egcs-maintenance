@@ -6,6 +6,7 @@ import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
 import { gmailDraft, preloadGmail } from '../shared/gmailDraft.js';
+import { loadShipCalls, shipCallsReady, nextCalls } from '../shared/shipCalls.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
@@ -156,6 +157,7 @@ function toggleSort(key) {
 function refresh() {
   const th = requireTH('bwts_calibration');
   initPick();
+  loadShipCalls(S.BWTS_CAL.map(c => c.ship_code));
   const order = getShipOrder();
   const enriched = S.BWTS_CAL.map(c => {
     const s = shipByCode(c.ship_code);
@@ -269,14 +271,16 @@ function pickAll(on) {
 
 const TC_TO = 'as.managers@techcross.com,david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
 const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
-const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건';
+const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 만료 예정 선박 방선 가능 여부 확인 요청의 건';
 const TC_INTRO = [
   '수신 : 테크로스 AS팀',
   '발신 : KMTC SM ETP / 정현우 과장',
   '',
   '업무에 수고가 많으십니다.',
-  'KMTC 호선중 BWTS 검교정 예정되어있는 선박들 확인요청드립니다.',
-  '아래 내용 중 진행 예정인 선박만 일정 재확인, 회신 부탁드립니다.',
+  '아래 KMTC 선박들의 BWTS 연간 검교정 만료가 예정되어 있습니다.',
+  '선박별 입항 예정 일정에 맞춰 검교정 방선이 가능한지 검토하시어,',
+  '방선 가능한 항구·일정을 회신 부탁드립니다.',
+  '(입항 일정은 변동될 수 있어 확정 전 재확인 부탁드립니다.)',
 ];
 const TC_SIGN = [
   '==========================================================',
@@ -297,23 +301,30 @@ const TC_LV = {
 };
 const TD = 'border:1px solid #e2e8f0;padding:7px 10px';
 
+// 다음 기항 3곳 — 날짜·항구 한 줄씩. 60일 안에 일정 없으면 '일정 미정'
+function callsCell(code) {
+  const cs = nextCalls(code, 3);
+  if (!cs.length) return '<span style="color:#64748b">일정 미정</span>';
+  return cs.map(x => `<b>${x.date}</b> ${esc(x.port)}`).join('<br>');
+}
+
 function techcrossHtml(items, sub) {
   const div = t => `<div>${t ? esc(t) : '<br>'}</div>`;
   const rows = items.map(({ c, due, days, lv }) => {
     const L = TC_LV[lv];
     return `<tr style="background:${L.bg}">` +
       `<td style="${TD};font-weight:600">${esc(c.ship_code)}</td>` +
-      `<td style="${TD}">BWTS 연간</td><td style="${TD}">검교정</td>` +
       `<td style="${TD}">${fmtDate(due)}</td>` +
-      `<td style="${TD}"><span style="color:${L.fg};font-weight:600">${esc(L.txt(days))}</span></td></tr>`;
+      `<td style="${TD}"><span style="color:${L.fg};font-weight:600">${esc(L.txt(days))}</span></td>` +
+      `<td style="${TD}">${callsCell(c.ship_code)}</td></tr>`;
   }).join('');
   return '<div style="font-family:\'Malgun Gothic\',sans-serif;color:#222">' +
     TC_INTRO.map(div).join('') + div('') +
-    `<h3 style="font-family:'Malgun Gothic',sans-serif;color:#1e40af;margin:0 0 6px;font-size:15px">⚓ BWTS ` +
+    `<h3 style="font-family:'Malgun Gothic',sans-serif;color:#1e40af;margin:0 0 6px;font-size:15px">⚓ BWTS 검교정 만료 예정 ` +
       `<span style="font-weight:400;font-size:13px;color:#64748b">${sub}</span></h3>` +
     `<table style="color:#1f2426;font-family:'Malgun Gothic',sans-serif;border-collapse:collapse;font-size:12.5px;width:670px">` +
     '<thead><tr style="background:#1e40af;color:#ffffff">' +
-      ['선박', '장비', '구분', '만료일', '상태'].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
+      ['선박', '만료일', '상태', '입항 예정 (KST)'].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + div('') +
     div('감사합니다. thanks,') +
     TC_SIGN.map(t => `<div style="white-space:pre">${esc(t)}</div>`).join('') +
@@ -327,9 +338,10 @@ function techcrossMail() {
     return { c, due, days, lv: bwtsLevel(days).lv };
   }).sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
   if (!items.length) { toast('메일 보낼 선박을 체크해 주세요'); return; }
+  if (!shipCallsReady()) { toast('입항 일정 불러오는 중 — 잠시 후 다시'); return; }
   const exp = items.filter(x => x.lv === 'expired').length;
   const soon = items.filter(x => x.lv === 'soon').length;
-  const sub = `(${items.length}건 · 만료 ${exp} · 임박 ${soon})`;
+  const sub = `(${items.length}척 · 만료 ${exp} · 임박 ${soon})`;
   gmailDraft({ to: TC_TO, cc: TC_CC, subject: TC_SUBJECT, html: techcrossHtml(items, sub) });
 }
 
