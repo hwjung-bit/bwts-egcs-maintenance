@@ -6,7 +6,7 @@ import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
 import { gmailDraft, preloadGmail } from '../shared/gmailDraft.js';
-import { loadShipCalls, shipCallsReady, nextCalls } from '../shared/shipCalls.js';
+import { loadShipCalls, shipCallsReady, nextCalls, TARGET_LABEL } from '../shared/shipCalls.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
@@ -301,10 +301,10 @@ const TC_LV = {
 };
 const TD = 'border:1px solid #e2e8f0;padding:7px 10px';
 
-// 다음 기항 3곳 — 날짜·항구 한 줄씩. 60일 안에 일정 없으면 '일정 미정'
+// 방선 대상 항(한국·상해·칭따오·미주) 다음 기항 3곳 — 60일 안에 없으면 '불기항'
 function callsCell(code) {
   const cs = nextCalls(code, 3);
-  if (!cs.length) return '<span style="color:#64748b">일정 미정</span>';
+  if (!cs.length) return `<span style="color:#b91c1c;font-weight:600">불기항</span> <span style="color:#64748b">(${TARGET_LABEL}, 60일 내)</span>`;
   return cs.map(x => `<b>${x.date}</b> ${esc(x.port)}`).join('<br>');
 }
 
@@ -324,7 +324,7 @@ function techcrossHtml(items, sub) {
       `<span style="font-weight:400;font-size:13px;color:#64748b">${sub}</span></h3>` +
     `<table style="color:#1f2426;font-family:'Malgun Gothic',sans-serif;border-collapse:collapse;font-size:12.5px;width:670px">` +
     '<thead><tr style="background:#1e40af;color:#ffffff">' +
-      ['선박', '만료일', '상태', '입항 예정 (KST)'].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
+      ['선박', '만료일', '상태', `입항 예정 (${TARGET_LABEL})`].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + div('') +
     div('감사합니다. thanks,') +
     TC_SIGN.map(t => `<div style="white-space:pre">${esc(t)}</div>`).join('') +
