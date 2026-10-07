@@ -5,7 +5,6 @@ import { $, esc, fmtDate, inlineEdit, toast, todayStr } from '../core/dom.js';
 import { requireTH } from '../shared/thresholds.js';
 import { daysUntil, addMonths, dLabel } from '../shared/dates.js';
 import { getShipOrder, shipByCode, ensureDatalists, normalizeShipCode } from '../shared/ships.js';
-import { calMailLink } from '../shared/calMail.js';
 
 const SORT = { key: 'status', dir: 1 };   // key: ship|maker|status
 const CERT_FOLDER = 'https://drive.google.com/drive/folders/18RwNxrsoGR4qGu1MKcHMeRFlFsCLAooA';
@@ -154,6 +153,7 @@ function toggleSort(key) {
 
 function refresh() {
   const th = requireTH('bwts_calibration');
+  initPick();
   const order = getShipOrder();
   const enriched = S.BWTS_CAL.map(c => {
     const s = shipByCode(c.ship_code);
@@ -178,6 +178,7 @@ function refresh() {
     const shipName = s ? (s.name || '') : '';
     const makerTxt = s ? (s.bwts_maker || '') : '';
     return '<tr>' +
+      `<td style="text-align:center"><input type="checkbox" ${PICK.has(c.ship_code) ? 'checked' : ''} onchange="bwtsCalTab.pick('${esc(c.ship_code)}',this.checked)"></td>` +
       `<td><b>${esc(c.ship_code)}</b>${shipName ? `<div style="font-size:10px;color:#94a3b8">${esc(shipName)}</div>` : ''}</td>` +
       `<td style="font-size:11px;color:#64748b">${esc(makerTxt)}</td>` +
       `<td class="edit-cell" onclick="bwtsCalTab.editDate('${eid}',this)" title="클릭하여 수정" style="cursor:pointer;font-weight:600">${esc(c.last_date || '—')}</td>` +
@@ -194,14 +195,14 @@ function refresh() {
       `<div style="font-size:12px;color:#64748b">검교정 주기 ${th.interval_months}개월 · 임박 ${th.soon_days}일 · 날짜 클릭하여 수정</div>` +
       `<a href="${CERT_FOLDER}" target="_blank" style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d;margin-left:8px" title="Google Drive CERT 폴더 열기">📁 CERT 폴더</a>` +
       '<button onclick="bwtsCalTab.openUpload()" style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#047857;cursor:pointer" title="CERT·서비스레포트·SAFETY ALARM TEST 파일을 Drive 에 자동 저장">📥 파일 저장</button>' +
-      '<button onclick="bwtsCalTab.techcrossMail()" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8;cursor:pointer" title="만료·임박 선박 일정 확인 요청 — Gmail 작성창(테크로스·라스텍)">✉ 테크로스 요청</button>' +
-      calMailLink() +
+      `<button onclick="bwtsCalTab.techcrossMail()" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8;cursor:pointer" title="체크한 선박으로 테크로스 검교정 요청 메일 — Gmail 작성창이 열리면 본문에 Ctrl+V">✉ 테크로스 요청 <span id="tcCnt">(${PICK.size}척)</span></button>` +
       '<div style="margin-left:auto;display:flex;gap:6px">' +
         `<span class="pill lv-expired" style="font-size:11px;padding:3px 8px">만료 ${expCnt}</span>` +
         `<span class="pill lv-soon" style="font-size:11px;padding:3px 8px">임박 ${soonCnt}</span>` +
         `<span class="pill lv-ok" style="font-size:11px;padding:3px 8px">정상 ${okCnt}</span>` +
       '</div></div>' +
     '<table class="cal-table"><thead><tr>' +
+      '<th style="width:34px;text-align:center"><input type="checkbox" title="전체 선택/해제" onchange="bwtsCalTab.pickAll(this.checked)"></th>' +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('ship')">선박${arrow('ship')}</th>` +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('maker')">메이커${arrow('maker')}</th>` +
       '<th>최근 검교정</th><th>다음 만료</th>' +
@@ -237,60 +238,117 @@ function docLink(url, label) {
     : `<span style="font-size:11px;color:#cbd5e1">${label.replace(/^\S+\s/, '')} 없음</span>`;
 }
 
-/* ===== 테크로스 검교정 일정 확인 요청 =====
-   2026-09-16 사용자가 직접 보낸 메일 양식 그대로. 대상 = 만료·임박 (메이커가 테크로스가
-   아닌 게 분명한 선박은 제외). Gmail 작성 URL 은 계정 서명이 안 붙어 본문에 직접 넣는다. */
+/* ===== 테크로스 검교정 요청 =====
+   2026-09-16 사용자가 직접 보낸 메일 양식(주간 리포트 표를 붙여넣은 것) 그대로.
+   대상 = 체크한 선박. 처음엔 만료·임박(메이커 테크로스 또는 공란)이 체크돼 있다.
+   Gmail 작성 URL 은 HTML 을 못 싣는다 → 본문(표·서명 포함)을 HTML 로 클립보드에 넣고
+   작성창은 받는 사람·제목만 채워 연다. 사용자는 본문에 Ctrl+V. */
+const PICK = new Set();
+let pickInit = false;
+const isTechcross = code => {
+  const m = (shipByCode(code) || {}).bwts_maker || '';
+  return !m || /techcross|테크로스/i.test(m);
+};
+function initPick() {
+  if (pickInit || !S.BWTS_CAL.length) return;
+  pickInit = true;
+  S.BWTS_CAL.forEach(c => {
+    const due = bwtsDue(c);
+    const lv = bwtsLevel(due ? daysUntil(due) : null).lv;
+    if ((lv === 'expired' || lv === 'soon') && isTechcross(c.ship_code)) PICK.add(c.ship_code);
+  });
+}
+function pickCount() { const el = $('tcCnt'); if (el) el.textContent = `(${PICK.size}척)`; }
+function pick(code, on) { if (on) PICK.add(code); else PICK.delete(code); pickCount(); }
+function pickAll(on) {
+  S.BWTS_CAL.forEach(c => { if (on) PICK.add(c.ship_code); else PICK.delete(c.ship_code); });
+  refresh();
+}
+
 const TC_TO = 'david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
 const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
+const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건';
+const TC_INTRO = [
+  '수신 : 테크로스 / 이대형과장님, 김소연주임님, 정원비주임님',
+  '발신 : KMTC SM ETP / 정현우 과장',
+  '',
+  '업무에 수고가 많으십니다.',
+  'KMTC 호선중 BWTS 검교정 예정되어있는 선박들 확인요청드립니다.',
+  '아래 내용 중 진행 예정인 선박만 일정 재확인, 회신 부탁드립니다.',
+];
 const TC_SIGN = [
-  '감사합니다. thanks,',
   '==========================================================',
-  '정 현 우 (H.W. JUNG 鄭 泫 禹 / 과장 (Manager)',
-  'Environment Tech. Part / Repair & Supply Team',
-  'KMTC Ship Management Co.,Ltd. (KMTC SM)',
-  'E-mail : hwjung@ekmtc.com',
-  'Office : TEL : +82-51-790-2473 / FAX : +82-51-466-5217',
-  'M.P : +82-10-7930-3820',
+  '   정 현 우 (H.W. JUNG 鄭 泫 禹 / 과장 (Manager)',
+  '   Environment Tech. Part / Repair & Supply Team',
+  '   KMTC Ship Management Co.,Ltd. (KMTC SM)',
+  '   E-mail : hwjung@ekmtc.com',
+  '   Office : TEL : +82-51-790-2473 / FAX : +82-51-466-5217',
+  '   M.P : +82-10-7930-3820',
   '==========================================================',
-].join('\n');
+];
+// 주간 리포트 메일(weekly_cal_alert.py) 표 색과 같게
+const TC_LV = {
+  expired: { bg: '#fef2f2', fg: '#b91c1c', txt: d => `${dLabel(d)}(만료)` },
+  soon: { bg: '#fffbeb', fg: '#b45309', txt: d => `${dLabel(d)} 임박` },
+  ok: { bg: '#ffffff', fg: '#15803d', txt: d => `${dLabel(d)} 정상` },
+  unknown: { bg: '#ffffff', fg: '#64748b', txt: () => '이력 없음' },
+};
+const TD = 'border:1px solid #e2e8f0;padding:7px 10px';
+
+function techcrossHtml(items, sub) {
+  const div = t => `<div>${t ? esc(t) : '<br>'}</div>`;
+  const rows = items.map(({ c, due, days, lv }) => {
+    const L = TC_LV[lv];
+    return `<tr style="background:${L.bg}">` +
+      `<td style="${TD};font-weight:600">${esc(c.ship_code)}</td>` +
+      `<td style="${TD}">BWTS 연간</td><td style="${TD}">검교정</td>` +
+      `<td style="${TD}">${fmtDate(due)}</td>` +
+      `<td style="${TD}"><span style="color:${L.fg};font-weight:600">${esc(L.txt(days))}</span></td></tr>`;
+  }).join('');
+  return '<div style="font-family:\'Malgun Gothic\',sans-serif;color:#222">' +
+    TC_INTRO.map(div).join('') + div('') +
+    `<h3 style="font-family:'Malgun Gothic',sans-serif;color:#1e40af;margin:0 0 6px;font-size:15px">⚓ BWTS ` +
+      `<span style="font-weight:400;font-size:13px;color:#64748b">${sub}</span></h3>` +
+    `<table style="color:#1f2426;font-family:'Malgun Gothic',sans-serif;border-collapse:collapse;font-size:12.5px;width:670px">` +
+    '<thead><tr style="background:#1e40af;color:#ffffff">' +
+      ['선박', '장비', '구분', '만료일', '상태'].map(h => `<th style="${TD};text-align:left">${h}</th>`).join('') +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' + div('') +
+    div('감사합니다. thanks,') +
+    TC_SIGN.map(t => `<div style="white-space:pre">${esc(t)}</div>`).join('') +
+    '</div>';
+}
 
 function techcrossMail() {
-  const items = S.BWTS_CAL.map(c => {
+  const items = S.BWTS_CAL.filter(c => PICK.has(c.ship_code)).map(c => {
     const due = bwtsDue(c);
     const days = due ? daysUntil(due) : null;
-    const maker = (shipByCode(c.ship_code) || {}).bwts_maker || '';
-    return { c, due, days, lv: bwtsLevel(days).lv, maker };
-  }).filter(x => (x.lv === 'expired' || x.lv === 'soon')
-    && (!x.maker || /techcross|테크로스/i.test(x.maker)))
-    .sort((a, b) => a.days - b.days);
-  if (!items.length) { toast('만료·임박 선박 없음'); return; }
+    return { c, due, days, lv: bwtsLevel(days).lv };
+  }).sort((a, b) => (a.days ?? 9999) - (b.days ?? 9999));
+  if (!items.length) { toast('메일 보낼 선박을 체크해 주세요'); return; }
   const exp = items.filter(x => x.lv === 'expired').length;
-  const lines = items.map(({ c, due, days, lv }) =>
-    `${c.ship_code} BWTS 연간 검교정 ${fmtDate(due)} ` +
-    (lv === 'expired' ? `${dLabel(days)}(만료)` : `${dLabel(days)} 임박`));
-  const body = [
-    '수신 : 테크로스 / 이대형과장님, 김소연주임님, 정원비주임님',
-    '발신 : KMTC SM ETP / 정현우 과장',
-    '',
-    '업무에 수고가 많으십니다.',
-    'KMTC 호선중 BWTS 검교정 예정되어있는 선박들 확인요청드립니다.',
-    '아래 내용 중 진행 예정인 선박만 일정 재확인, 회신 부탁드립니다.',
-    '',
-    `⚓ BWTS (${items.length}건 · 만료 ${exp} · 임박 ${items.length - exp})`,
-    '선박 장비 구분 만료일 상태',
-    ...lines,
-    '',
-    TC_SIGN,
-  ].join('\n');
+  const soon = items.filter(x => x.lv === 'soon').length;
+  const sub = `(${items.length}건 · 만료 ${exp} · 임박 ${soon})`;
+  const text = [...TC_INTRO, '', `⚓ BWTS ${sub}`, '선박\t장비\t구분\t만료일\t상태',
+    ...items.map(({ c, due, days, lv }) =>
+      [c.ship_code, 'BWTS 연간', '검교정', fmtDate(due), TC_LV[lv].txt(days)].join('\t')),
+    '', '감사합니다. thanks,', ...TC_SIGN].join('\n');
+
+  // 클립보드는 작성창을 열기 전에(이 페이지에 포커스 있을 때) 써야 한다
+  const copied = navigator.clipboard.write([new ClipboardItem({
+    'text/html': new Blob([techcrossHtml(items, sub)], { type: 'text/html' }),
+    'text/plain': new Blob([text], { type: 'text/plain' }),
+  })]);
   const url = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&to=' + encodeURIComponent(TC_TO)
     + '&cc=' + encodeURIComponent(TC_CC)
-    + '&su=' + encodeURIComponent('[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건')
-    + '&body=' + encodeURIComponent(body);
-  if (!window.open(url, '_blank')) { toast('팝업이 차단됨 — 주소창 오른쪽 차단 아이콘에서 허용 후 다시'); return; }
-  toast(`${items.length}척 작성창 — 그대로 두면 임시보관함에 저장됨`);
+    + '&su=' + encodeURIComponent(TC_SUBJECT);
+  const w = window.open(url, '_blank');
+  copied.then(() => toast(w
+    ? `${items.length}척 표 복사됨 — 작성창 본문에 Ctrl+V`
+    : '표 복사됨 — 팝업이 차단됨, 허용 후 다시'))
+    .catch(() => toast('클립보드 복사 실패 — 다시 눌러 주세요'));
 }
 
-window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind, techcrossMail };
+window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind, techcrossMail, pick, pickAll };
 
 export default { id: 'bwtsCal', mount, refresh };
