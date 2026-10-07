@@ -50,9 +50,13 @@ export function loadShipCalls(codes) {
 
 export const shipCallsReady = () => calls !== null;
 
-// 대상 항 다음 n개 기항 (KST 날짜)
+// 대상 항 다음 n개 기항 (KST 날짜). 부산은 기간 안에 있으면 n개 밖이라도 붙인다.
 export function nextCalls(code, n = 3) {
-  return ((calls && calls[code]) || []).slice(0, n).map(c => {
+  const all = (calls && calls[code]) || [];
+  const picked = all.slice(0, n);
+  const pus = all.find(c => c.port === '부산');
+  if (pus && !picked.includes(pus)) picked.push(pus);
+  return picked.map(c => {
     const k = new Date(c.eta.getTime() + 9 * 3600000);
     return { port: c.port, date: `${k.getUTCMonth() + 1}/${k.getUTCDate()}` };
   });
