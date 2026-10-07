@@ -333,20 +333,25 @@ function techcrossMail() {
       [c.ship_code, 'BWTS 연간', '검교정', fmtDate(due), TC_LV[lv].txt(days)].join('\t')),
     '', '감사합니다. thanks,', ...TC_SIGN].join('\n');
 
-  // 클립보드는 작성창을 열기 전에(이 페이지에 포커스 있을 때) 써야 한다
-  const copied = navigator.clipboard.write([new ClipboardItem({
-    'text/html': new Blob([techcrossHtml(items, sub)], { type: 'text/html' }),
-    'text/plain': new Blob([text], { type: 'text/plain' }),
-  })]);
+  // 복사는 작성창을 열기 전에 동기로 끝낸다. navigator.clipboard.write 는 비동기라
+  // window.open 으로 포커스가 넘어가면 "Document is not focused" 로 조용히 실패했다.
+  let ok = false;
+  const onCopy = e => {
+    e.clipboardData.setData('text/html', techcrossHtml(items, sub));
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
+    ok = true;
+  };
+  document.addEventListener('copy', onCopy);
+  try { document.execCommand('copy'); } finally { document.removeEventListener('copy', onCopy); }
+  if (!ok) { toast('클립보드 복사 실패 — 다시 눌러 주세요'); return; }
   const url = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&to=' + encodeURIComponent(TC_TO)
     + '&cc=' + encodeURIComponent(TC_CC)
     + '&su=' + encodeURIComponent(TC_SUBJECT);
   const w = window.open(url, '_blank');
-  copied.then(() => toast(w
-    ? `${items.length}척 표 복사됨 — 작성창 본문에 Ctrl+V`
-    : '표 복사됨 — 팝업이 차단됨, 허용 후 다시'))
-    .catch(() => toast('클립보드 복사 실패 — 다시 눌러 주세요'));
+  toast(w ? `${items.length}척 표 복사됨 — 작성창 본문 클릭 후 Ctrl+V`
+    : '표 복사됨 — 팝업이 차단됨, 허용 후 다시');
 }
 
 window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind, techcrossMail, pick, pickAll };
