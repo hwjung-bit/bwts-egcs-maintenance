@@ -265,7 +265,7 @@ function pickAll(on) {
   refresh();
 }
 
-const TC_TO = 'david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
+const TC_TO = 'as.managers@techcross.com,david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
 const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
 const TC_SUBJECT = '[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건';
 // 작성창엔 Gmail 서명 템플릿(TO/FR·수신/발신·인사·서명)이 자동으로 들어간다 →
