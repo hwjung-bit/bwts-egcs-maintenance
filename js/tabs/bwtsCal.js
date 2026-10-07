@@ -194,6 +194,7 @@ function refresh() {
       `<div style="font-size:12px;color:#64748b">검교정 주기 ${th.interval_months}개월 · 임박 ${th.soon_days}일 · 날짜 클릭하여 수정</div>` +
       `<a href="${CERT_FOLDER}" target="_blank" style="text-decoration:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#15803d;margin-left:8px" title="Google Drive CERT 폴더 열기">📁 CERT 폴더</a>` +
       '<button onclick="bwtsCalTab.openUpload()" style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;padding:5px 14px;font-size:12px;font-weight:600;color:#047857;cursor:pointer" title="CERT·서비스레포트·SAFETY ALARM TEST 파일을 Drive 에 자동 저장">📥 파일 저장</button>' +
+      '<button onclick="bwtsCalTab.techcrossMail()" style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8;cursor:pointer" title="만료·임박 선박 일정 확인 요청 — Gmail 작성창(테크로스·라스텍)">✉ 테크로스 요청</button>' +
       calMailLink() +
       '<div style="margin-left:auto;display:flex;gap:6px">' +
         `<span class="pill lv-expired" style="font-size:11px;padding:3px 8px">만료 ${expCnt}</span>` +
@@ -236,6 +237,60 @@ function docLink(url, label) {
     : `<span style="font-size:11px;color:#cbd5e1">${label.replace(/^\S+\s/, '')} 없음</span>`;
 }
 
-window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind };
+/* ===== 테크로스 검교정 일정 확인 요청 =====
+   2026-09-16 사용자가 직접 보낸 메일 양식 그대로. 대상 = 만료·임박 (메이커가 테크로스가
+   아닌 게 분명한 선박은 제외). Gmail 작성 URL 은 계정 서명이 안 붙어 본문에 직접 넣는다. */
+const TC_TO = 'david@techcross.com,thduss@lastech.kr,wbjeong@lastech.kr';
+const TC_CC = 'etp@ekmtc.com,as@lastech.kr,young1106@techcross.com';
+const TC_SIGN = [
+  '감사합니다. thanks,',
+  '==========================================================',
+  '정 현 우 (H.W. JUNG 鄭 泫 禹 / 과장 (Manager)',
+  'Environment Tech. Part / Repair & Supply Team',
+  'KMTC Ship Management Co.,Ltd. (KMTC SM)',
+  'E-mail : hwjung@ekmtc.com',
+  'Office : TEL : +82-51-790-2473 / FAX : +82-51-466-5217',
+  'M.P : +82-10-7930-3820',
+  '==========================================================',
+].join('\n');
+
+function techcrossMail() {
+  const items = S.BWTS_CAL.map(c => {
+    const due = bwtsDue(c);
+    const days = due ? daysUntil(due) : null;
+    const maker = (shipByCode(c.ship_code) || {}).bwts_maker || '';
+    return { c, due, days, lv: bwtsLevel(days).lv, maker };
+  }).filter(x => (x.lv === 'expired' || x.lv === 'soon')
+    && (!x.maker || /techcross|테크로스/i.test(x.maker)))
+    .sort((a, b) => a.days - b.days);
+  if (!items.length) { toast('만료·임박 선박 없음'); return; }
+  const exp = items.filter(x => x.lv === 'expired').length;
+  const lines = items.map(({ c, due, days, lv }) =>
+    `${c.ship_code} BWTS 연간 검교정 ${fmtDate(due)} ` +
+    (lv === 'expired' ? `${dLabel(days)}(만료)` : `${dLabel(days)} 임박`));
+  const body = [
+    '수신 : 테크로스 / 이대형과장님, 김소연주임님, 정원비주임님',
+    '발신 : KMTC SM ETP / 정현우 과장',
+    '',
+    '업무에 수고가 많으십니다.',
+    'KMTC 호선중 BWTS 검교정 예정되어있는 선박들 확인요청드립니다.',
+    '아래 내용 중 진행 예정인 선박만 일정 재확인, 회신 부탁드립니다.',
+    '',
+    `⚓ BWTS (${items.length}건 · 만료 ${exp} · 임박 ${items.length - exp})`,
+    '선박 장비 구분 만료일 상태',
+    ...lines,
+    '',
+    TC_SIGN,
+  ].join('\n');
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&to=' + encodeURIComponent(TC_TO)
+    + '&cc=' + encodeURIComponent(TC_CC)
+    + '&su=' + encodeURIComponent('[KMTC SM][ETP] BWTS 검교정 진행 여부 및 예정 여부 확인 요청의 건')
+    + '&body=' + encodeURIComponent(body);
+  if (!window.open(url, '_blank')) { toast('팝업이 차단됨 — 주소창 오른쪽 차단 아이콘에서 허용 후 다시'); return; }
+  toast(`${items.length}척 작성창 — 그대로 두면 임시보관함에 저장됨`);
+}
+
+window.bwtsCalTab = { sort: toggleSort, editDate, editNote, openUpload, closeUpload, submitUpload, removeFile, setKind, techcrossMail };
 
 export default { id: 'bwtsCal', mount, refresh };
