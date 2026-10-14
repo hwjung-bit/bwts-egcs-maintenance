@@ -6,6 +6,7 @@ import { $, esc, toast, placePopup } from '../core/dom.js';
 import { STATUS_OPTS } from '../shared/constants.js';
 import { getShipOrder } from '../shared/ships.js';
 import { calSummaryHtml } from '../shared/calSummary.js';
+import { go } from '../core/router.js';
 
 /* History snapshots merge into the last row when it is younger than this,
    so a save followed by quick corrections stays one history entry. */
@@ -102,6 +103,34 @@ async function delHist(id) {
 }
 function closeHistory() { $('calEdit').style.display = 'none'; }
 
+/* Open 📋 업무 rows (S.REPAIRS = BWTS/EGCS only) shown under each 현황 cell.
+   EGCS rows pick a column by keyword: WMS first, then CEMS, rest → BODY. */
+function taskCol(r) {
+  if (r.system === 'BWTS') return 'bwts';
+  const t = [r.equip, r.title, r.symptom].join(' ').toUpperCase();
+  if (/WMS|PAH|TURB|탁도/.test(t)) return 'egcs_wms';
+  if (/CEMS|GMS|SOX|SO2|CO2/.test(t)) return 'egcs_cems';
+  return 'egcs_body';
+}
+function openTasks(code, sys) {
+  return S.REPAIRS.filter(r => r.ship_code === code && r.status !== '완료' && taskCol(r) === sys);
+}
+function taskLines(code, sys) {
+  return openTasks(code, sys).map(r =>
+    `<div onclick="statusTab.openTask('${esc(r.id)}',event)" title="📋 업무 탭에서 보기 — ${esc(r.title || r.symptom || '')}" ` +
+    'style="font-size:10px;color:#1e40af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;margin-top:1px">' +
+    `📋 <b>${esc(r.status || '')}</b> ${esc(r.title || r.symptom || '')}</div>`).join('');
+}
+async function openTask(id, ev) {
+  ev.stopPropagation();
+  await go('work');
+  const tr = document.querySelector(`#view tr[data-id="${CSS.escape(id)}"]`);
+  if (!tr) { toast('업무 탭 필터에 가려짐 — 전체 보기로 확인'); return; }
+  tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  tr.style.outline = '2px solid #2563eb';
+  setTimeout(() => { tr.style.outline = ''; }, 2500);
+}
+
 function stColor(st) {
   if (st === '정상') return 'background:#d1fae5;color:#065f46';
   if (st === '수리중') return 'background:#fff7ed;color:#c2410c';
@@ -117,7 +146,7 @@ function stCell(code, field, val, memo, disabled) {
     '<div style="display:flex;align-items:center;gap:4px">' +
     `<span style="font-size:11px;font-weight:700;flex-shrink:0">${esc(val)}</span>` +
     `<span style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${esc(memo || '')}">${esc(memo || '')}</span>` +
-    histBtn + '</div></td>';
+    histBtn + '</div>' + taskLines(code, sys) + '</td>';
 }
 
 function mount(root) {
@@ -153,7 +182,7 @@ function refresh() {
       '</tr>';
   }).join('');
   $('statusRoot').innerHTML =
-    '<div style="margin-bottom:16px"><h3 style="margin:0 0 12px">BWTS · EGCS 현황</h3>' +
+    '<div style="margin-bottom:16px"><h3 style="margin:0 0 12px">BWTS · EGCS 현황 <span style="font-size:11px;font-weight:400;color:#64748b">📋 = 업무 탭의 미완료 건 (클릭 → 업무)</span></h3>' +
     '<div class="stats" style="padding:0;margin-bottom:16px">' +
       `<div class="card"><div class="num">${ships.length}</div><div class="label">전체</div></div>` +
       `<div class="card green"><div class="num">${okCnt}</div><div class="label">정상</div></div>` +
@@ -214,6 +243,6 @@ async function saveCell(code, sys) {
   refresh();
 }
 
-window.statusTab = { editCell, saveCell, history, hideHist, closeHistory, delHist };
+window.statusTab = { editCell, saveCell, history, hideHist, closeHistory, delHist, openTask };
 
 export default { id: 'status', mount, refresh };
