@@ -430,13 +430,22 @@ function tokens(s) {
   String(s || '').toUpperCase().split(/[^0-9A-Z가-힣]+/).forEach(p => { if (p.length >= 2 && !STOP[p]) out[p] = 1; });
   return out;
 }
+// 진행률 — 줄 끝 "60%" (상태 앞뒤 어느 쪽이든: "#진행 60%" / "60% #진행")
+const PROG_RE = /\s*(\d{1,3})\s*%\s*$/;
+function takeProgress(line) {
+  const m = PROG_RE.exec(line);
+  if (!m || Number(m[1]) > 100) return { line, progress: '' };
+  return { line: line.slice(0, m.index).trim(), progress: String(Number(m[1])) };
+}
 function parseLine(line, ships) {
   const raw = line;
   let urgency = '', detail = '', ship = '', system = '';
   const um = /^[\[(（]\s*(상|중|하)\s*[\])）]\s*/.exec(line);
   if (um) { urgency = um[1]; line = line.slice(um[0].length).trim(); }
-  const st = statusOf(line);
+  let pg = takeProgress(line);
+  const st = statusOf(pg.line);
   line = st.line;
+  if (pg.progress === '') { pg = takeProgress(line); line = pg.line; }
   const m = /^(.*\S)\s*[(（]([^()（）]*)[)）]\s*$/.exec(line);
   if (m && m[2].trim()) { line = m[1].trim(); detail = m[2].trim(); }
   const head = /^([A-Za-z][A-Za-z0-9]{1,4})\b[\s:·]*/.exec(line);
@@ -447,7 +456,7 @@ function parseLine(line, ships) {
   // detail ("(견적 접수됨)") often carries the state when the title does not
   const status = st.status || statusOf(detail).status;
   return { raw, ship, system, category: categoryOf(line), title: line, detail, urgency,
-    status, statusAuto: !!status && !st.explicit };
+    status, statusAuto: !!status && !st.explicit, progress: pg.progress };
 }
 function candidates(it, open) {
   const a = tokens(it.title + ' ' + it.detail), ak = Object.keys(a);
@@ -474,7 +483,7 @@ function ensureBulkModal() {
   d.id = 'workBulk';
   d.innerHTML = `
   <div class="box">
-    <h3>⏎ 붙여넣기 일괄 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 한 줄 = 업무 하나. "[상] KMB Hi-NAS … (상세) #진행" 형식, ──── 줄은 무시</span></h3>
+    <h3>⏎ 붙여넣기 일괄 등록 <span style="font-weight:400;color:#94a3b8;font-size:11px">— 한 줄 = 업무 하나. "[상] KMB Hi-NAS … (상세) #진행 60%" 형식, ──── 줄은 무시</span></h3>
     <div class="row">
       <label>출처<input id="wbSource" list="wbSourceList" placeholder="주간회의 등"><datalist id="wbSourceList">${SOURCES.map(s => `<option>${s}</option>`).join('')}</datalist></label>
       <label>지시자<input id="wbReq" placeholder="선택"></label>
@@ -518,7 +527,6 @@ function parseBulk() {
     it.matchId = it.action === 'update' ? top.id : '';
     // no detected state: a new task starts 대기, an existing one keeps its own
     if (!it.status && it.action === 'new') it.status = '대기';
-    it.progress = '';
     return it;
   });
   renderBulk();
