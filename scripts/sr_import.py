@@ -20,10 +20,11 @@ GitHub Actions(sr-import.yml)에서 실행. 환경변수는 supabase_collector.p
   python scripts/sr_import.py --dry-run       Supabase 쓰기 없이 결과만 출력
 """
 
-import argparse, os, re, sys, logging
+import argparse, os, re, sys, time, logging
 from datetime import date, datetime, timedelta, timezone
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from supabase_collector import (
     SHIP_MAP, extract_body_text, fetch_messages, get_gmail_creds,
@@ -226,9 +227,23 @@ def attachments_of(payload):
     return out
 
 
+def get_message(gmail, msg_id):
+    # The OAuth client is shared with other tools, so the per-user rate
+    # limit is hit on a full backfill — back off and retry.
+    for attempt in range(6):
+        try:
+            return gmail.users().messages().get(
+                userId="me", id=msg_id, format="full").execute()
+        except HttpError as e:
+            if e.resp.status not in (403, 429) or attempt == 5:
+                raise
+            wait = 15 * (attempt + 1)
+            log.warning("rate limit — %ds 대기", wait)
+            time.sleep(wait)
+
+
 def parse(gmail, stub):
-    msg = gmail.users().messages().get(
-        userId="me", id=stub["id"], format="full").execute()
+    msg = get_message(gmail, stub["id"])
     payload = msg.get("payload", {})
     heads = payload.get("headers", [])
     subject = get_header(heads, "Subject") or ""
@@ -306,6 +321,7 @@ def run(since, dry_run):
 
     rows, skipped = [], {}
     for stub in stubs:
+        time.sleep(0.15)
         row, why = parse(gmail, stub)
         if row:
             rows.append(row)
