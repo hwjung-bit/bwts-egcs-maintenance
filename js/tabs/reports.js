@@ -87,7 +87,60 @@ function render() {
     card(live.filter(r => r.repair_id).length, '수리건 연결', 'purple') +
     card(live.filter(r => !r.visit_start).length, '방선일 미입력', 'amber');
   $('srCnt').textContent = rows.length + '건';
-  $('srRoot').innerHTML = F.view === 'ships' ? shipSummary(rows) : listTable(rows);
+  $('srRoot').innerHTML = F.view === 'ships' ? shipSummary(rows) : closePanel() + listTable(rows);
+}
+
+/* ── 리포트 받은 미완료 수리건 ───────────────────────── */
+// Open BWTS/EGCS repair + a later report of the same ship/system that is
+// unlinked or linked to it. A report usually means the job is done, but
+// interim reports exist, so closing stays a click.
+const SR_END = r => r.visit_end || r.visit_start || kstDay(r.mail_at);
+
+function closeCandidates() {
+  return S.REPAIRS.filter(t => t.status !== '완료' && t.date).map(t => {
+    const srs = S.SR.filter(r => !r.excluded && r.ship_code === t.ship_code && r.system === t.system &&
+      kstDay(r.mail_at) >= t.date && (!r.repair_id || r.repair_id === t.id));
+    srs.sort((a, b) => (a.repair_id === t.id) - (b.repair_id === t.id) || (a.mail_at < b.mail_at ? -1 : 1));
+    return { t, sr: srs.pop() };
+  }).filter(x => x.sr);
+}
+
+function closePanel() {
+  const list = closeCandidates();
+  if (!list.length) return '';
+  const rows = list.map(({ t, sr }) => '<tr>' +
+    `<td><b>${esc(t.ship_code)}</b> <span class="pill pill-${t.system === 'BWTS' ? 'bwts' : 'egcs'}">${esc(t.system)}</span></td>` +
+    `<td style="white-space:nowrap">${esc(t.date)}</td>` +
+    `<td><span class="status-select st-${esc(t.status)}" style="padding:1px 6px;background-image:none">${esc(t.status || '')}</span> ${esc(repairLabel(t))}</td>` +
+    `<td style="white-space:nowrap">${esc(kstDay(sr.mail_at))}${sr.repair_id === t.id ? ' 🔗' : ''}</td>` +
+    `<td>${esc(sr.summary || sr.subject)}</td>` +
+    `<td style="white-space:nowrap"><button class="add-btn" style="padding:3px 10px;font-size:12px" ` +
+      `onclick="srTab.closeRepair('${esc(t.id)}','${esc(sr.id)}',this)" title="수리건 완료 (완료일 ${esc(SR_END(sr))}) + 리포트 연결">✅ 완료</button></td>` +
+    '</tr>').join('');
+  return `<div style="border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+    <div style="font-weight:600;margin-bottom:6px">🔔 리포트 받은 미완료 수리건 ${list.length}건
+      <span class="muted" style="font-weight:400;font-size:12px">— 등록 후 같은 선박·장비 리포트가 온 건. 클리어면 ✅ (완료일 = 방선일, 없으면 리포트 메일일)</span></div>
+    <table style="width:100%;background:#fff"><thead><tr><th style="width:110px">선박</th><th style="width:96px">수리 등록</th><th>수리건</th>
+      <th style="width:110px">리포트</th><th>리포트 내용</th><th style="width:80px"></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function closeRepair(rid, srId, btn) {
+  const t = S.REPAIRS.find(x => x.id === rid);
+  const sr = S.SR.find(x => x.id === srId);
+  if (!t || !sr) return;
+  if (btn) btn.disabled = true;
+  const done = SR_END(sr);
+  // Same rule as 업무 탭 statusPatch: 완료 → progress 100, stage mirrors status
+  const note = '서비스 리포트 수신 → 완료: ' + (sr.summary || sr.subject || '').slice(0, 120);
+  const patch = { status: '완료', progress: 100, stage: '완료', completed_at: done, last_action: note };
+  if (!await dbSave(sb.from('repairs').update(patch).eq('id', rid))) { if (btn) btn.disabled = false; return; }
+  [S.REPAIRS, S.TASKS].forEach(list => { const x = list.find(y => y.id === rid); if (x) Object.assign(x, patch); });
+  const act = { id: 'wa_' + Date.now().toString(36), task_id: rid, date: done, progress: 100, note,
+    author: (S.USER && S.USER.email) || '' };
+  if (await dbSave(sb.from('work_actions').insert(act))) S.ACTIONS.unshift(act);
+  if (sr.repair_id !== rid) await set(srId, 'repair_id', rid);
+  toast(t.ship_code + ' 수리건 완료 (' + done + ')');
+  render();
 }
 
 /* ── 목록 ─────────────────────────────────────────── */
@@ -234,6 +287,6 @@ function pickRepair(id, el) {
 function toggle(id) { OPEN.has(id) ? OPEN.delete(id) : OPEN.add(id); render(); }
 function openRepair(rid) { go('repairs', { focus: rid }); }
 
-window.srTab = { set, edit, pickRepair, toggle, openRepair };
+window.srTab = { set, edit, pickRepair, toggle, openRepair, closeRepair };
 
 export default { id: 'reports', mount, refresh };
