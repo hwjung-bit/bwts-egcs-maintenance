@@ -63,7 +63,7 @@ QUOTE_RE = re.compile(r"\n\s*(From:|보낸 사람:|-+\s*Original Message|"
 WORK_TYPES = [
     ("개조·설치", re.compile(r"retrofit|개조|신규\s*설치|install", re.I)),
     ("검교정", re.compile(r"calibration|캘리브레이션|검교정|교정", re.I)),
-    ("수리", re.compile(r"수리|repair|고장|불량|trouble|TS|fail|"
+    ("수리", re.compile(r"수리|repair|고장|불량|trouble|\bTS\b|fail|"
                         r"malfunction|error|alarm|이상|조치|교체|replace|"
                         r"작동\s*불가|용접", re.I)),
     ("정기점검", re.compile(r"정기|점검|annual|inspection|condition|"
