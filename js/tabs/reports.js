@@ -5,8 +5,8 @@
 // guesses from the subject and body (PDFs are not read); editing any of them
 // sets edited=true so the importer leaves them alone afterwards.
 //
-// 선박별 집계: 수리 연결된 건의 정지 일수(수리 등록일 → 마지막 방선 종료일,
-// 없으면 수리 완료일·오늘)를 연도 안으로 잘라 합산 → 추정 가동률.
+// 선박별 집계: 수리 연결된 건의 정지 일수(수리 등록일 → 마지막 방선일,
+// 없으면 리포트 메일일)를 겹침 없이 연도 안으로 잘라 합산 → 추정 가동률.
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, inlineEdit } from '../core/dom.js';
@@ -151,16 +151,24 @@ function shipSummary(rows) {
     const byRepair = {};
     S.SR.filter(r => !r.excluded && r.ship_code === code && r.system === sys && r.repair_id)
       .forEach(r => { (byRepair[r.repair_id] = byRepair[r.repair_id] || []).push(r); });
-    let down = 0;
+    // A report mail means the visit is over, so the stop ends at the latest
+    // visit date or report mail of that repair. Overlaps count once.
+    const spans = [];
     Object.keys(byRepair).forEach(rid => {
       const rep = repairById(rid);
       if (!rep || !rep.date) return;
-      const ends = byRepair[rid].map(r => r.visit_end || r.visit_start).filter(Boolean).sort();
-      const end = ends.pop() || (rep.completed_at || '').slice(0, 10) || today();
+      const end = byRepair[rid].map(r => r.visit_end || r.visit_start || kstDay(r.mail_at)).sort().pop();
       const a = rep.date > yStart ? rep.date : yStart;
       const b = end < yEnd ? end : yEnd;
-      if (b >= a) down += dayDiff(a, b) + 1;
+      if (b >= a) spans.push([a, b]);
     });
+    let down = 0, curA = null, curB = null;
+    spans.sort((x, y) => x[0] < y[0] ? -1 : 1).forEach(([a, b]) => {
+      if (curB && a <= curB) { if (b > curB) curB = b; return; }
+      if (curB) down += dayDiff(curA, curB) + 1;
+      curA = a; curB = b;
+    });
+    if (curB) down += dayDiff(curA, curB) + 1;
     const avail = Math.max(0, 100 * (1 - down / span));
     out.push('<tr>' +
       `<td><b>${esc(code)}</b></td><td><span class="pill pill-${sys === 'BWTS' ? 'bwts' : 'egcs'}">${sys}</span></td>` +
@@ -174,8 +182,8 @@ function shipSummary(rows) {
       '</tr>');
   }));
   if (!out.length) return '<div class="muted" style="padding:24px">해당 건 없음</div>';
-  return `<div class="muted" style="font-size:12px;margin-bottom:8px">${esc(year)}년 기준 (${span}일) · 정지 일수 = 연결된 수리건의 등록일 → 마지막 방선 종료일
-    (없으면 수리 완료일, 미완료면 오늘), 연도 안으로 잘라 합산 · 가동률 = 1 − 정지/기간 (추정)</div>` +
+  return `<div class="muted" style="font-size:12px;margin-bottom:8px">${esc(year)}년 기준 (${span}일) · 정지 일수 = 연결된 수리건의 등록일 → 마지막 방선일
+    (없으면 리포트 메일일), 겹치는 기간은 한 번만, 연도 안으로 잘라 합산 · 가동률 = 1 − 정지/기간 (추정)</div>` +
     '<table style="width:auto"><thead><tr><th>선박</th><th>장비</th><th>리포트</th><th>수리</th><th>검교정</th><th>정기점검</th>' +
     '<th>기타</th><th>마지막 방선</th><th>수리건</th><th>정지 일수</th><th>추정 가동률</th></tr></thead><tbody>' +
     out.join('') + '</tbody></table>';
