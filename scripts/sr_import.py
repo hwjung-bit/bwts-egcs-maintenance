@@ -63,8 +63,9 @@ QUOTE_RE = re.compile(r"\n\s*(From:|보낸 사람:|-+\s*Original Message|"
 WORK_TYPES = [
     ("개조·설치", re.compile(r"retrofit|개조|신규\s*설치|install", re.I)),
     ("검교정", re.compile(r"calibration|캘리브레이션|검교정|교정", re.I)),
-    ("수리", re.compile(r"수리|repair|고장|불량|trouble|fail|error|alarm|"
-                        r"이상|조치|교체|replace", re.I)),
+    ("수리", re.compile(r"수리|repair|고장|불량|trouble|TS|fail|"
+                        r"malfunction|error|alarm|이상|조치|교체|replace|"
+                        r"작동\s*불가|용접", re.I)),
     ("정기점검", re.compile(r"정기|점검|annual|inspection|condition|"
                           r"pre-?check|survey", re.I)),
 ]
@@ -185,13 +186,15 @@ def dates_in(line, mail_day):
     return out
 
 
-def visit_dates(top, mail_day):
-    """(start, end) from lines that talk about the visit, else (None, None)."""
+def visit_dates(subject, top, mail_day):
+    """(start, end) from the subject ("… / 9.2", "(4/13)") and body lines that
+    talk about the visit, else (None, None)."""
     lo, hi = mail_day - timedelta(days=120), mail_day + timedelta(days=3)
+    lines = [subject] + [ln for ln in top.splitlines()
+                         if VISIT_LINE_RE.search(ln)]
     found = []
-    for line in top.splitlines():
-        if VISIT_LINE_RE.search(line):
-            found += [d for d in dates_in(line, mail_day) if lo <= d <= hi]
+    for line in lines:
+        found += [d for d in dates_in(line, mail_day) if lo <= d <= hi]
     if not found:
         return None, None
     return min(found), max(found)
@@ -267,9 +270,9 @@ def parse(gmail, stub):
     if not system:
         return None, "장비 미판정"
     mail_at = datetime.fromtimestamp(int(msg["internalDate"]) / 1000, KST)
-    start, end = visit_dates(top, mail_at.date())
+    start, end = visit_dates(subject, top, mail_at.date())
     return {
-        "id": msg["id"],
+        "msg_id": msg["id"],
         "thread_id": msg.get("threadId", ""),
         "ship_code": ship,
         "system": system,
@@ -306,10 +309,53 @@ def link_repair(row, repairs):
     return cands[0] if len(cands) == 1 else None
 
 
-# ── Main ──────────────────────────────────────────
-MAIL_FIELDS = ["id", "thread_id", "ship_code", "system", "vendor", "sender",
-               "mail_at", "subject", "body", "attachments"]
+# ── Grouping ──────────────────────────────────────
+# One row per (thread, ship): re-sends, invoices and settlement mails in the
+# same thread fold into the first report mail.
+MAIL_FIELDS = ["id", "thread_id", "msg_ids", "mail_count", "ship_code",
+               "system", "vendor", "sender", "mail_at", "last_mail_at",
+               "subject", "body", "attachments"]
+GUESS_FIELDS = ["visit_start", "visit_end", "work_type", "summary"]
 
+
+def _merge_atts(a, b):
+    seen = {(x["name"], x["size"]) for x in a}
+    return a + [x for x in b if (x["name"], x["size"]) not in seen]
+
+
+def group(mails, existing):
+    """mails: parsed messages. existing: id → current DB row (may hold mails
+    older than this scan window). Returns rows keyed by thread:ship."""
+    rows = {}
+    for m in sorted(mails, key=lambda x: x["mail_at"]):
+        gid = m["thread_id"] + ":" + m["ship_code"]
+        r = rows.get(gid)
+        if r is None:
+            r = rows[gid] = dict(m, id=gid, msg_ids=[], attachments=[],
+                                 last_mail_at=m["mail_at"])
+            r.pop("msg_id")
+            ex = existing.get(gid)
+            if ex and (datetime.fromisoformat(ex["mail_at"])
+                       < datetime.fromisoformat(m["mail_at"])):
+                # Keep the first report mail from the earlier scan
+                for k in ["mail_at", "subject", "body", "sender", "vendor",
+                          "system"] + GUESS_FIELDS:
+                    r[k] = ex[k]
+                r["msg_ids"] = list(ex.get("msg_ids") or [])
+                r["attachments"] = list(ex.get("attachments") or [])
+        if m["msg_id"] not in r["msg_ids"]:
+            r["msg_ids"].append(m["msg_id"])
+        r["attachments"] = _merge_atts(r["attachments"], m["attachments"])
+        r["last_mail_at"] = max(r["last_mail_at"], m["mail_at"])
+        # Fill a missing visit range from a later mail in the thread
+        if not r.get("visit_start") and m.get("visit_start"):
+            r["visit_start"], r["visit_end"] = m["visit_start"], m["visit_end"]
+    for r in rows.values():
+        r["mail_count"] = len(r["msg_ids"])
+    return list(rows.values())
+
+
+# ── Main ──────────────────────────────────────────
 
 def run(since, dry_run):
     gmail = build("gmail", "v1", credentials=get_gmail_creds(),
@@ -319,22 +365,24 @@ def run(since, dry_run):
     stubs = fetch_messages(gmail, query)
     log.info("검색 %d통", len(stubs))
 
-    rows, skipped = [], {}
+    mails, skipped = [], {}
     for stub in stubs:
         time.sleep(0.15)
-        row, why = parse(gmail, stub)
-        if row:
-            rows.append(row)
+        m, why = parse(gmail, stub)
+        if m:
+            mails.append(m)
         else:
             skipped[why] = skipped.get(why, 0) + 1
-    log.info("대상 %d통, 제외 %s", len(rows), skipped)
+    log.info("대상 %d통, 제외 %s", len(mails), skipped)
 
     if dry_run:
+        rows = group(mails, {})
+        log.info("묶음 %d건", len(rows))
         for r in sorted(rows, key=lambda x: x["mail_at"]):
-            log.info("%s %s %-4s %-6s %s~%s | %s", r["mail_at"][:10],
+            log.info("%s %s %-4s %-6s %s~%s x%d | %s", r["mail_at"][:10],
                      r["ship_code"], r["system"], r["work_type"],
                      r["visit_start"] or "", r["visit_end"] or "",
-                     r["summary"][:70])
+                     r["mail_count"], r["summary"][:70])
         return
 
     from supabase import create_client
@@ -344,11 +392,12 @@ def run(since, dry_run):
                .select("id,ship_code,system,date,completed_at")
                .in_("system", ["BWTS", "EGCS"]).execute().data or [])
     existing = {}
-    ids = [r["id"] for r in rows]
-    for i in range(0, len(ids), UPSERT_CHUNK):
-        got = (db.table("service_reports").select("id,edited,repair_id")
-               .in_("id", ids[i:i + UPSERT_CHUNK]).execute().data or [])
+    gids = sorted({m["thread_id"] + ":" + m["ship_code"] for m in mails})
+    for i in range(0, len(gids), UPSERT_CHUNK):
+        got = (db.table("service_reports").select("*")
+               .in_("id", gids[i:i + UPSERT_CHUNK]).execute().data or [])
         existing.update({g["id"]: g for g in got})
+    rows = group(mails, existing)
 
     full, mail_only = [], []
     for r in rows:

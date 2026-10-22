@@ -1,4 +1,5 @@
--- 035: 메이커 서비스 리포트 대장 — 메일 1통 = 1행
+-- 035: 메이커 서비스 리포트 대장 — (메일 스레드, 선박) 1건 = 1행
+--   같은 스레드의 재첨부·인보이스·정산 메일은 한 행으로 묶인다 (mail_count).
 --
 -- 채우는 쪽: scripts/sr_import.py (Actions sr-import.yml, 매일 07:00 KST).
 --   Gmail Auto Manager GAS 가 첨부를 Drive 에 저장한 메일과 같은 조건
@@ -7,27 +8,31 @@
 -- 보는 쪽: 웹 📑 서비스 리포트 탭. Drive 폴더는 drive_folders 와
 --   (ship_code, system, folder_date = mail_at 의 KST 날짜) 로 이어 붙인다.
 --
--- 편집 규칙: 사람이 고친 칸(visit_start/visit_end/work_type/summary/repair_id)은
+-- 편집 규칙: 사람이 고친 칸(visit_start/visit_end/work_type/summary/repair_id/excluded)은
 --   edited=true 가 되고, 가져오기는 그 행의 이 칸들을 다시 덮지 않는다.
 --
 -- 재실행 가능. Run in Supabase SQL Editor.
 
 CREATE TABLE IF NOT EXISTS service_reports (
-  id          TEXT PRIMARY KEY,           -- Gmail message id
+  id          TEXT PRIMARY KEY,           -- '<Gmail thread id>:<ship_code>'
   thread_id   TEXT DEFAULT '',
+  msg_ids     JSONB DEFAULT '[]',         -- 묶인 메일 id (오래된 순)
+  mail_count  INTEGER DEFAULT 1,
   ship_code   TEXT NOT NULL,
   system      TEXT NOT NULL,              -- BWTS | EGCS
   vendor      TEXT DEFAULT '',            -- 발신 도메인 (lastech.kr …)
   sender      TEXT DEFAULT '',
-  mail_at     TIMESTAMPTZ NOT NULL,
+  mail_at     TIMESTAMPTZ NOT NULL,       -- 첫 리포트 메일
+  last_mail_at TIMESTAMPTZ,              -- 마지막 메일
   subject     TEXT DEFAULT '',
-  body        TEXT DEFAULT '',            -- 인용 전 본문, 3000자
-  attachments JSONB DEFAULT '[]',         -- [{name, size}]
+  body        TEXT DEFAULT '',            -- 첫 메일 인용 전 본문, 3000자
+  attachments JSONB DEFAULT '[]',         -- [{name, size}] 전 메일 합집합
   visit_start DATE,                       -- 방선·작업 시작 (본문 추출 또는 수기)
   visit_end   DATE,                       -- 방선·작업 종료
   work_type   TEXT DEFAULT '',            -- 검교정 | 정기점검 | 수리 | 개조·설치 | 기타
   summary     TEXT DEFAULT '',
   repair_id   TEXT REFERENCES repairs(id) ON DELETE SET NULL,
+  excluded    BOOLEAN NOT NULL DEFAULT false,  -- 서비스 리포트 아님 (웹에서 숨김)
   edited      BOOLEAN NOT NULL DEFAULT false,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
