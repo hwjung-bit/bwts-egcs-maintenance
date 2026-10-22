@@ -22,6 +22,7 @@ export const TABS = [
   { id: 'work',    label: '📋 업무' },
   // 📧 메일대장 탭은 2026-09-18 제거 — 수리이력 자동 생성 경로가 아니었고 소비자가 없었다.
   { id: 'repairs', label: '🔧 EGCS·BWTS 이력' },
+  { id: 'reports', label: '📑 서비스 리포트' },
   { id: 'status',  label: '📊 EGCS·BWTS 현황' },
   { id: 'bwtsLog', label: '🧪 BWTS 로그' },
   { id: 'bsr',     label: '⛽ BSR' },
