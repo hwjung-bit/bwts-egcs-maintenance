@@ -348,6 +348,21 @@ function openAdd() {
   $('workAdd').classList.add('open'); $('waTitle').focus();
 }
 function closeAdd() { $('workAdd').classList.remove('open'); }
+
+// "KDE, KMN" / "KDE/KMN" / "KDE KMN" → 선박별 1건씩. 미등록 코드는 bad 로 돌려준다.
+function splitShips(raw) {
+  const codes = [], bad = [];
+  String(raw || '').split(/[\s,/·、+&]+/).filter(Boolean).forEach(p => {
+    const c = normalizeShipCode(p);
+    if (!c) bad.push(p.toUpperCase());
+    else if (!codes.includes(c)) codes.push(c);
+  });
+  return { codes, bad };
+}
+function perShip(row, codes) {
+  if (codes.length <= 1) return [{ ...row, ship_code: codes[0] || null }];
+  return codes.map(c => ({ ...row, id: newId('WK_'), ship_code: c }));
+}
 async function saveAdd() {
   const title = $('waTitle').value.trim();
   if (!title) { toast('제목을 입력하세요'); $('waTitle').focus(); return; }
@@ -358,11 +373,14 @@ async function saveAdd() {
     requester: '', due_date: $('waDue').value || null, status, progress: status === '완료' ? 100 : 0,
     urgency: $('waUrg').value, origin: '업무', note: '' };
   if (REPAIR_SYS[sys]) { r.stage = STAGE_OF[status] || '미확인'; r.symptom = title; r.equip = r.category; }
+  const sh = splitShips($('waShip').value);
+  if (sh.bad.length) { toast('등록 안 된 선박코드: ' + sh.bad.join(', ')); $('waShip').focus(); return; }
+  const rows = perShip(r, sh.codes);
   const btn = $('waSave'); btn.disabled = true;
-  const ok = await dbSave(sb.from('repairs').insert(r), '업무 등록됨');
+  const ok = await dbSave(sb.from('repairs').insert(rows), rows.length > 1 ? `업무 ${rows.length}건 등록됨` : '업무 등록됨');
   btn.disabled = false;
   if (!ok) return;
-  if (REPAIR_SYS[sys]) { try { await requestDriveFolder(r); } catch (e) { console.warn('folder request', e); } }
+  for (const x of rows) { if (REPAIR_SYS[sys]) { try { await requestDriveFolder(x); } catch (e) { console.warn('folder request', e); } } }
   closeAdd();
   await loadData();
 }
@@ -610,6 +628,9 @@ async function applyBulk() {
   const n = counts();
   if (!n.neu && !n.upd) { toast('등록할 항목이 없습니다'); return; }
   if (n.unpicked) { toast(`"기존에 추가" ${n.unpicked}줄에 대상 업무를 고르세요`); return; }
+  const badShips = [];
+  BULK.forEach(it => { if (it.action === 'new' && it.title) badShips.push(...splitShips(it.ship).bad); });
+  if (badShips.length) { toast('등록 안 된 선박코드: ' + [...new Set(badShips)].join(', ')); return; }
   const btn = $('wbApply');
   if (!ARMED) { ARMED = true; btn.classList.add('armed'); btn.textContent = `신규 ${n.neu} · 추가 ${n.upd} 등록? (다시 클릭)`;
     setTimeout(() => { ARMED = false; btn.classList.remove('armed'); btn.textContent = `일괄 등록 (신규 ${n.neu} · 추가 ${n.upd})`; }, 6000); return; }
@@ -639,7 +660,7 @@ async function applyBulk() {
       status, progress: it.progress === '' ? (status === '완료' ? 100 : 0) : Number(it.progress),
       urgency: it.urgency || '', origin: '업무', note: '' };
     if (REPAIR_SYS[r.system]) { r.stage = STAGE_OF[status] || '미확인'; r.symptom = r.title; r.equip = r.category; }
-    newRows.push(r);
+    newRows.push(...perShip(r, splitShips(it.ship).codes));
   });
   try {
     if (newRows.length) { const res = await sb.from('repairs').insert(newRows); if (res.error) throw res.error; }
