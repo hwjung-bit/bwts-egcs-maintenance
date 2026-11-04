@@ -5,6 +5,11 @@
 // 이 탭은 그걸 iframe 으로 띄울 뿐 — Supabase 데이터 로드 없음.
 // Pages 는 max-age=600 이라 열 때마다 ?t= 를 붙여 항상 최신본을 받는다.
 import { $, toast } from '../core/dom.js';
+import { sb } from '../core/supabase.js';
+
+// The iframe (same origin) borrows this client + login session to read and
+// write its alert action notes (sql/036 bsr_notes).
+window.__bsrSb = sb;
 
 const URL = 'archive/bsr/index.html';
 
