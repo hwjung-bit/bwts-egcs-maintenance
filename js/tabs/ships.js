@@ -40,13 +40,13 @@ function refresh() {
     return '<tr>' +
       `<td style="text-align:center;color:#94a3b8;font-size:11px">${idx + 1}</td>` +
       `<td title="코드는 기본키 — mail_log·repairs·calibrations 가 참조하므로 수정 불가"><b>${c}</b></td>` +
-      cell('name') + cell('teu') + cell('bwts_maker') + cell('egcs_maker') + cell('wms') + cell('cems') + cell('wms_note', true) +
+      cell('name') + cell('teu') + cell('bwts_maker') + cell('bwts_as') + cell('egcs_maker') + cell('wms') + cell('cems') + cell('wms_note', true) +
       `<td style="text-align:center"><button onclick="shipsTab.toggleHidden('${c}')" style="background:none;border:none;cursor:pointer;font-size:14px" title="${s.hidden ? '복원' : '숨김'}">${s.hidden ? '👁️' : '🙈'}</button></td></tr>`;
   }).join('');
   $('shipsRoot').innerHTML = head('<span style="font-size:12px;color:#64748b">셀 클릭 수정</span>') + tabs +
     // width:auto + table-layout:fixed — 헤더 폭을 그대로 쓰고 창이 넓어도 늘어나지 않는다
     '<table style="width:auto;table-layout:fixed"><thead><tr><th style="width:40px">#</th><th style="width:50px">코드</th><th style="width:160px">선명</th><th style="width:60px">TEU</th>' +
-    '<th style="width:90px">BWTS</th><th style="width:90px">EGCS</th><th style="width:70px">WMS</th><th style="width:80px">CEMS</th><th style="width:560px">리마크</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
+    '<th style="width:90px">BWTS</th><th style="width:90px">BWTS A/S</th><th style="width:90px">EGCS</th><th style="width:70px">WMS</th><th style="width:80px">CEMS</th><th style="width:560px">리마크</th><th style="width:40px"></th></tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
 function sub(id) { SUB = id; refresh(); }

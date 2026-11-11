@@ -162,12 +162,13 @@ function refresh() {
   const enriched = S.BWTS_CAL.map(c => {
     const s = shipByCode(c.ship_code);
     const due = bwtsDue(c);
-    return { c, maker: s ? (s.bwts_maker || '') : '', days: due ? daysUntil(due) : 9999, shipIdx: order.indexOf(c.ship_code) };
+    return { c, maker: s ? (s.bwts_maker || '') : '', as: s ? (s.bwts_as || '') : '', days: due ? daysUntil(due) : 9999, shipIdx: order.indexOf(c.ship_code) };
   });
   enriched.sort((a, b) => {
     let v = 0;
     if (SORT.key === 'ship') v = (a.shipIdx < 0 ? 99 : a.shipIdx) - (b.shipIdx < 0 ? 99 : b.shipIdx);
     else if (SORT.key === 'maker') v = a.maker.localeCompare(b.maker);
+    else if (SORT.key === 'as') v = (a.as || '￿').localeCompare(b.as || '￿') || a.days - b.days;
     else v = a.days - b.days;
     return v * SORT.dir;
   });
@@ -181,10 +182,12 @@ function refresh() {
     const s = shipByCode(c.ship_code);
     const shipName = s ? (s.name || '') : '';
     const makerTxt = s ? (s.bwts_maker || '') : '';
+    const asTxt = s ? (s.bwts_as || '') : '';
     return '<tr>' +
       `<td style="text-align:center"><input type="checkbox" ${PICK.has(c.ship_code) ? 'checked' : ''} onchange="bwtsCalTab.pick('${esc(c.ship_code)}',this.checked)"></td>` +
       `<td><b>${esc(c.ship_code)}</b>${shipName ? `<div style="font-size:10px;color:#94a3b8">${esc(shipName)}</div>` : ''}</td>` +
       `<td style="font-size:11px;color:#64748b">${esc(makerTxt)}</td>` +
+      `<td style="font-size:11px;white-space:nowrap" title="선박관리 탭에서 수정">${esc(asTxt)}</td>` +
       `<td class="edit-cell" onclick="bwtsCalTab.editDate('${eid}',this)" title="클릭하여 수정" style="cursor:pointer;font-weight:600">${esc(c.last_date || '—')}</td>` +
       `<td>${fmtDate(due)}</td>` +
       `<td style="padding:4px 10px"><span class="pill lv-${lv}" style="margin-right:6px">${label}</span>` +
@@ -209,6 +212,7 @@ function refresh() {
       '<th style="width:34px;text-align:center"><input type="checkbox" title="전체 선택/해제" onchange="bwtsCalTab.pickAll(this.checked)"></th>' +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('ship')">선박${arrow('ship')}</th>` +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('maker')">메이커${arrow('maker')}</th>` +
+      `<th style="cursor:pointer" onclick="bwtsCalTab.sort('as')">A/S 담당${arrow('as')}</th>` +
       '<th>최근 검교정</th><th>다음 만료</th>' +
       `<th style="cursor:pointer" onclick="bwtsCalTab.sort('status')">상태${arrow('status')}</th>` +
       '<th>CERT · SERVICE REPORT</th><th>비고</th>' +
