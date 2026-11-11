@@ -853,11 +853,14 @@ function syncCalRecord_(req, fileUrl) {
   // last_date — the cert is what dates a calibration.
   if (!isCert && req.target !== 'bwts_cal_report') return;
   var q = 'calibrations?system=eq.BWTS&ship_code=eq.' + encodeURIComponent(req.ship_code);
-  var rows = supaGet_(q + '&select=id,last_date');
+  var rows = supaGet_(q + '&select=id,last_date,cert_url');
   if (!rows.length) return;
   var cur = rows[0].last_date || '';
   var nd = String(req.req_date || '').slice(0, 10);
-  if (cur && nd < cur) return;               // older file — leave the ledger alone
+  // A row with no CERT yet holds a placeholder date (newbuild = delivery day),
+  // so its first CERT lands even when older (KDH 2026-11-11: 09-22 cert vs 10-21).
+  var firstCert = isCert && !rows[0].cert_url;
+  if (cur && nd < cur && !firstCert) return; // older file — leave the ledger alone
   supaPatch_('calibrations?id=eq.' + encodeURIComponent(rows[0].id),
              isCert ? { last_date: nd, cert_url: fileUrl } : { report_url: fileUrl });
 }
