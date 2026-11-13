@@ -134,7 +134,7 @@ async function openTask(id, ev) {
 function stColor(st) {
   if (st === '정상') return 'background:#d1fae5;color:#065f46';
   if (st === '운용가능') return 'background:#fff7ed;color:#c2410c';
-  if (st === '문제') return 'background:#fce7f3;color:#be185d';
+  if (st === '문제') return 'background:#dc2626;color:#fff';   // 운전 불가 — 진하게
   return 'background:#f8fafc;color:#cbd5e1';
 }
 
@@ -146,7 +146,7 @@ function stCell(code, field, val, memo, disabled) {
   return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden;cursor:pointer" onclick="statusTab.editCell('${esc(code)}','${sys}',event)" title="클릭 → 상태·메모 수정">` +
     '<div style="display:flex;align-items:center;gap:4px">' +
     `<span style="font-size:11px;font-weight:700;flex-shrink:0">${esc(val)}</span>` +
-    `<span style="font-size:10px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${esc(memo || '')}">${esc(memo || '')}</span>` +
+    `<span style="font-size:10px;color:${val === '문제' ? '#fee2e2' : '#64748b'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${esc(memo || '')}">${esc(memo || '')}</span>` +
     histBtn + '</div>' + taskLines(code, sys) + '</td>';
 }
 
