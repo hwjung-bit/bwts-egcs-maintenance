@@ -54,16 +54,20 @@ function table(title, rows) {
     `<th ${th}>다음 만료</th><th ${th}>상태</th></tr>${body}</table>`;
 }
 
+function build() {
+  const today = ymd(new Date());
+  return `<div style="font-family:'Malgun Gothic',sans-serif">` +
+    `<div style="font-size:13px">환경기술파트 관리대장 기준 검교정 만료·임박 현황 (${today})</div>` +
+    table('BWTS 검교정', bwtsRows()) + table('EGCS WMS 검교정 · 센서 신환', egcsRows()) +
+    `<div style="margin-top:14px;font-size:11px;color:#64748b">관리대장: https://hwjung-bit.github.io/bwts-egcs-maintenance/</div></div>`;
+}
+
 function draft(ev) {
   ev.preventDefault();
   ev.stopPropagation();
   let html;
   try {
-    const today = ymd(new Date());
-    html = `<div style="font-family:'Malgun Gothic',sans-serif">` +
-      `<div style="font-size:13px">환경기술파트 관리대장 기준 검교정 만료·임박 현황 (${today})</div>` +
-      table('BWTS 검교정', bwtsRows()) + table('EGCS WMS 검교정 · 센서 신환', egcsRows()) +
-      `<div style="margin-top:14px;font-size:11px;color:#64748b">관리대장: https://hwjung-bit.github.io/bwts-egcs-maintenance/</div></div>`;
+    html = build();
   } catch (e) {
     toast('리포트 만들기 실패: ' + (e.message || e));
     return;
@@ -77,4 +81,4 @@ export function calMailLink(style) {
     `style="${style || 'text-decoration:none;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:5px 12px;font-size:12px;font-weight:600;color:#1d4ed8'}">✉ 리포트 메일</a>`;
 }
 
-window.calMail = { draft };
+window.calMail = { draft, build };
