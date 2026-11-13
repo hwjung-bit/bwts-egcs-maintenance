@@ -18,7 +18,9 @@ export const ORIGIN_LIST = ['카톡', '전화', '구두', '방선', '파일', '�
 export const ORIGIN_ICON = { '카톡': '💬', '전화': '☎', '구두': '🗣', '방선': '🚢', '파일': '📥', '기타': '📝' };
 
 /* 현황 탭 */
-export const STATUS_OPTS = ['-', '정상', '수리중', '문제'];
+// 2026-11-13: 운용가능(문제 있으나 운전됨) / 문제(운전 불가) 로 구분. 옛 값 '수리중' 은 운용가능으로 표시.
+export const STATUS_OPTS = ['-', '정상', '운용가능', '문제'];
+export const stNorm = v => (v === '수리중' ? '운용가능' : v);
 
 export const YEARS = ['2026', '2025', '2024', '2023'];
 export const MAIL_CATEGORIES = ['수리요청', '견적', '검교정', 'SR', '부품', 'Invoice', '방선', '인증서'];

@@ -3,7 +3,7 @@
 import { S } from '../core/state.js';
 import { sb, dbSave } from '../core/supabase.js';
 import { $, esc, toast, placePopup } from '../core/dom.js';
-import { STATUS_OPTS } from '../shared/constants.js';
+import { STATUS_OPTS, stNorm } from '../shared/constants.js';
 import { getShipOrder } from '../shared/ships.js';
 import { calSummaryHtml } from '../shared/calSummary.js';
 import { go } from '../core/router.js';
@@ -77,7 +77,7 @@ async function history(code, sys, ev) {
   box.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin:4px 0 10px">' +
       `<h3 style="margin:0;font-size:14px">🕘 ${esc(code)} · ${esc(sys.toUpperCase())} 이력</h3>` +
-      '<span style="font-size:11px;color:#94a3b8">✅ 클리어 = 수리중·문제 → 정상 전환일 · 5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
+      '<span style="font-size:11px;color:#94a3b8">✅ 클리어 = 운용가능·문제 → 정상 전환일 · 5분 내 재수정은 한 건으로 합쳐짐 · 한국시간</span>' +
       '<div style="flex:1"></div><button onclick="statusTab.hideHist()">✕ 닫기</button></div>' +
     (rows
       ? `<table class="cal-table" style="width:100%;font-size:13px"><thead><tr><th style="width:150px">저장일시</th><th style="width:110px">상태</th><th>메모</th><th style="width:34px"></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -133,7 +133,7 @@ async function openTask(id, ev) {
 
 function stColor(st) {
   if (st === '정상') return 'background:#d1fae5;color:#065f46';
-  if (st === '수리중') return 'background:#fff7ed;color:#c2410c';
+  if (st === '운용가능') return 'background:#fff7ed;color:#c2410c';
   if (st === '문제') return 'background:#fce7f3;color:#be185d';
   return 'background:#f8fafc;color:#cbd5e1';
 }
@@ -142,6 +142,7 @@ function stCell(code, field, val, memo, disabled) {
   if (disabled) return '<td style="padding:4px 6px;background:#f8fafc;color:#cbd5e1;text-align:center;font-size:11px">—</td>';
   const sys = field.replace('_status', '');
   const histBtn = `<span onclick="statusTab.history('${esc(code)}','${sys}',event)" title="이전 이력 보기" style="cursor:pointer;font-size:10px;flex-shrink:0;opacity:.55">🕘</span>`;
+  val = stNorm(val);
   return `<td style="padding:2px 4px;${stColor(val)};overflow:hidden;cursor:pointer" onclick="statusTab.editCell('${esc(code)}','${sys}',event)" title="클릭 → 상태·메모 수정">` +
     '<div style="display:flex;align-items:center;gap:4px">' +
     `<span style="font-size:11px;font-weight:700;flex-shrink:0">${esc(val)}</span>` +
@@ -164,11 +165,14 @@ function refresh() {
     const ia = order.indexOf(a.code), ib = order.indexOf(b.code);
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
   });
+  // EGCS 기타(ETC) 칸 — sql/040 실행 전에는 컬럼이 없으니 숨김
+  const hasEtc = ships.some(s => 'egcs_etc_status' in s);
   let okCnt = 0, repairCnt = 0, issueCnt = 0;
   ships.forEach(s => {
-    const fields = [s.bwts_status, s.egcs_wms_status, s.egcs_cems_status, s.egcs_body_status].filter(f => f && f !== '-');
+    const fields = [s.bwts_status, s.egcs_wms_status, s.egcs_cems_status, s.egcs_body_status, s.egcs_etc_status]
+      .filter(f => f && f !== '-').map(stNorm);
     if (fields.some(f => f === '문제')) issueCnt++;
-    else if (fields.some(f => f === '수리중')) repairCnt++;
+    else if (fields.some(f => f === '운용가능')) repairCnt++;
     else okCnt++;
   });
   const rows = ships.map(s => {
@@ -179,6 +183,7 @@ function refresh() {
       stCell(s.code, 'egcs_wms_status', s.egcs_wms_status || '정상', s.egcs_wms_memo, !hasEgcs) +
       stCell(s.code, 'egcs_cems_status', s.egcs_cems_status || '정상', s.egcs_cems_memo, !hasEgcs) +
       stCell(s.code, 'egcs_body_status', s.egcs_body_status || '정상', s.egcs_body_memo, !hasEgcs) +
+      (hasEtc ? stCell(s.code, 'egcs_etc_status', s.egcs_etc_status || '정상', s.egcs_etc_memo, !hasEgcs) : '') +
       '</tr>';
   }).join('');
   $('statusRoot').innerHTML =
@@ -186,13 +191,16 @@ function refresh() {
     '<div class="stats" style="padding:0;margin-bottom:16px">' +
       `<div class="card"><div class="num">${ships.length}</div><div class="label">전체</div></div>` +
       `<div class="card green"><div class="num">${okCnt}</div><div class="label">정상</div></div>` +
-      `<div class="card amber"><div class="num">${repairCnt}</div><div class="label">수리중</div></div>` +
-      `<div class="card rose"><div class="num">${issueCnt}</div><div class="label">문제</div></div>` +
+      `<div class="card amber"><div class="num">${repairCnt}</div><div class="label">운용가능</div></div>` +
+      `<div class="card rose"><div class="num">${issueCnt}</div><div class="label">문제(운전 불가)</div></div>` +
     '</div></div>' +
     calSummaryHtml() +
     '<table style="table-layout:fixed;width:100%"><thead><tr>' +
-      '<th style="width:36px">코드</th><th style="width:24%">BWTS</th><th style="width:24%">EGCS WMS</th>' +
-      '<th style="width:24%">EGCS CEMS</th><th style="width:24%">EGCS BODY</th>' +
+      (hasEtc
+        ? '<th style="width:36px">코드</th><th style="width:20%">BWTS</th><th style="width:19%">EGCS WMS</th>' +
+          '<th style="width:19%">EGCS CEMS</th><th style="width:19%">EGCS BODY</th><th style="width:19%" title="WMS·CEMS·BODY 외 — 펌프·VFD·배관 등">EGCS ETC</th>'
+        : '<th style="width:36px">코드</th><th style="width:24%">BWTS</th><th style="width:24%">EGCS WMS</th>' +
+          '<th style="width:24%">EGCS CEMS</th><th style="width:24%">EGCS BODY</th>') +
     '</tr></thead><tbody>' + rows + '</tbody></table>';
 }
 
@@ -201,7 +209,7 @@ function editCell(code, sys, ev) {
   ev.stopPropagation();
   const s = S.SHIPS.find(x => x.code === code);
   if (!s) return;
-  const cur = s[sys + '_status'] || '정상';
+  const cur = stNorm(s[sys + '_status'] || '정상');
   const pop = $('calEdit');
   const opts = STATUS_OPTS.map(o => `<option value="${o}"${cur === o ? ' selected' : ''}>${o}</option>`).join('') +
     '<option value="수리완료">✅ 수리완료 (클리어)</option>';
@@ -209,7 +217,7 @@ function editCell(code, sys, ev) {
     `<div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#1e293b">${esc(code)} · ${esc(sys.toUpperCase())}</div>` +
     `<label>상태<select id="scStatus">${opts}</select></label>` +
     `<label>메모<input id="scMemo" value="${esc(s[sys + '_memo'] || '')}" placeholder="현상/조치 내용"></label>` +
-    '<div style="font-size:10px;color:#94a3b8;margin-top:4px">상태·메모 동시 저장, 이력 1건 · 수리완료 = 이력에 남기고 정상 복귀</div>' +
+    '<div style="font-size:10px;color:#94a3b8;margin-top:4px">운용가능 = 문제 있으나 운전됨 · 문제 = 운전 불가(가동률에서 빠짐)<br>상태·메모 동시 저장, 이력 1건 · 수리완료 = 이력에 남기고 정상 복귀</div>' +
     '<div style="display:flex;gap:6px;margin-top:10px">' +
       `<button class="pri" onclick="statusTab.saveCell('${esc(code)}','${esc(sys)}')">저장</button>` +
       '<button onclick="statusTab.closeHistory()">취소</button></div>';

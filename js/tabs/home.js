@@ -8,7 +8,7 @@ import { sb } from '../core/supabase.js';
 import { S } from '../core/state.js';
 import { $, esc } from '../core/dom.js';
 import { go } from '../core/router.js';
-import { STATUS_LIST } from '../shared/constants.js';
+import { STATUS_LIST, stNorm } from '../shared/constants.js';
 import { panelHtml, calPanelsHtml } from '../shared/calSummary.js';
 import { GRADES } from './bwtsLog.js';
 
@@ -82,19 +82,19 @@ function repairPanel() {
   });
 }
 
-/* 현황 탭의 선박별 상태 — 같은 규칙(문제 > 수리중 > 정상), 칩은 정상이 아닌 배 */
-const SYS = { bwts: 'BWTS', egcs_wms: 'WMS', egcs_cems: 'CEMS', egcs_body: 'BODY' };
-const ST_COLOR = { '정상': '#16a34a', '수리중': '#d97706', '문제': '#e11d48' };
+/* 현황 탭의 선박별 상태 — 같은 규칙(문제 > 운용가능 > 정상), 칩은 정상이 아닌 배 */
+const SYS = { bwts: 'BWTS', egcs_wms: 'WMS', egcs_cems: 'CEMS', egcs_body: 'BODY', egcs_etc: 'ETC' };
+const ST_COLOR = { '정상': '#16a34a', '운용가능': '#d97706', '문제': '#e11d48' };
 function statusPanel() {
   const ships = S.SHIPS.filter(s => !s.hidden);
-  const cnt = { '정상': 0, '수리중': 0, '문제': 0 };
+  const cnt = { '정상': 0, '운용가능': 0, '문제': 0 };
   const chips = [];
   ships.forEach(s => {
-    const by = { '문제': [], '수리중': [] };
-    Object.keys(SYS).forEach(f => { const v = s[f + '_status']; if (by[v]) by[v].push(SYS[f]); });
-    const worst = by['문제'].length ? '문제' : (by['수리중'].length ? '수리중' : '정상');
+    const by = { '문제': [], '운용가능': [] };
+    Object.keys(SYS).forEach(f => { const v = stNorm(s[f + '_status']); if (by[v]) by[v].push(SYS[f]); });
+    const worst = by['문제'].length ? '문제' : (by['운용가능'].length ? '운용가능' : '정상');
     cnt[worst]++;
-    ['문제', '수리중'].forEach(st => {
+    ['문제', '운용가능'].forEach(st => {
       if (by[st].length) chips.push({
         text: `${s.code} ${by[st].join('·')}`, color: ST_COLOR[st],
         title: st + ' — ' + by[st].map(sys => (s[Object.keys(SYS).find(f => SYS[f] === sys) + '_memo'] || '').trim()).filter(Boolean).join(' / '),
@@ -103,9 +103,9 @@ function statusPanel() {
   });
   return panelHtml({
     title: '장비 현황', unit: `${ships.length}척`, tab: 'status',
-    big: `${cnt['정상']}/${ships.length}`, bigLabel: '정상', bigCls: cnt['문제'] ? 'rose' : (cnt['수리중'] ? 'amber' : 'green'),
-    bigTitle: '선박 기준 — 문제 > 수리중 > 정상',
-    segs: ['정상', '수리중', '문제'].map(st => ({ n: cnt[st], label: st, color: ST_COLOR[st] })),
+    big: `${cnt['정상']}/${ships.length}`, bigLabel: '정상', bigCls: cnt['문제'] ? 'rose' : (cnt['운용가능'] ? 'amber' : 'green'),
+    bigTitle: '선박 기준 — 문제(운전 불가) > 운용가능 > 정상',
+    segs: ['정상', '운용가능', '문제'].map(st => ({ n: cnt[st], label: st, color: ST_COLOR[st] })),
     chips, chipsEmpty: '전 선박 정상',
   });
 }
@@ -146,8 +146,8 @@ function render(k, log) {
     ${card(k.bwts_target, 'BWTS 대상', 'blue', "homeTab.go('ships')")}
     ${card(k.egcs_target, 'EGCS 대상', 'green', "homeTab.go('ships')")}
     ${card(k.status_ok, '정상', 'green', "homeTab.go('status')")}
-    ${card(k.status_repairing, '수리중', 'amber', "homeTab.go('status')")}
-    ${card(k.status_issue, '문제(보류)', 'rose', "homeTab.go('status')")}
+    ${card(k.status_repairing, '운용가능', 'amber', "homeTab.go('status')")}
+    ${card(k.status_issue, '문제(운전 불가)', 'rose', "homeTab.go('status')")}
     ${card(k.repairs_open, '진행 중 수리', 'purple', "homeTab.go('repairs')")}
     ${card(k.bwts_log_review_pending, '로그 재검토 대기', 'teal', 'homeTab.goLog()')}
   </div>

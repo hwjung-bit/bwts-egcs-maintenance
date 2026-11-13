@@ -303,3 +303,25 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   이제 `export_contract.py` 가 Supabase 기준으로 같은 모양으로 씀. **작업 스케줄러 "BWTS_EGCS_ExportContract"** (매일 07:30,
   `pipelines\bwts_log\export_contract_daily.bat`) 로 갱신. 로그 `pipelines\bwts_log\out\export_contract_daily.log`.
 - 옛 로컬 폴더는 `D:\CLAUDE CODE\_보관(완료)\BWTS_EGCS_구버전_20260901\`.
+
+## 2026-10-02 BWTS/EGCS 매뉴얼 지식 API (sql/033, pipelines/kb_manual)
+- `sql/033_kb_manual.sql` SQL Editor 실행 완료 (재실행 가능). 테이블 kb_* 4개 + RPC `kb_search`/`kb_read`/`kb_vessel`.
+- 적재: `pipelines/kb_manual/export_kb.py` (service_role env 필요, PowerShell 로 registry User 값 로드). 14,996페이지·장비 33건.
+  매뉴얼 추가·볼트 40_장비 수정 후 다시 실행하면 업서트 + 사라진 페이지 삭제.
+- 검색 품질 확인: `check_search.py` (로컬, 같은 점수 규칙).
+- 클라이언트 키: `export_kb.py --new-client <이름>` → 키는 1회만 표시. 자재파트 키는
+  `C:\Users\user\.claude\data\kb_api_key_자재파트.txt`. 폐기는 `kb_clients.active=false`.
+- 연동 문서: `docs/KB_API.md` (자재파트 전달용).
+
+## 2026-11-12 work_tasks 잠금 + 공무팀 Dash env-contract-2 (sql/038·039)
+- **038 (보안)**: `work_tasks` 뷰(027, `SELECT * FROM repairs`)가 REVOKE/GRANT·security_invoker 없이 만들어져
+  anon 키로 repairs 전 행이 읽혔음 → `REVOKE ALL FROM anon, public` + `security_invoker=on`. 사용처 0.
+  검증: anon REST `work_tasks` 401 (전 200). SQL Editor 실행 완료.
+- **039 (Dash v2)**: `v_env2_ships / cal_bwts / cal_egcs / bwts_log / repairs` + 함수 `app_js_add_months`
+  (JS setMonth 넘침 재현)·`app_today_kst`·`app_history_array`. 검교정 판정은 웹 탭과 동일
+  (EGCS 센서당 1행·warn_days 183) — 파이썬 재계산 대조 BWTS 23·EGCS 69 불일치 0.
+  repairs.end_date = completed_at > history done > 연결 서비스리포트 방선일 (end_basis 로 근거 표시).
+  security_invoker on, anon 401 확인. env-contract-1 뷰(020/028/031)는 그대로 — Dash 전환 후 정리.
+- 일일 내보내기: `export_contract_daily.bat` 에 `run_env2_export.py` 연결 →
+  `D:\CLAUDE CODE\공무팀 대시보드 환경파트\export\export_env2.py` 가 G `환경\data\env2_*.json` 8개 생성
+  (뷰 5 + cii·reg·costs). 로그 `out\export_env2_daily.log`.
