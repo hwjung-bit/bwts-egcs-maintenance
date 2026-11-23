@@ -271,7 +271,10 @@ def main():
             print(f"[경고] 계약 JSON 내보내기 실패: {e}")
     try:   # follow-up tasks (점검필요 → 업무, PMS ECU cleaning) — secondary too
         import followup
-        followup.run()
+        if followup.FU.get("enabled"):
+            followup.run()
+        else:
+            print("후처리(followup) 꺼짐 — thresholds.json bwts_followup.enabled")
     except Exception as e:
         print(f"[경고] 후처리(followup) 실패: {e}")
     return 0

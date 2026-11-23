@@ -81,6 +81,7 @@
     "load_limit": 2000
   },
   "bwts_followup": {
+    "enabled": false,
     "start_period": "2026-10",
     "repeat_urgent_months": 2,
     "ecu_cycle_months": 1,
