@@ -1,8 +1,8 @@
 name: Weekly Calibration Alert
 
 on:
-  schedule:
-    - cron: '0 23 * * 0'  # Sunday 23:00 UTC = Monday 08:00 KST
+  # 2026-11-23: schedule off — merged into the PC weekly check report
+  # (D:/CLAUDE CODE/(활성) 주간 점검 보고, Gmail Auto Manager weeklyCheckReport).
   workflow_dispatch:       # Manual trigger
 
 jobs:
