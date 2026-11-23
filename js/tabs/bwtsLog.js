@@ -10,6 +10,7 @@ import { $, esc, toast } from '../core/dom.js';
 import { getShipOrder, shipByCode } from '../shared/ships.js';
 import { requireTH } from '../shared/thresholds.js';
 import { buildGuidance, sessionTableText } from '../shared/bwtsGuidance.js';
+import { go } from '../core/router.js';
 
 export const GRADES = ['운전양호', '점검필요', '수리후정상', '미운전', '미수신', '데이터불량', '판독실패'];
 const STYLE = {
@@ -35,6 +36,24 @@ let DETAIL = null;          // {ship_code, period, sessions, flags} — renderDe
 let loadedYear = null;
 
 const disp = r => r.final_grade || r.grade;
+
+/* ===== 후처리 업무 (pipelines/bwts_log/followup.py) =====
+   점검필요 → 업무 BL_<선박>_<월>, 그 뒤 달마다 조치이력 wa_BL_<선박>_<월>.
+   ECU chemical cleaning 주기 초과 → 업무 BE_. 스마트플랫폼 수기 접수 건도 같은 루프. */
+const FU_LOG = ['로그분석', '스마트플랫폼'];
+const FU_ALL = [...FU_LOG, 'PMS'];
+const fuActs = id => (S.ACTIONS || []).filter(a => a.task_id === id)
+  .sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))
+    || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+// 이 칸(선박·월)을 다룬 후처리 업무 — 생성 달이거나 그 달 로그가 조치이력으로 붙은 업무
+function fuTaskOfCell(code, period) {
+  const own = (S.TASKS || []).find(t => t.id === `BL_${code}_${period}`);
+  if (own) return own;
+  const a = (S.ACTIONS || []).find(x => x.id === `wa_BL_${code}_${period}`);
+  return a ? (S.TASKS || []).find(t => t.id === a.task_id) || null : null;
+}
+const fuOpen = code => (S.TASKS || []).filter(t => t.ship_code === code && t.system === 'BWTS'
+  && FU_ALL.includes(t.origin) && t.status !== '완료');
 // 채터링은 ⚙ 참고표시가 아니라 전용 밸브 아이콘으로 따로 그린다. 과거 행의
 // flags 에 남아 있는 옛 문구는 여기서 걸러 이중 표시를 막는다.
 const flagsOf = r => ((r.integrity && r.integrity.flags) || r.flags || [])
@@ -218,12 +237,57 @@ function renderMatrix() {
         ? ` <span title="밸브 채터링 ${ch.level} — ${esc(ch.valves.map(v => v.valve + ' ' + v.chatter_events + '회').join(', '))}">`
           + VALVE_SVG(ch.level === '심각' ? '#dc2626' : '#ea580c') + '</span>'
         : '';
+      const ft = fuTaskOfCell(code, r.period);
+      const fu = ft ? ` <span class="bl-mark" title="후처리 업무: ${esc(ft.title || ft.id)} — ${esc(ft.status)}">${ft.status === '완료' ? '☑' : '📋'}</span>` : '';
       return `<td class="bl-cell" style="background:${st.bg};color:${st.fg};${dim}${sel}" onclick="bwtsLogTab.select('${esc(r.ship_code)}','${esc(r.period)}')" title="${esc(code)} ${esc(r.period)} ${esc(g)}${r.grade !== g ? ' (자동: ' + esc(r.grade) + ')' : ''}">` +
-        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}${valve}</div><div class="bl-sub">${esc(sub)}</div></td>`;
+        `<div class="bl-g">${esc(g)}${mark ? ' <span class="bl-mark">' + mark + '</span>' : ''}${flag}${valve}${fu}</div><div class="bl-sub">${esc(sub)}</div></td>`;
     }).join('');
     return `<tr><td><b>${esc(code)}</b><div style="font-size:10px;color:#94a3b8">${esc(s ? (s.bwts_maker || '') : '')}</div></td>${tds}</tr>`;
   }).join('');
   $('blMatrix').innerHTML = `<div style="overflow-x:auto"><table class="bl-matrix"><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+/* ===== 후처리 섹션 (상세 패널) ===== */
+function followupHtml(r) {
+  const seen = new Set();
+  const list = [fuTaskOfCell(r.ship_code, r.period), ...fuOpen(r.ship_code)]
+    .filter(t => t && !seen.has(t.id) && seen.add(t.id));
+  const head = `<h4>후처리 <span class="muted" style="font-weight:400;font-size:11px">— 점검필요·ECU CLEANING 주기 초과는 업무로 자동 등록, 다음 달 로그 양호면 자동 완료</span></h4>`;
+  if (!list.length) return `<div class="bl-sec" style="margin-top:8px">${head}<div class="muted">이 선박 열린 후처리 업무 없음</div></div>`;
+  const card = t => {
+    const acts = fuActs(t.id).map(a => `<li><span class="muted">${esc(a.date || '')}</span> ${esc(a.note || '')}</li>`).join('')
+      || '<li class="muted">조치이력 없음</li>';
+    return `<div style="border-left:3px solid ${t.status === '완료' ? '#94a3b8' : '#ea580c'};padding:4px 8px;margin:6px 0">
+      <div><b>${esc(t.title || t.id)}</b> <span class="pill">${esc(t.status)}</span>${t.urgency ? ` <span class="urg-badge urg-${esc(t.urgency)}">🔥 ${esc(t.urgency)}</span>` : ''}
+      <span class="muted" style="font-size:11px">${esc(t.origin || '')} · 등록 ${esc(t.date || '')}${t.due_date ? ' · 기한 ' + esc(t.due_date) : ''}</span>
+      <button class="refresh-btn" style="margin-left:6px" onclick="bwtsLogTab.goTask('${esc(t.id)}')">업무 탭에서 보기</button></div>
+      <ul style="margin-top:4px">${acts}</ul></div>`;
+  };
+  return `<div class="bl-sec" style="margin-top:8px">${head}${list.map(card).join('')}</div>`;
+}
+
+function goTask(id) {
+  const t = (S.TASKS || []).find(x => x.id === id);
+  if (t) go('work', { q: `${t.ship_code || ''} ${t.title || ''}`.trim() });
+}
+
+// ✉ 본선 메일을 쓰면 열린 후처리 업무에 기록 + 대기→확인
+async function logMailAction(r) {
+  const t = fuOpen(r.ship_code).filter(x => FU_LOG.includes(x.origin))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))[0];
+  if (!t) return;
+  const today = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+  const note = `본선 점검 메일 작성 (${r.period} 로그 기준)`;
+  const rec = { id: 'wa_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    task_id: t.id, date: today, progress: null, note, author: (S.USER && S.USER.email) || '' };
+  const patch = { last_action: note, action: note };
+  if (t.status === '대기') patch.status = '확인';
+  const ok = await dbSave(sb.from('work_actions').insert(rec), '후처리 업무에 메일 기록');
+  if (!ok) return;
+  S.ACTIONS.unshift(rec);
+  const res = await sb.from('repairs').update(patch).eq('id', t.id);
+  if (!res.error) Object.assign(t, patch);
+  if (selected) renderDetail();
 }
 
 /* ===== detail ===== */
@@ -281,6 +345,7 @@ async function renderDetail() {
       <div>배출 max ${num(r.tro_d_max)} ppm ${r.tro_d_compliant === false ? '<span class="lv-expired pill">초과</span>' : r.tro_d_compliant ? '<span class="lv-ok pill">정상</span>' : ''}</div></div>
     ${flagsHtml}${integ}${review}
   </div>
+  ${followupHtml(r)}
   <div id="blSessions" class="bl-sec"><span class="spin"></span> 세션·재검토 이력 로딩...</div>`;
   // Heavy parts on demand: full summary (sessions) + review thread
   const [sum, rv] = await Promise.all([
@@ -742,6 +807,7 @@ function issueMail(lang) {
   }
   gmailCompose(vesselMail(r.ship_code),
     `[${r.ship_code}] BWTS 운전 상태 확인 및 점검 요청 (${r.period})`, body + '\n' + SIGN);
+  logMailAction(r);
 }
 
 /* ===== 미수신 로그 제출 요청 =====
@@ -972,7 +1038,7 @@ async function override() {
 
 window.bwtsLogTab = { select, close, filter, requestReview, override, reanalyze,
   chatterList, chatterSet, copyChatter, copyChatterMail, chatterMail, chatterMailMulti,
-  chatterMailSelected, chatterPick, issueMail, missingMail, missingPanel, recheck,
+  chatterMailSelected, chatterPick, issueMail, missingMail, missingPanel, recheck, goTask,
   _test: { setRows: (rows, years) => { ROWS = rows; YEARS = years; loadedYear = F.year; } } };
 
 export default { id: 'bwtsLog', mount, refresh, destroy: () => { selected = null; } };

@@ -79,5 +79,13 @@
   "mail": {
     "stale_days": 3,
     "load_limit": 2000
+  },
+  "bwts_followup": {
+    "start_period": "2026-10",
+    "repeat_urgent_months": 2,
+    "ecu_cycle_months": 1,
+    "pms_json_path": "D:/CLAUDE CODE/(활성) KINS PMS 이력 수집/pms_bwts_all.json",
+    "pms_max_age_days": 10,
+    "_doc": "로그 후처리(pipelines/bwts_log/followup.py). 점검필요→업무 BL_, ECU chemical cleaning 주기 초과→업무 BE_. bwts_log 밖에 둔 이유: bwts_log 를 바꾸면 분석 캐시 서명이 바뀌어 전체 재파싱"
   }
 }

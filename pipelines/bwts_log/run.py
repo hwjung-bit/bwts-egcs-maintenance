@@ -269,6 +269,11 @@ def main():
             export_contract.export_legacy_snapshot(sb, verbose=args.verbose)
         except Exception as e:   # export is secondary — never fail the publish
             print(f"[경고] 계약 JSON 내보내기 실패: {e}")
+    try:   # follow-up tasks (점검필요 → 업무, PMS ECU cleaning) — secondary too
+        import followup
+        followup.run()
+    except Exception as e:
+        print(f"[경고] 후처리(followup) 실패: {e}")
     return 0
 
 

@@ -98,7 +98,7 @@ function render() {
     if (F.status && t.status !== F.status) return false;
     if (F.hideDone && !F.status && !F.q && t.status === '완료') return false;
     if (F.q && !matchQuery(F.q, t.date, t.ship_code, t.system, t.category, t.title, t.detail,
-      t.last_action, t.next_action, t.note, t.source, t.status)) return false;
+      t.last_action, t.next_action, t.note, t.source, t.status, t.origin)) return false;
     return true;
   });
   filtered.sort((a, b) => {
@@ -321,6 +321,7 @@ function ensureAddModal() {
       <label>선박<input id="waShip" list="dlShips" placeholder="예: KMB (없으면 비움)" maxlength="3" style="text-transform:uppercase" autocomplete="off"></label>
       <label>시스템<input id="waSys" list="waSysList" placeholder="BWTS / Hi-NAS / CII …" autocomplete="off"><datalist id="waSysList">${opt(SYSTEMS)}</datalist></label>
       <label>구분<select id="waCat">${opt(CATEGORIES)}</select></label>
+      <label title="스마트플랫폼 = 테크로스 원격 알람으로 접수. BWTS 건은 다음 달 로그로 자동 추적(followup.py)">접수<select id="waOrigin">${opt(['업무', '스마트플랫폼'])}</select></label>
     </div>
     <label>제목<input id="waTitle" placeholder="예: KMB Hi-NAS autopilot 자재 발주"></label>
     <label>상세 / 지시내용<textarea id="waDetail" placeholder="선택"></textarea></label>
@@ -344,7 +345,7 @@ function ensureAddModal() {
 function openAdd() {
   if (!isLoggedIn()) { toast('로그인 필요'); return; }
   ['waShip', 'waSys', 'waTitle', 'waDetail', 'waDue', 'waSource'].forEach(id => { $(id).value = ''; });
-  $('waCat').value = '기타'; $('waStatus').value = '대기'; $('waUrg').value = '';
+  $('waCat').value = '기타'; $('waStatus').value = '대기'; $('waUrg').value = ''; $('waOrigin').value = '업무';
   $('workAdd').classList.add('open'); $('waTitle').focus();
 }
 function closeAdd() { $('workAdd').classList.remove('open'); }
@@ -371,7 +372,7 @@ async function saveAdd() {
   const r = { id: newId('WK_'), ship_code: normalizeShipCode($('waShip').value) || null, system: sys, date: todayStr(),
     title, detail: $('waDetail').value.trim(), source: $('waSource').value.trim(), category: $('waCat').value,
     requester: '', due_date: $('waDue').value || null, status, progress: status === '완료' ? 100 : 0,
-    urgency: $('waUrg').value, origin: '업무', note: '' };
+    urgency: $('waUrg').value, origin: $('waOrigin').value || '업무', note: '' };
   if (REPAIR_SYS[sys]) { r.stage = STAGE_OF[status] || '미확인'; r.symptom = title; r.equip = r.category; }
   const sh = splitShips($('waShip').value);
   if (sh.bad.length) { toast('등록 안 된 선박코드: ' + sh.bad.join(', ')); $('waShip').focus(); return; }
@@ -679,4 +680,11 @@ async function applyBulk() {
 
 window.workTab = { filterStatus, toggleActs, edit, setStatus, cycleUrgency, addAct, removeAct, deleteTask };
 
-export default { id: 'work', mount, refresh };
+// 다른 탭에서 특정 업무로 이동 (BWTS 로그 → 후처리 업무). 검색어로 거른다.
+function setParams(p) {
+  if (!p || p.q == null) return;
+  F.q = p.q;
+  if ($('wfSearch')) $('wfSearch').value = p.q;
+}
+
+export default { id: 'work', mount, refresh, setParams };
