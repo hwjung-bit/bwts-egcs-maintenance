@@ -9,5 +9,6 @@ import sys
 from pathlib import Path
 
 SCRIPT = Path(r"D:\CLAUDE CODE\공무팀 대시보드 환경파트\export\export_env2.py")
+sys.path.insert(0, str(SCRIPT.parent))   # sibling modules (build_cii_yearend)
 sys.argv = [str(SCRIPT)]
 runpy.run_path(str(SCRIPT), run_name="__main__")

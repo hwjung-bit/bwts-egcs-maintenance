@@ -19,6 +19,7 @@ export const ROUTER_BUILD = BUILD;
 // Tab bar order. Adding a tab = one line here + one file in js/tabs/.
 export const TABS = [
   { id: 'home',    label: '🏠 종합' },
+  { id: 'watch',   label: '🛰 관제' },
   { id: 'work',    label: '📋 업무' },
   // 📧 메일대장 탭은 2026-09-18 제거 — 수리이력 자동 생성 경로가 아니었고 소비자가 없었다.
   { id: 'repairs', label: '🔧 EGCS·BWTS 이력' },
