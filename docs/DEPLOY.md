@@ -325,3 +325,5 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 - 일일 내보내기: `export_contract_daily.bat` 에 `run_env2_export.py` 연결 →
   `D:\CLAUDE CODE\공무팀 대시보드 환경파트\export\export_env2.py` 가 G `환경\data\env2_*.json` 8개 생성
   (뷰 5 + cii·reg·costs). 로그 `out\export_env2_daily.log`.
+
+- 2026-11-24 `sql/041_watch_snapshot.sql` SQL Editor 실행 완료 (재실행 가능). 🛰 관제 탭·watch.py 용.
