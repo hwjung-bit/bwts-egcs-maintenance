@@ -94,6 +94,7 @@
     "missing_urgent_day": 20,
     "stale_task_days": 14,
     "compare_days": 7,
-    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용"
+    "follow_days": {"ECU": 7, "미수신": 5, "점검필요": 30, "데이터불량": 7, "판독실패": 7, "검교정": 14, "정체": 7},
+    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용. follow_days: 관제 항목을 '요청함' 으로 기록한 뒤 해소를 기다리는 일수 — 넘기면 기한초과(재요청 알람)"
   }
 }

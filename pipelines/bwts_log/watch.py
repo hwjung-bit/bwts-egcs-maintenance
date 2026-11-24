@@ -152,6 +152,27 @@ def diff(now_hits, old_hits):
             [h for h in old_hits if h["key"] not in nk])
 
 
+def follow(hits, actions, today):
+    """Merge follow-through state (watch_actions) into hits.
+    Returns updates for actions whose hit is gone (-> 해소)."""
+    open_ = {a["key"]: a for a in actions if a.get("status") == "요청함"}
+    for h in hits:
+        a = open_.get(h["key"])
+        if a:
+            h["follow"] = {"status": "요청함", "requested_at": a["requested_at"],
+                           "due": a["due_date"], "round": a.get("round") or 1,
+                           "overdue": today.isoformat() > a["due_date"]}
+        else:
+            h["follow"] = {"status": "미조치"}
+    keys = {h["key"] for h in hits}
+    return [{"key": k, "status": "해소", "resolved_at": today.isoformat()}
+            for k in open_ if k not in keys]
+
+
+def is_overdue(h):
+    return bool(h.get("follow", {}).get("overdue"))
+
+
 # ── IO ──────────────────────────────────────────────────────────────
 def analyze(today, dry_run):
     if not LOG_ROOT.exists():
@@ -220,6 +241,12 @@ def run(dry_run=False, no_analyze=False, today=None):
         fu.apply(sb, ops)          # auto mode: register instead of suggesting
         ops = []
     payload = evaluate(grades, ships, tasks, last_act, cleanings, tc, cal, ops, today)
+    try:
+        actions = sb.table("watch_actions").select("*").eq("status", "요청함").execute().data
+    except Exception as e:          # table not created yet (sql/042)
+        print(f"[경고] watch_actions 읽기 실패: {e}")
+        actions = []
+    closed = follow(payload["hits"], actions, today)
     pms = Path(fu.FU["pms_json_path"])
     payload["meta"] = {
         "at": datetime.now().isoformat(timespec="minutes"), "note": note,
@@ -233,7 +260,11 @@ def run(dry_run=False, no_analyze=False, today=None):
           f"주의 {sum(h['level'] == WARN for h in payload['hits'])} · "
           f"후보 {len(payload['candidates'])} · 직전 대비 신규 {len(new)} 해결 {len(resolved)}")
     for h in payload["hits"]:
-        print(f"  [{h['level']}] {h['ship']} {h['kind']:<5} {h['msg']}")
+        f = h["follow"]
+        st = f["status"] + (f" {f['requested_at']}" if f["status"] == "요청함" else "")             + (" 기한초과" if is_overdue(h) else "")
+        print(f"  [{h['level']}] {h['ship']} {h['kind']:<5} {h['msg']}  <{st}>")
+    if closed:
+        print("  해소: " + ", ".join(c["key"] for c in closed))
     if note:
         print(f"[참고] {note}")
     if dry_run:
@@ -241,10 +272,16 @@ def run(dry_run=False, no_analyze=False, today=None):
         return payload
     sb.table("watch_snapshot").upsert({"date": today.isoformat(), "system": "BWTS",
                                        "payload": payload}).execute()
+    for c in closed:
+        sb.table("watch_actions").update({k: v for k, v in c.items() if k != "key"})             .eq("key", c["key"]).execute()
     urgent_new = [h for h in new if h["level"] == URG]
-    if urgent_new or note:
+    was_over = {h["key"] for h in prev["hits"] if is_overdue(h)}
+    over_new = [h for h in payload["hits"] if is_overdue(h) and h["key"] not in was_over]
+    if urgent_new or over_new or note:
         alarm("BWTS 관제 — " + (note + " / " if note else "")
-              + ", ".join(f"{h['ship']} {h['kind']}" for h in urgent_new[:6]))
+              + ", ".join(f"{h['ship']} {h['kind']}" for h in urgent_new[:6])
+              + (" / 재요청 필요: " + ", ".join(f"{h['ship']} {h['kind']}" for h in over_new[:6])
+                 if over_new else ""))
     return payload
 
 

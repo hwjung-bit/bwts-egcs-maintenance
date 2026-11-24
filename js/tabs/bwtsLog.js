@@ -595,13 +595,13 @@ function copyChatterMail() {
    Gmail 작성창을 열면 Gmail 이 곧바로 임시보관함에 저장한다.
    본선이 읽는 글이므로 버스트·평균간격 같은 분석 용어는 넣지 않는다 —
    밸브 번호와 횟수, 그리고 그게 무슨 현상인지만. */
-const vesselMail = code => `kmtc${String(code).toLowerCase()}@sea-one.com`;
+export const vesselMail = code => `kmtc${String(code).toLowerCase()}@sea-one.com`;
 
 // Gmail 작성창. 반드시 클릭 핸들러 안에서 동기적으로 열어야 팝업 차단을 안 맞는다 —
 // 그 앞에 prompt() 같은 모달을 두면 웨일은 제스처가 끝난 것으로 보고 막는다.
 // 본문은 항상 URL 에 싣는다. 본문을 짧게 유지하는 게 전제 — 6척 한/영 기준 ~4,000자로
 // Gmail 한도 안. 길어져 400 이 나면 문구를 줄이지 클립보드로 우회하지 않는다.
-function gmailCompose(to, subject, body) {
+export function gmailCompose(to, subject, body) {
   const url = 'https://mail.google.com/mail/?view=cm&fs=1'
     + '&to=' + encodeURIComponent(to)
     + '&su=' + encodeURIComponent(subject)
@@ -640,7 +640,7 @@ const SENDER_KO = 'KMTC SM ETP / 정현우 과장';
 const SENDER_EN = 'KMTC SM ETP / Hyunwoo Jung';
 
 // Gmail 작성 URL 로 여는 메일에는 계정 서명이 안 붙는다 — 본문 끝에 직접 넣는다.
-const SIGN = [
+export const SIGN = [
   '',
   '감사합니다. thanks,',
   '==========================================================',
@@ -652,7 +652,7 @@ const SIGN = [
   'M.P : +82-10-7930-3820',
   '==========================================================',
 ].join('\n');
-const shipName = code => { const s = shipByCode(code); return (s && s.name) || code; };
+export const shipName = code => { const s = shipByCode(code); return (s && s.name) || code; };
 const replyBy = () => { const d = new Date(); d.setDate(d.getDate() + 5); return d; };
 const koDate = d => `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 

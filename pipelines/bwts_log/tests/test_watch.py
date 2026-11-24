@@ -87,3 +87,20 @@ def test_urgent_sorted_first():
          "KBB": {"2026-09": ("점검필요", BAD), "2026-10": ("점검필요", BAD)}}
     p = ev(date(2026, 11, 24), g, ships=("KAA", "KBB"))
     assert p["hits"][0]["ship"] == "KBB"
+
+
+def test_follow_states_and_resolve():
+    hits = [{"key": "ECU:KAA"}, {"key": "ECU:KBB"}, {"key": "미수신:KCC"}]
+    acts = [{"key": "ECU:KAA", "status": "요청함", "requested_at": "2026-11-10",
+             "due_date": "2026-11-17", "round": 1},
+            {"key": "ECU:KBB", "status": "요청함", "requested_at": "2026-11-20",
+             "due_date": "2026-11-27", "round": 2},
+            {"key": "ECU:KDD", "status": "요청함", "requested_at": "2026-11-20",
+             "due_date": "2026-11-27"}]
+    closed = w.follow(hits, acts, date(2026, 11, 24))
+    f = {h["key"]: h["follow"] for h in hits}
+    assert f["ECU:KAA"]["overdue"] is True
+    assert f["ECU:KBB"]["overdue"] is False and f["ECU:KBB"]["round"] == 2
+    assert f["미수신:KCC"] == {"status": "미조치"}
+    assert [c["key"] for c in closed] == ["ECU:KDD"]
+    assert closed[0]["status"] == "해소"

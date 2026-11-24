@@ -327,3 +327,4 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
   (뷰 5 + cii·reg·costs). 로그 `out\export_env2_daily.log`.
 
 - 2026-11-24 `sql/041_watch_snapshot.sql` SQL Editor 실행 완료 (재실행 가능). 🛰 관제 탭·watch.py 용.
+- 2026-11-24 `sql/042_watch_actions.sql` SQL Editor 실행 완료 (재실행 가능). 관제 항목 진행 추적.
