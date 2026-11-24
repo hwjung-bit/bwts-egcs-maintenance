@@ -94,7 +94,85 @@
     "missing_urgent_day": 20,
     "stale_task_days": 14,
     "compare_days": 7,
-    "follow_days": {"ECU": 7, "미수신": 5, "점검필요": 30, "데이터불량": 7, "판독실패": 7, "검교정": 14, "정체": 7},
-    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용. follow_days: 관제 항목을 '요청함' 으로 기록한 뒤 해소를 기다리는 일수 — 넘기면 기한초과(재요청 알람)"
+    "follow_days": {
+      "ECU": 7,
+      "미수신": 5,
+      "점검필요": 30,
+      "데이터불량": 7,
+      "판독실패": 7,
+      "검교정": 14,
+      "정체": 7
+    },
+    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용. follow_days: 관제 항목을 '요청함' 으로 기록한 뒤 해소를 기다리는 일수 — 넘기면 기한초과(재요청 알람) mail_actions: 관제 본선 메일의 '요청 조치' — 사유 문구(match 포함)별 매뉴얼 조치. 상세 분석(Smart Platform TOTALLOG 등)이 hit.detail.findings 를 주면 그걸 우선.",
+    "mail_actions": [
+      {
+        "match": "주입 TRO 범위 이탈",
+        "en": "Injection TRO out of range (5~10 ppm)",
+        "ref": "Techcross ECS OMSM TC1710-001 Rev0.7 7.3.1.1 TRO low alarm p.147-150",
+        "actions": [
+          [
+            "TSU 샘플수가 CLX cuvette 로 정상 유입되는지 확인 (Sol. valve 전원, Y-strainer 막힘)",
+            "Check sampling water flows into the CLX cuvette (Sol. valve power, Y-strainer)"
+          ],
+          [
+            "CLX 시약 유효기간·잔량 확인, 경과 시 교체",
+            "Check CLX reagent expiry/level and replace if expired"
+          ],
+          [
+            "cuvette 오염 시 세척",
+            "Clean the cuvette if contaminated"
+          ],
+          [
+            "APU(Air Pump Unit) 작동·배출라인 막힘 확인",
+            "Check APU operation and discharge line blockage"
+          ]
+        ]
+      },
+      {
+        "match": "배출 TRO 기준 초과",
+        "en": "Discharge TRO above limit",
+        "ref": "Techcross ECS OMSM TC1710-001 Rev0.7 7.3.2.1 TRO high alarm p.152-153",
+        "actions": [
+          [
+            "ANU metering pump 중화제 토출 확인",
+            "Check the ANU metering pump discharges neutralizer"
+          ],
+          [
+            "펌프 후단 CHECK valve 볼 작동 확인, 공기 빼기",
+            "Check the ball in the CHECK valve behind the pump and vent air"
+          ],
+          [
+            "ANU Sol. valve 막힘 확인",
+            "Check ANU Sol. valves for clogging"
+          ]
+        ]
+      },
+      {
+        "match": "Trip",
+        "en": "BWTS trip",
+        "ref": "",
+        "actions": [
+          [
+            "Trip 발생 시각의 알람 화면 사진과 조치 내용 회신",
+            "Send the alarm screen photo at the trip time and the action taken"
+          ]
+        ]
+      },
+      {
+        "match": "알람 Shutdown",
+        "en": "Alarm shutdown during operation",
+        "ref": "Alfa Laval PureBallast OM 4.9 Alarm handling (KDB PB3.0 p.115)",
+        "actions": [
+          [
+            "Alarm list(Page 2.1)에서 셧다운 알람 번호·발생 시각 확인 후 원인 조치",
+            "Check shutdown alarm numbers/times in Alarm list (Page 2.1) and remove the cause"
+          ],
+          [
+            "알람 이력 화면 사진 회신",
+            "Send a photo of the alarm history screen"
+          ]
+        ]
+      }
+    ]
   }
 }

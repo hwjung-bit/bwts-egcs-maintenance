@@ -20,11 +20,11 @@ const GRADE_C = { '운전양호': '#16a34a', '수리후정상': '#2563eb', '점�
 // One bundle = one kind of action. mail: draft one Gmail to all checked ships.
 const BUNDLES = [
   { id: 'ecu', kinds: ['ECU'], title: 'ECU chemical cleaning 실시 요청',
-    how: '본선 일괄 메일 → KINS PMS 실시 기록이 들어오면 자동 해소', mail: ecuMail },
+    how: '본선 메일 → KINS PMS 실시 기록이 들어오면 자동 해소', mail: true },
   { id: 'miss', kinds: ['미수신'], title: 'BWTS 로그 제출 독촉',
-    how: '본선 일괄 메일 → 로그가 수신·분석되면 자동 해소', mail: missMail },
+    how: '본선 메일 → 로그가 수신·분석되면 자동 해소', mail: true },
   { id: 'bad', kinds: ['점검필요'], title: '점검필요 — 원인 확인·본선 점검 요청',
-    how: 'BWTS 로그 탭 상세에서 원인 확인 후 ✉ 본선 메일 → 다음 달 로그 양호면 자동 해소', tab: 'bwtsLog' },
+    how: '본선 메일(문제·수치·매뉴얼 조치) → 다음 달 로그 양호면 자동 해소', mail: true },
   { id: 'rev', kinds: ['데이터불량', '판독실패'], title: '로그 재검토',
     how: '/bwts-review 재판정 또는 본선 재송부 요청 → 판정이 바뀌면 자동 해소', tab: 'bwtsLog' },
   { id: 'cal', kinds: ['검교정'], title: 'BWTS 검교정 일정 요청 (업체)',
@@ -88,13 +88,13 @@ function bundleHtml(b, hits) {
     const st = sts[i], need = st.s === '미조치' || st.over;
     const pick = b.mail ? `<input type="checkbox" class="wpick-${b.id}" value="${esc(h.key)}" ${need ? 'checked' : ''}>` : '';
     const btn = b.mail ? '' : need
-      ? `<button class="refresh-btn" onclick="watchTab.mark('${esc(b.id)}',['${esc(h.key)}'])">${st.over ? '재요청 기록' : '요청함 기록'}</button>`
+      ? `<button class="refresh-btn" onclick="watchTab.mark(['${esc(h.key)}'])">${st.over ? '재요청 기록' : '요청함 기록'}</button>`
       : '';
     return `<tr><td>${pick}</td><td>${badge(h.level)}</td><td><b>${esc(h.ship)}</b></td>
       <td style="text-align:left">${esc(h.msg)}</td><td style="text-align:left">${stateHtml(st)}</td><td>${btn}</td></tr>`;
   }).join('');
   const act = b.mail
-    ? `<button class="add-btn" onclick="watchTab.mail('${b.id}')">✉ 선택 선박 메일 작성 + 요청함 기록</button>`
+    ? `<button class="add-btn" onclick="watchTab.mail('${b.id}')">✉ 선택 선박 메일 작성 (선박별 문제·조치) + 요청함 기록</button>`
     : `<button class="refresh-btn" onclick="watchTab.go('${b.tab}')">${esc({ bwtsLog: 'BWTS 로그 탭', bwtsCal: '검교정 탭', work: '업무 탭' }[b.tab])}으로</button>`;
   return `<div class="bl-sec" style="margin-bottom:10px;border-left:4px solid ${urgent ? '#b91c1c' : '#2563eb'};padding-left:10px">
     <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
@@ -157,14 +157,14 @@ function render() {
 }
 
 /* ===== actions ===== */
-async function mark(bid, keys, note) {
-  const b = BUNDLES.find(x => x.id === bid);
-  const d = new Date(today()); d.setDate(d.getDate() + requireTH('watch').follow_days[b.kinds[0]]);
+async function mark(keys, note) {
+  const W = requireTH('watch');
   const hits = snap.payload.hits;
   const rows = keys.map(k => {
     const h = hits.find(x => x.key === k), prev = acts[k];
+    const d = new Date(today()); d.setDate(d.getDate() + W.follow_days[h.kind]);
     return { key: k, kind: h.kind, ship_code: h.ship, status: '요청함', requested_at: today(),
-      due_date: d.toISOString().slice(0, 10), round: prev ? prev.round + 1 : 1,
+      due_date: ymd(d), round: prev ? prev.round + 1 : 1,
       note: note || '', resolved_at: null, updated_at: new Date().toISOString() };
   });
   const ok = await dbSave(sb.from('watch_actions').upsert(rows), `요청함 기록 ${rows.length}건`);
@@ -177,58 +177,105 @@ function picked(bid) {
   return [...document.querySelectorAll(`.wpick-${bid}:checked`)].map(x => x.value);
 }
 
-function shipLines(keys, f) {
-  const hits = snap.payload.hits;
-  return keys.map(k => hits.find(h => h.key === k)).map(f).join('\n');
+// ===== ship mail: per ship "문제 → 수치 → 요청 조치" =====
+// One mail for the checked ships; each ship block lists every mailable problem
+// of that ship (ECU, 미수신, 점검필요), not just the bundle's kind, so the crew
+// gets one request per ship. Actions come from thresholds.json watch.mail_actions
+// (manual-based); a finer analysis (Smart Platform TOTALLOG …) that writes
+// hit.detail.findings [{ko, en, action_ko, action_en}] replaces them.
+const MAIL_KINDS = ['ECU', '미수신', '점검필요'];
+const ymd = d => d.toISOString().slice(0, 10);
+
+function reasonsOf(h) {
+  return h.detail?.grade_reasons?.length ? h.detail.grade_reasons
+    : (h.msg.split(' — ')[1] || '').split(', ').filter(Boolean);
 }
 
-function ecuMail(keys) {
+function figLines(d) {
+  if (!d) return [];
+  const bl = requireTH('bwts_log'), out = [];
+  if (d.tro_b_avg != null) out.push(`Ballast ${d.ballast_count}회, 주입 TRO 평균 ${d.tro_b_avg} ppm (최저 ${d.tro_b_min}) — 기준 ${bl.tro_ballast_min_ppm}~${bl.tro_ballast_max_ppm} ppm`
+    + ` / Ballast ${d.ballast_count} times, injection TRO avg ${d.tro_b_avg} ppm (required ${bl.tro_ballast_min_ppm}~${bl.tro_ballast_max_ppm})`);
+  if (d.tro_d_max != null && d.tro_d_max > bl.tro_deballast_max_ppm) out.push(`De-ballast 배출 TRO 최대 ${d.tro_d_max} ppm — 기준 ${bl.tro_deballast_max_ppm} ppm 이하`
+    + ` / Discharge TRO max ${d.tro_d_max} ppm (limit ${bl.tro_deballast_max_ppm})`);
+  if (d.trip_count) out.push(`Trip ${d.trip_count}회 / ${d.trip_count} trip(s)`);
+  return out;
+}
+
+function problemBlocks(h) {
   const ships = snap.payload.ships;
+  if (h.kind === 'ECU') {
+    const e = ships[h.ship]?.ecu || {};
+    return [{ p: `ECU chemical cleaning 주기(1개월) 초과 — 마지막 실시 ${e.last || '-'} (+${e.over}일)`,
+      pe: `ECU chemical cleaning overdue (1-month interval) — last ${e.last || '-'}`,
+      a: [['ECU chemical cleaning 실시 후 KINS PMS 에 기록', 'Carry out ECU chemical cleaning and record it in KINS PMS']] }];
+  }
+  if (h.kind === '미수신') {
+    const lp = ships[h.ship]?.log.period || '';
+    return [{ p: `${lp} BWTS LOG DATA 미접수`, pe: `BWTS LOG DATA for ${lp} not received`,
+      a: [['LOG DATA 송부 (메일 제목: [선박코드]_BWTS_LOG_DATA_(YYYY.MM))', 'Send the LOG DATA (subject: [code]_BWTS_LOG_DATA_(YYYY.MM))']] }];
+  }
+  if (h.detail?.findings?.length) {
+    return h.detail.findings.map(f => ({ p: f.ko, pe: f.en, a: [[f.action_ko, f.action_en]], src: h.detail.source }));
+  }
+  const n = ships[h.ship]?.log.streak || 1, lp = h.detail?.period || ships[h.ship]?.log.period || '';
+  const rules = requireTH('watch').mail_actions;
+  const rs = reasonsOf(h).filter(r => r !== 'ALFA LAVAL');
+  const figs = figLines(h.detail);
+  return rs.map((r, i) => {
+    const rule = rules.find(x => r.includes(x.match));
+    return { p: `${lp} 로그 분석 — ${r}${n > 1 ? ` (${n}개월 연속)` : ''}`,
+      pe: `${lp} log analysis — ${rule ? rule.en : r}${n > 1 ? ` (${n} months in a row)` : ''}`,
+      f: i === 0 ? figs : [], a: rule ? rule.actions : [['원인 확인 후 조치 내용 회신', 'Check the cause and reply with the action taken']],
+      ref: rule?.ref };
+  });
+}
+
+function shipBlock(ship, hits) {
+  const L = [`■ ${shipName(ship)} (${ship})`];
+  let k = 0;
+  hits.flatMap(problemBlocks).forEach(b => {
+    k += 1;
+    L.push(`  [문제 ${k}] ${b.p}`, `            ${b.pe}`);
+    (b.f || []).forEach(x => L.push(`     · ${x}`));
+    L.push('     요청 조치 / Action:');
+    b.a.forEach(([ko, en], j) => L.push(`       ${j + 1}) ${ko}`, `          ${en}`));
+    if (b.ref) L.push(`       (Ref. ${b.ref})`);
+  });
+  return L.join('\n');
+}
+
+const MAIL_TITLE = {
+  ecu: 'BWTS ECU CHEMICAL CLEANING 실시 요청의 건 / Request for ECU chemical cleaning',
+  miss: 'BWTS LOG DATA 제출 요청의 건 / Request for BWTS LOG DATA',
+  bad: 'BWTS 로그 분석 결과 점검 요청의 건 / BWTS check request from log analysis',
+};
+
+function shipMail(bid, ships) {
+  const hits = snap.payload.hits.filter(h => MAIL_KINDS.includes(h.kind) && ships.includes(h.ship));
   const due = new Date(); due.setDate(due.getDate() + 5);
   const body = [
     '수신: 각 선박 기관장님 / Chief Engineers',
     '',
-    '1. BWTS ECU chemical cleaning 실시 주기(1개월)가 지나 실시를 요청드립니다.',
-    '   Please carry out the BWTS ECU chemical cleaning (1-month interval exceeded).',
+    '1. BWTS 관리 현황 확인 결과 아래 사항이 확인되어 점검·조치를 요청드립니다.',
+    '   The items below were found in the BWTS status review. Please check and take action.',
     '',
-    '2. 선박별 마지막 실시일 / Last cleaning date',
-    shipLines(keys, h => `   - ${shipName(h.ship)}: ${(ships[h.ship]?.ecu || {}).last || '-'}`),
-    '',
-    '3. 실시 후 KINS PMS 에 작업 기록을 입력 바랍니다.',
-    '   After the work, please record it in KINS PMS.',
-    '',
-    `4. 실시 예정일 회신 기한: ${due.getMonth() + 1}월 ${due.getDate()}일`,
-    `   Please reply with the planned date by ${due.toISOString().slice(0, 10)}.`,
+    ...ships.map(s => shipBlock(s, hits.filter(h => h.ship === s)) + '\n'),
+    `2. 조치 결과(사진 포함) 또는 실시 예정일을 ${due.getMonth() + 1}월 ${due.getDate()}일까지 회신 바랍니다.`,
+    `   Please reply with the result (with photos) or the planned date by ${ymd(due)}.`,
   ].join('\n');
-  return ['[KMTC SM][ETP] BWTS ECU CHEMICAL CLEANING 실시 요청의 건 / Request for ECU chemical cleaning', body];
-}
-
-function missMail(keys) {
-  const p = Object.values(snap.payload.ships)[0]?.log.period || '';
-  const body = [
-    '수신: 각 선박 기관장님 / Chief Engineers',
-    '',
-    `1. ${p} BWTS LOG DATA 가 아직 접수되지 않아 제출을 요청드립니다.`,
-    `   BWTS LOG DATA for ${p} has not been received. Please send it.`,
-    '',
-    '2. 대상 선박 / Vessels',
-    shipLines(keys, h => `   - ${shipName(h.ship)}`),
-    '',
-    '3. 메일 제목: [선박코드]_BWTS_LOG_DATA_(YYYY.MM)',
-  ].join('\n');
-  return [`[KMTC SM][ETP] ${p} BWTS LOG DATA 제출 요청의 건 / Request for BWTS LOG DATA (${p})`, body];
+  return { subject: `[KMTC SM][ETP] ${MAIL_TITLE[bid]}`, body, keys: hits.map(h => h.key) };
 }
 
 function mail(bid) {
-  const b = BUNDLES.find(x => x.id === bid);
   const keys = picked(bid);
   if (!keys.length) { toast('선택된 선박 없음'); return; }
   const ships = [...new Set(keys.map(k => snap.payload.hits.find(h => h.key === k).ship))];
-  const [subject, body] = b.mail(keys);
-  gmailCompose(ships.map(vesselMail).join(','), subject, body + '\n' + SIGN);   // sync: popup-safe
-  mark(bid, keys, '메일 작성');
+  const m = shipMail(bid, ships);
+  gmailCompose(ships.map(vesselMail).join(','), m.subject, m.body + '\n' + SIGN);   // sync: popup-safe
+  mark(m.keys, '메일 작성');
 }
 
-window.watchTab = { go, mark, mail };
+window.watchTab = { go, mark, mail, shipMail };
 
 export default { id: 'watch', mount, refresh };

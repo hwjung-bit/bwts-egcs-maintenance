@@ -144,6 +144,23 @@ def evaluate(grades, ships, tasks, last_act, cleanings, techcross, cal_alerts, o
     return {"ships": by_ship, "hits": hits, "candidates": candidates(ops)}
 
 
+FIG_COLS = ("ship_code,ballast_count,deballast_count,op_days,tro_b_avg,tro_b_min,"
+            "tro_d_max,trip_count,alarm_count,grade_reasons")
+LOG_KINDS = ("점검필요", "데이터불량", "판독실패")
+
+
+def attach_detail(hits, figs, period):
+    """Log hits get the month's figures so the ship mail can state the problem
+    with numbers. detail.source = 'log' (monthly CSV analysis). A finer source
+    (e.g. Techcross Smart Platform TOTALLOG) adds detail.findings =
+    [{ko, en, action_ko, action_en}]; the mail prefers findings when present."""
+    for h in hits:
+        f = figs.get(h["ship"])
+        if h["kind"] in LOG_KINDS and f:
+            h["detail"] = {"source": "log", "period": period,
+                           **{k: v for k, v in f.items() if k != "ship_code"}}
+
+
 def diff(now_hits, old_hits):
     """(new, resolved) by key."""
     nk = {h["key"] for h in now_hits}
@@ -247,6 +264,9 @@ def run(dry_run=False, no_analyze=False, today=None):
         print(f"[경고] watch_actions 읽기 실패: {e}")
         actions = []
     closed = follow(payload["hits"], actions, today)
+    lp = last_period(today)
+    figs = sb.table("bwts_log_analysis").select(FIG_COLS).eq("period", lp).execute().data
+    attach_detail(payload["hits"], {r["ship_code"]: r for r in figs}, lp)
     pms = Path(fu.FU["pms_json_path"])
     payload["meta"] = {
         "at": datetime.now().isoformat(timespec="minutes"), "note": note,

@@ -104,3 +104,13 @@ def test_follow_states_and_resolve():
     assert f["미수신:KCC"] == {"status": "미조치"}
     assert [c["key"] for c in closed] == ["ECU:KDD"]
     assert closed[0]["status"] == "해소"
+
+
+def test_attach_detail_log_kinds_only():
+    hits = [{"ship": "KAA", "kind": "점검필요"}, {"ship": "KAA", "kind": "ECU"},
+            {"ship": "KBB", "kind": "점검필요"}]
+    figs = {"KAA": {"ship_code": "KAA", "tro_b_avg": 1.48, "ballast_count": 5}}
+    w.attach_detail(hits, figs, "2026-10")
+    assert hits[0]["detail"] == {"source": "log", "period": "2026-10",
+                                 "tro_b_avg": 1.48, "ballast_count": 5}
+    assert "detail" not in hits[1] and "detail" not in hits[2]
