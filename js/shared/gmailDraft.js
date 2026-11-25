@@ -101,3 +101,18 @@ export function gmailDraft(msg) {
     })
     .catch(e => toast(String(e.message || e)));
 }
+
+// Several drafts in one click (one per ship). Opens the drafts folder once.
+export function gmailDraftMany(msgs, done) {
+  if (!window.google?.accounts?.oauth2) { toast('Google 로그인 준비 중 — 잠시 후 다시'); preloadGmail(); return; }
+  const w = hasToken() ? window.open('about:blank', '_blank') : null;
+  (hasToken() ? Promise.resolve() : requestToken())
+    .then(async () => { for (const m of msgs) await createDraft(m); })
+    .then(() => {
+      const url = 'https://mail.google.com/mail/u/0/#drafts';
+      if (w) w.location.href = url; else window.open(url, '_blank');
+      toast(`임시보관함에 ${msgs.length}통 저장됨 — 확인 후 보내기`);
+      if (done) done();
+    })
+    .catch(e => { if (w) w.close(); toast(String(e.message || e)); });
+}
