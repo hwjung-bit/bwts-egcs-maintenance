@@ -48,46 +48,48 @@ function state(h) {
   const over = today() > a.due_date;
   return { s: over ? '기한초과' : '요청함', a, need: over };
 }
-function stateHtml(st) {
-  if (st.s === '미조치') return '<b style="color:#b91c1c">미조치</b>';
-  const d = Math.round((new Date(today()) - new Date(st.a.requested_at)) / 864e5);
-  return st.s === '기한초과'
-    ? `<b style="color:#fff;background:#b91c1c;padding:1px 6px;border-radius:6px">기한초과</b> <span class="muted">${st.a.round}차 요청 ${esc(st.a.requested_at)}</span>`
-    : `<span style="color:#2563eb">요청함 D+${d}</span> <span class="muted">기한 ${esc(st.a.due_date)}</span>`;
-}
-
-// short problem label for the table
-function label(h) {
+// short tag per problem (chip text) and full label (tooltip)
+function tag(h) {
   const v = snap.payload.ships[h.ship] || {};
-  if (h.kind === 'ECU') return `ECU cleaning +${v.ecu?.over}일`;
-  if (h.kind === '미수신') return `${v.log?.period} 로그 미수신`;
+  if (h.kind === 'ECU') return `ECU +${v.ecu?.over}일`;
+  if (h.kind === '미수신') return '로그 미수신';
   const n = v.log?.streak || 1;
-  return `점검필요${n > 1 ? ` ${n}개월` : ''} — ${reasonsOf(h).filter(r => r !== 'ALFA LAVAL').join(', ')}`;
+  return `점검필요${n > 1 ? ` ${n}개월` : ''}`;
 }
+function label(h) {
+  if (h.kind !== '점검필요') return h.msg;
+  return `${tag(h)} — ${reasonsOf(h).filter(r => r !== 'ALFA LAVAL').join(', ')}`;
+}
+function stateText(st) {
+  if (st.s === '미조치') return '미조치';
+  return st.s === '기한초과' ? `기한초과 (${st.a.round}차 ${st.a.requested_at})` : `요청함 ${st.a.requested_at} · 기한 ${st.a.due_date}`;
+}
+const CHIP = { '미조치': ['#fde2e2', '#b91c1c'], '기한초과': ['#b91c1c', '#fff'], '요청함': ['#e0ecff', '#1d4ed8'] };
 
-function shipTable(hits) {
+// one chip per ship: checkbox + code + tags; details in the tooltip
+function shipChips(hits) {
   const ships = [...new Set(hits.map(h => h.ship))];
   if (!ships.length) return '<div class="muted">본선 요청 없음</div>';
-  const rows = ships.map(s => {
+  const items = ships.map(s => {
     const hs = hits.filter(h => h.ship === s), sts = hs.map(state);
-    const need = sts.some(x => x.need);
-    return `<tr><td><input type="checkbox" class="wpick" value="${esc(s)}" ${need ? 'checked' : ''}></td>
-      <td><b>${esc(s)}</b></td>
-      <td style="text-align:left">${hs.map((h, i) => `<div>${esc(label(h))} · ${stateHtml(sts[i])}</div>`).join('')}</td></tr>`;
-  }).join('');
-  return `<table class="cal-table"><thead><tr><th></th><th>선박</th><th>문제 · 진행</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const worst = sts.find(x => x.s === '기한초과') || sts.find(x => x.s === '미조치') || sts[0];
+    return { s, hs, sts, worst, need: sts.some(x => x.need) };
+  }).sort((x, y) => y.need - x.need || x.s.localeCompare(y.s));
+  return `<div style="display:flex;flex-wrap:wrap;gap:6px">${items.map(({ s, hs, sts, worst, need }) => {
+    const [bg, fg] = CHIP[worst.s];
+    const tip = hs.map((h, i) => `${label(h)} [${stateText(sts[i])}]`).join('\n');
+    return `<label title="${esc(tip)}" style="display:inline-flex;gap:5px;align-items:center;padding:3px 8px;border-radius:14px;background:${bg};color:${fg};font-size:12px;cursor:pointer">
+      <input type="checkbox" class="wpick" value="${esc(s)}" ${need ? 'checked' : ''}><b>${esc(s)}</b> ${esc(hs.map(tag).join(' · '))}${worst.s === '미조치' ? '' : ` <span style="opacity:.8">${worst.s}</span>`}</label>`;
+  }).join('')}</div>`;
 }
 
-function officeTable(hits) {
+function officeList(hits) {
   if (!hits.length) return '<div class="muted">사무실 처리 없음</div>';
-  const rows = hits.map(h => {
+  return hits.map(h => {
     const st = state(h), tab = OFFICE_TAB[h.kind];
-    const btn = st.need ? `<button class="refresh-btn" onclick="watchTab.mark(['${esc(h.key)}'])">${st.s === '기한초과' ? '재요청 기록' : '요청함 기록'}</button>` : '';
-    return `<tr><td><b>${esc(h.ship)}</b></td><td style="text-align:left">${esc(h.msg)}</td>
-      <td style="text-align:left">${stateHtml(st)}</td>
-      <td>${btn} <button class="refresh-btn" onclick="watchTab.go('${tab}')">${TAB_LABEL[tab]} 탭</button></td></tr>`;
+    const btn = st.need ? `<a href="#" onclick="watchTab.mark(['${esc(h.key)}']);return false">${st.s === '기한초과' ? '재요청 기록' : '요청함 기록'}</a>` : `<span style="color:#1d4ed8">${esc(stateText(st))}</span>`;
+    return `<div style="font-size:12px;padding:2px 0"><b>${esc(h.ship)}</b> ${esc(h.msg)} · ${btn} · <a href="#" onclick="watchTab.go('${tab}');return false">${TAB_LABEL[tab]} 탭</a></div>`;
   }).join('');
-  return `<table class="cal-table"><thead><tr><th>선박</th><th>내용</th><th>진행</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function render() {
@@ -108,10 +110,10 @@ function render() {
         <h4 style="margin:0">본선 요청 — 조치 필요 ${todoShips}척</h4>
         <button class="add-btn" style="margin-left:auto" onclick="watchTab.mail()">✉ 선택 선박 메일 만들기 (선박별 1통)</button>
       </div>
-      <div class="muted" style="font-size:12px;margin:2px 0 6px">메일 = 선박별 문제·수치·매뉴얼 조치, Gmail 임시보관함에 저장 + 요청함 기록. PMS·로그에 반영되면 자동 해소</div>
-      ${shipTable(shipHits)}
+      <div class="muted" style="font-size:12px;margin:2px 0 6px">빨강 미조치 · 파랑 요청함 · 진빨강 기한초과 — 마우스 올리면 상세. 메일 = 선박별 문제·수치·매뉴얼 조치 → Gmail 임시보관함 + 요청함 기록</div>
+      ${shipChips(shipHits)}
     </div>
-    <div class="bl-sec"><h4 style="margin:0 0 6px">사무실 처리</h4>${officeTable(office)}</div>`;
+    <div class="bl-sec"><h4 style="margin:0 0 6px">사무실 처리</h4>${officeList(office)}</div>`;
 }
 
 /* ===== actions ===== */
