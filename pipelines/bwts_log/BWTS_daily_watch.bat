@@ -1,5 +1,5 @@
 @echo off
-rem BWTS daily watch (관제) - scheduled task "BWTS_DailyWatch", weekdays 09:30.
+rem BWTS daily watch - scheduled task "BWTS_DailyWatch", weekdays 09:30. ASCII only (cmd reads cp949).
 rem Must run in the interactive user session (G: mapping, HKCU env vars),
 rem same as BWTS_monthly_analysis.bat.
 setlocal

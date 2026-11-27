@@ -24,6 +24,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import followup as fu
+import watch_rules as wr
 from thresholds import TH
 
 W = TH["watch"]
@@ -32,6 +33,7 @@ REPO = HERE.parent.parent
 LOG_ROOT = Path(r"G:\공유 드라이브\고려에스엠 0033 공무팀 환경기술파트\011  BWTS\4. BWTS LOG DATA")
 ALARM = Path(r"C:\Users\user\.claude\claude_alarm.ps1")
 URG, WARN = "긴급", "주의"
+SYSTEM = "FLEET"      # one snapshot row per day for every watched column
 
 
 def last_period(today):
@@ -41,8 +43,7 @@ def last_period(today):
 
 # ── rules (pure) ────────────────────────────────────────────────────
 def hit(ship, kind, level, msg, tab, key=None):
-    return {"ship": ship, "kind": kind, "level": level, "msg": msg, "tab": tab,
-            "key": key or f"{kind}:{ship}"}
+    return wr.hit(ship, kind, level, msg, tab, key)
 
 
 def log_hits(grades, ships, today):
@@ -101,7 +102,7 @@ def task_hits(tasks, last_act, today):
         idle = (today - date.fromisoformat(d)).days
         if idle >= W["stale_task_days"]:
             out.append(hit(t.get("ship_code") or "공통", "정체", WARN,
-                           f"업무 '{t.get('title') or t['id']}' {idle}일째 조치 없음 ({t.get('status')})",
+                           f"[{t.get('system') or '-'}] 업무 '{t.get('title') or t['id']}' {idle}일째 조치 없음 ({t.get('status')})",
                            "work", key=f"정체:{t['id']}"))
     return out
 
@@ -122,10 +123,12 @@ def candidates(ops):
             for op in ops if op[0] == "insert_task"]
 
 
-def evaluate(grades, ships, tasks, last_act, cleanings, techcross, cal_alerts, ops, today):
+def evaluate(grades, ships, tasks, last_act, cleanings, techcross, cal_alerts, ops, today,
+             extra=()):
+    """extra: hits from watch_rules (EGCS · 수신 · 연료/CII), already built."""
     ecu = ecu_state(cleanings, techcross, today)
     hits = (log_hits(grades, ships, today) + ecu_hits(ecu)
-            + task_hits(tasks, last_act, today) + cal_hits(cal_alerts))
+            + task_hits(tasks, last_act, today) + cal_hits(cal_alerts) + list(extra))
     hits.sort(key=lambda h: (h["level"] != URG, h["ship"], h["kind"]))
     lp = last_period(today)
     by_ship = {}
@@ -210,8 +213,8 @@ def analyze(today, dry_run):
 
 
 def fetch_rest(sb, today):
-    tasks = sb.table("repairs").select("id,ship_code,title,status,date,origin,urgency") \
-        .eq("system", "BWTS").neq("status", "완료").execute().data
+    tasks = sb.table("repairs").select("id,ship_code,title,status,date,origin,urgency,system") \
+        .neq("status", "완료").execute().data
     ids = [t["id"] for t in tasks]
     last = {}
     if ids:
@@ -219,19 +222,36 @@ def fetch_rest(sb, today):
             d = (a.get("date") or "")[:10]
             if d > last.get(a["task_id"], ""):
                 last[a["task_id"]] = d
-    ships = [s["code"] for s in sb.table("ships").select("code,bwts_maker,hidden").execute().data
-             if s.get("bwts_maker") and not s.get("hidden")]
+    rows = [s for s in sb.table("ships").select("*").execute().data if not s.get("hidden")]
+    ships = [s["code"] for s in rows if s.get("bwts_maker")]
     sys.path.insert(0, str(REPO / "scripts"))
     import logging
     import weekly_cal_alert as wc
     logging.getLogger("httpx").setLevel(logging.WARNING)
     cal = wc.collect_bwts_alerts(wc.fetch_all(sb, "calibrations", ("system", "BWTS")), today)
-    return tasks, last, sorted(ships), cal
+    egcs_cal, _ = wc.collect_egcs_alerts(wc.fetch_all(sb, "calibrations", ("system", "EGCS")),
+                                         {s["code"]: s for s in rows}, today)
+    return tasks, last, sorted(ships), cal, rows, egcs_cal
+
+
+def other_hits(rows, egcs_cal, today):
+    """EGCS · 수신 · 연료/CII columns (watch_rules). G: missing -> file columns empty."""
+    out = wr.egcs_status_hits([r for r in rows if r.get("egcs_maker")]) + wr.egcs_cal_hits(egcs_cal)
+    if LOG_ROOT.exists():
+        out += wr.bunker_hits(wr.read_bunker(today), W.get("bunker_from", {}))
+        out += wr.bsr_hits(wr.read_bsr(), today)
+        out += wr.egcs_log_hits(wr.read_egcs_logs(today, W["egcs_daily_ships"]), today)
+        lines, name = wr.read_ai_txt()
+        out += wr.fuel_hits(lines, name, wr.read_extra())
+    else:
+        out += wr.fuel_hits([], "", wr.read_extra())
+    fleet = {r["code"] for r in rows}
+    return [h for h in out if h["ship"] in fleet]
 
 
 def snapshot_on(sb, d):
     try:
-        r = sb.table("watch_snapshot").select("payload").eq("system", "BWTS") \
+        r = sb.table("watch_snapshot").select("payload").eq("system", SYSTEM) \
             .lte("date", d.isoformat()).order("date", desc=True).limit(1).execute().data
     except Exception as e:          # table not created yet (sql/041)
         print(f"[경고] watch_snapshot 읽기 실패: {e}")
@@ -242,22 +262,25 @@ def snapshot_on(sb, d):
 def alarm(msg):
     if ALARM.exists():
         subprocess.Popen(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                          str(ALARM), msg, "BWTS 관제"])
+                          str(ALARM), msg, "관제"])
 
 
-def run(dry_run=False, no_analyze=False, today=None):
+def run(dry_run=False, no_analyze=False, today=None, no_alarm=False):
     from publish_supabase import get_client
     today = today or date.today()
     note = "" if no_analyze else analyze(today, dry_run)
     sb = get_client()
     grades, ftasks, action_ids, tc = fu.fetch(sb)
     cleanings = fu.load_pms(today)
-    tasks, last_act, ships, cal = fetch_rest(sb, today)
+    tasks, last_act, ships, cal, rows, egcs_cal = fetch_rest(sb, today)
     ops = fu.plan_all(grades, ftasks, action_ids, cleanings, tc, today)
     if fu.FU.get("enabled") and not dry_run:
         fu.apply(sb, ops)          # auto mode: register instead of suggesting
         ops = []
-    payload = evaluate(grades, ships, tasks, last_act, cleanings, tc, cal, ops, today)
+    payload = evaluate(grades, ships, tasks, last_act, cleanings, tc, cal, ops, today,
+                       other_hits(rows, egcs_cal, today))
+    payload["fleet"] = sorted(r["code"] for r in rows)
+    payload["cols"] = wr.COLS
     try:
         actions = sb.table("watch_actions").select("*").eq("status", "요청함").execute().data
     except Exception as e:          # table not created yet (sql/042)
@@ -290,15 +313,15 @@ def run(dry_run=False, no_analyze=False, today=None):
     if dry_run:
         print("--dry-run: snapshot 저장 생략")
         return payload
-    sb.table("watch_snapshot").upsert({"date": today.isoformat(), "system": "BWTS",
+    sb.table("watch_snapshot").upsert({"date": today.isoformat(), "system": SYSTEM,
                                        "payload": payload}).execute()
     for c in closed:
         sb.table("watch_actions").update({k: v for k, v in c.items() if k != "key"})             .eq("key", c["key"]).execute()
     urgent_new = [h for h in new if h["level"] == URG]
     was_over = {h["key"] for h in prev["hits"] if is_overdue(h)}
     over_new = [h for h in payload["hits"] if is_overdue(h) and h["key"] not in was_over]
-    if urgent_new or over_new or note:
-        alarm("BWTS 관제 — " + (note + " / " if note else "")
+    if (urgent_new or over_new or note) and not no_alarm:
+        alarm("관제 — " + (note + " / " if note else "")
               + ", ".join(f"{h['ship']} {h['kind']}" for h in urgent_new[:6])
               + (" / 재요청 필요: " + ", ".join(f"{h['ship']} {h['kind']}" for h in over_new[:6])
                  if over_new else ""))
@@ -309,6 +332,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="BWTS daily watch")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--no-analyze", action="store_true")
+    ap.add_argument("--no-alarm", action="store_true")
     a = ap.parse_args()
-    run(dry_run=a.dry_run, no_analyze=a.no_analyze)
+    run(dry_run=a.dry_run, no_analyze=a.no_analyze, no_alarm=a.no_alarm)
     sys.exit(0)

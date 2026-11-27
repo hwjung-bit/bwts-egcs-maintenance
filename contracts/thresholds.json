@@ -101,9 +101,17 @@
       "데이터불량": 7,
       "판독실패": 7,
       "검교정": 14,
-      "정체": 7
+      "정체": 7,
+      "EGCS상태": 14,
+      "EGCS검교정": 14,
+      "벙커미수신": 3,
+      "BSR미수신": 5,
+      "EGCS로그": 3,
+      "CII오류": 7,
+      "BCM": 7,
+      "XPERT": 14
     },
-    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용. follow_days: 관제 항목을 '요청함' 으로 기록한 뒤 해소를 기다리는 일수 — 넘기면 기한초과(재요청 알람) mail_actions: 관제 본선 메일의 '요청 조치' — 사유 문구(match 포함)별 매뉴얼 조치. 상세 분석(Smart Platform TOTALLOG 등)이 hit.detail.findings 를 주면 그걸 우선.",
+    "_doc": "BWTS 관제(pipelines/bwts_log/watch.py, 평일 매일). 전월 로그 미수신: 이달 missing_after_day 일 지나면 주의, missing_urgent_day 지나면 긴급. 열린 BWTS 업무 조치이력 stale_task_days 일 없으면 정체. compare_days: 관제 탭·월요일 요약의 '지난주 대비' 비교 간격. 점검필요 연속·ECU 주기는 bwts_followup 값 사용. follow_days: 관제 항목을 '요청함' 으로 기록한 뒤 해소를 기다리는 일수 — 넘기면 기한초과(재요청 알람) mail_actions: 관제 본선 메일의 '요청 조치' — 사유 문구(match 포함)별 매뉴얼 조치. 상세 분석(Smart Platform TOTALLOG 등)이 hit.detail.findings 를 주면 그걸 우선. 전 항목 관제(2026-11-27): bsr_missing_days 마지막 BSR 파일명 날짜 기준 미수신 일수, egcs_daily_gap_days 일일 로그 선박(egcs_daily_ships) 최근 7일 중 결측 일수, bunker_from 선박별 벙커 리포트 집계 시작 금요일(인도 선박). X-PERT/BCM 은 월요일 weekly_check 가 쓴 weekly_extra.json.",
     "mail_actions": [
       {
         "match": "주입 TRO 범위 이탈",
@@ -173,6 +181,15 @@
           ]
         ]
       }
-    ]
+    ],
+    "bsr_missing_days": 30,
+    "egcs_daily_gap_days": 3,
+    "egcs_daily_ships": [
+      "KLB",
+      "KDH"
+    ],
+    "bunker_from": {
+      "KDH": "2026-10-30"
+    }
   }
 }
