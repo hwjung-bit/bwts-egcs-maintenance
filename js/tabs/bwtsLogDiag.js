@@ -53,7 +53,7 @@ function deviceHtml(devs) {
 }
 
 function sessionHtml(ss) {
-  const hold = (x, cols) => `<tr>${td(esc(x.start))}${td(Math.round(x.min))}${'<td style="' + C + '">—</td>'.repeat(cols)}${td('판정 보류', false, 'color:#94a3b8')}</tr>`;
+  const hold = (x, cols) => `<tr>${td(esc(x.start))}${td(Math.round(x.min))}${('<td style="' + C + '">—</td>').repeat(cols)}${td('판정 보류', false, 'color:#94a3b8')}</tr>`;
   const b = ss.filter(x => x.mode === 'BALLAST').map(x => x.ok == null ? hold(x, 6) :
     `<tr>${td(esc(x.start))}${td(Math.round(x.min))}${td(n(x.amp, 0))}${td(n(x.tro), !x.ok)}${td(n(x.tmin))}${td(n(x.tmax))}${td(pct(x.inr))}${td(pct(x.zero), x.zero >= 0.5)}`
     + td(x.ok ? '정상' : x.tro < 5 ? '미달' : '과다', !x.ok) + '</tr>').join('');
