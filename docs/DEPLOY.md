@@ -328,3 +328,4 @@ SELECT * FROM folder_trash_requests WHERE status = 'error';
 
 - 2026-11-24 `sql/041_watch_snapshot.sql` SQL Editor 실행 완료 (재실행 가능). 🛰 관제 탭·watch.py 용.
 - 2026-11-24 `sql/042_watch_actions.sql` SQL Editor 실행 완료 (재실행 가능). 관제 항목 진행 추적.
+- 2026-11-27 `sql/043_bwts_log_diag.sql` SQL Editor 실행 완료 (재실행 가능). BWTS 로그 탭 상세 하단 로그 진단(log_diag.py).

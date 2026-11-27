@@ -11,4 +11,6 @@ if not exist "out" mkdir "out"
 echo ==== %DATE% %TIME% >> "out\daily_watch.log"
 python -X utf8 watch.py >> "out\daily_watch.log" 2>&1
 echo exit code %ERRORLEVEL% >> "out\daily_watch.log"
+rem per ship-month log diagnostic for the BWTS log tab detail (sql/043). Re-reads only changed months.
+python -X utf8 log_diag.py --recent 2 >> "out\daily_watch.log" 2>&1
 endlocal

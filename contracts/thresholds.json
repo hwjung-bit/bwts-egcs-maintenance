@@ -191,5 +191,40 @@
     "bunker_from": {
       "KDH": "2026-10-30"
     }
+  },
+  "log_diag": {
+    "gen_min_amp": 300,
+    "session_min_rows": 5,
+    "month_min_rows": 20,
+    "zero_ratio": 0.5,
+    "high_ratio": 0.3,
+    "inj_ok_ratio": 0.5,
+    "window_months": 4,
+    "action_min_total": 3,
+    "ignore_codes": [
+      "773",
+      "720"
+    ],
+    "major_codes": [
+      "100",
+      "200",
+      "201",
+      "202",
+      "400",
+      "402",
+      "405",
+      "406",
+      "407",
+      "603",
+      "604",
+      "605",
+      "606",
+      "607",
+      "608",
+      "701",
+      "703",
+      "727"
+    ],
+    "_doc": "로그 진단(pipelines/bwts_log/log_diag.py → bwts_log_diag, BWTS 로그 탭 상세 하단). bwts_log 밖에 둔 이유: 분석 캐시 서명 유지. gen_min_amp: 정류기 가동으로 보는 전류. session_min_rows: warm-up 제외 후 이 행수 미만 세션은 판정 보류. month_min_rows: 월 지표를 내는 최소 가동 행. zero_ratio: 가동 중 TRO 0.00 비율이 이 이상이면 센서 측정 불량 후보. high_ratio: 10ppm 초과 비율. inj_ok_ratio: 그 달 주입 정상 세션 비율이 이 미만이면 주입 TRO 미달. window_months: 추이 판정 구간. action_min_total: 그 달 이 횟수 이상(또는 Trip 1회 이상) 알람에 매뉴얼 조치 표시. major_codes: Techcross 요약 보고서 Major 구분에 맞춘 코드(매뉴얼 7.2 Fault 조건 있는 코드). TRO 범위·warm-up 은 bwts_log 값 사용."
   }
 }

@@ -11,6 +11,7 @@ import { getShipOrder, shipByCode } from '../shared/ships.js';
 import { requireTH } from '../shared/thresholds.js';
 import { buildGuidance, sessionTableText } from '../shared/bwtsGuidance.js';
 import { go } from '../core/router.js';
+import { renderDiag } from './bwtsLogDiag.js';
 
 export const GRADES = ['운전양호', '점검필요', '수리후정상', '미운전', '미수신', '데이터불량', '판독실패'];
 const STYLE = {
@@ -346,7 +347,11 @@ async function renderDetail() {
     ${flagsHtml}${integ}${review}
   </div>
   ${followupHtml(r)}
-  <div id="blSessions" class="bl-sec"><span class="spin"></span> 세션·재검토 이력 로딩...</div>`;
+  <div id="blSessions" class="bl-sec"><span class="spin"></span> 세션·재검토 이력 로딩...</div>
+  <div id="blDiag" class="bl-sec"></div>`;
+  renderDiag($('blDiag'), r.ship_code, r.period,
+    () => selected && selected.ship_code === r.ship_code && selected.period === r.period)
+    .catch(e => console.warn('diag', e));
   // Heavy parts on demand: full summary (sessions) + review thread
   const [sum, rv] = await Promise.all([
     sb.from('bwts_log_analysis').select('summary').eq('ship_code', r.ship_code).eq('period', r.period).maybeSingle(),
